@@ -1,0 +1,26 @@
+# Replace monitor.example.com with your real domain (its DNS A record must
+# point at this server's public IP). Caddy then fetches and renews a free
+# Let's Encrypt certificate automatically.
+#
+# The dashboards are intentionally public; admin actions are gated inside the
+# app. If you'd rather require a login for the WHOLE site as well, uncomment the
+# basicauth block (generate a hash with: docker run caddy caddy hash-password).
+
+monitor.example.com {
+    reverse_proxy app:8050
+
+    # basicauth {
+    #     viewer <bcrypt-hash-here>
+    # }
+
+    encode gzip
+    log {
+        output stdout
+    }
+}
+
+# Local testing without a domain/TLS: `docker compose` with this instead —
+# browse to http://localhost
+# :80 {
+#     reverse_proxy app:8050
+# }

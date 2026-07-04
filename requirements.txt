@@ -1,0 +1,19 @@
+dash>=2.17
+pandas>=2.0
+plotly>=5.18
+requests
+beautifulsoup4
+lxml
+openpyxl
+geopy
+selenium
+webdriver-manager
+pywebview
+waitress
+# Overview briefing PDF: kaleido renders Plotly figures to PNG (0.2.x bundles
+# its own chromium, so no system Chrome needed just for reports); reportlab
+# assembles the PDF (pure Python, no system libraries).
+kaleido==0.2.1
+reportlab>=4.0
+# werkzeug ships with dash/flask; pinned here as it backs the admin password hash.
+werkzeug>=2.0

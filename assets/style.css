@@ -1,0 +1,189 @@
+/* ---- reset: kill the default body margin so the app reaches the window edges
+   (otherwise an 8px inset looks like a border around the UI) ---- */
+html, body { margin: 0; padding: 0; }
+#react-entry-point, #_dash-app-content { height: 100%; }
+html, body { height: 100%; }
+
+/* ---- theme variables ---- */
+.app.dark {
+    --bg: #0f141b;
+    --bg-panel: #161c26;
+    --bg-sidebar: #131922;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #2a3340;
+    --accent: #4ea1ff;
+}
+.app.light {
+    --bg: #f5f6f8;
+    --bg-panel: #ffffff;
+    --bg-sidebar: #eef1f5;
+    --text: #1b1f24;
+    --muted: #5f6368;
+    --border: #d8dce2;
+    --accent: #1a73e8;
+}
+
+.app {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+}
+
+/* ---- layout ---- */
+.body-row { display: flex; min-height: 100vh; }
+.sidebar {
+    width: 210px;
+    flex-shrink: 0;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: 18px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    box-sizing: border-box;
+}
+.brand { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-link {
+    color: var(--text);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+}
+.nav-link:hover { background: var(--bg-panel); color: var(--accent); }
+.theme-btn { margin-top: auto; }
+.content { flex: 1; padding: 20px 28px; min-width: 0; }
+
+/* ---- panels & cards ---- */
+.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    flex: 1;
+    min-width: 280px;
+}
+.panel-row { display: flex; gap: 14px; flex-wrap: wrap; }
+
+.kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin: 14px 0;
+}
+.kpi-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+
+.graph-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+.graph-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    overflow: hidden;
+}
+
+/* ---- controls ---- */
+.btn {
+    background: var(--bg-panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    margin: 4px 6px 4px 0;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: 0.9; color: #fff; }
+
+.text-input {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 4px 8px 4px 0;
+    font-size: 14px;
+}
+.text-input.wide { width: 100%; max-width: 560px; box-sizing: border-box; }
+
+.muted { color: var(--muted); font-size: 13px; }
+.error-text { color: #ff6b6b; font-size: 13px; }
+
+.status-pill { font-weight: 600; font-size: 13px; }
+.status-on { color: #2ecc71; }
+.status-off { color: #ff6b6b; }
+
+label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
+
+/* dropdowns readable in dark mode */
+.app.dark .Select-control, .app.dark .Select-menu-outer,
+.app.dark .Select-value-label, .app.dark .Select-input > input,
+.app.dark .Select-placeholder {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+}
+.app.dark .Select-menu-outer .VirtualizedSelectOption { background: var(--bg-panel); color: var(--text); }
+.app.dark .Select-menu-outer .VirtualizedSelectFocusedOption { background: var(--border); }
+.dropdown { margin-bottom: 8px; }
+
+/* ---- custom frameless title bar (desktop build) ---- */
+.titlebar {
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+}
+.tb-drag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    flex: 1;
+    -webkit-app-region: drag;   /* fallback for app-region drag */
+}
+.tb-logo { color: var(--accent); font-size: 15px; }
+.tb-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: 0.3px; }
+.tb-controls { display: flex; -webkit-app-region: no-drag; }
+.win-btn {
+    width: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: var(--muted);
+    cursor: default;
+}
+.win-btn:hover { background: var(--border); color: var(--text); }
+.win-close:hover { background: #d62b32; color: #fff; }
+
+/* When the title bar is present, lay out the app as a column and let the body
+   fill the remaining height (no native chrome, no extra scroll). */
+.app.has-titlebar { display: flex; flex-direction: column; height: 100vh; min-height: 0; overflow: hidden; }
+.app.has-titlebar .body-row { flex: 1; min-height: 0; height: auto; }
+.app.has-titlebar .sidebar { height: auto; position: static; }
+.app.has-titlebar .content { overflow-y: auto; }

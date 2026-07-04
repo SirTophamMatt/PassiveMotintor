@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploying Passive Monitor on a Hostinger VPS</title>
+<style>
+  :root {
+    --bg: #0f141b; --panel: #161c26; --border: #2a3340;
+    --text: #e8eaed; --muted: #9aa0a6; --accent: #4c9aff;
+    --code-bg: #1f2733; --code-text: #e6c700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.6; color: var(--text); background: var(--bg);
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; border-bottom: 2px solid var(--accent); padding-bottom: .4rem; }
+  h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .3rem; }
+  p, li { color: var(--text); }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg); color: var(--code-text);
+    padding: .12em .4em; border-radius: 4px; font-size: .9em;
+    font-family: "Cascadia Code", Consolas, monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; overflow-x: auto;
+  }
+  pre code { background: none; color: var(--text); padding: 0; }
+  ul { padding-left: 1.4rem; }
+  strong { color: #fff; }
+  .muted { color: var(--muted); }
+  .callout {
+    background: var(--panel); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --panel: #f1f3f4; --border: #d5dae0;
+      --text: #1a1a1a; --muted: #5f6368; --accent: #1a5fb4;
+      --code-bg: #f1f3f4; --code-text: #b8860b;
+    }
+    pre code { color: #1a1a1a; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Deploying Passive Monitor on a Hostinger VPS</h1>
+
+  <p>This runs the always-on web build behind HTTPS with an admin login. The
+  dashboards (Overview / Flood / Power) are public and read-only; Start/Stop,
+  Settings, Import, event tags and export sit behind the admin password.</p>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>A <strong>Hostinger VPS</strong> (KVM 2 &mdash; 2 vCPU / 8 GB &mdash; is comfortable if you run the
+      power scraper's Chrome; a 1&ndash;2 GB plan is fine for flood-only).</li>
+    <li>A <strong>domain</strong> (or subdomain) with an <code>A</code> record pointing at the VPS IP.</li>
+    <li>Docker + Docker Compose on the VPS (Hostinger's &ldquo;Ubuntu 22.04 with Docker&rdquo;
+      template ships them; otherwise <code>curl -fsSL https://get.docker.com | sh</code>).</li>
+  </ul>
+
+  <h2>First deploy</h2>
+<pre><code># on the VPS, in a checkout of this repo's unified_monitor/ folder
+cp .env.example .env
+# edit .env: set a strong UM_ADMIN_PASSWORD and a random UM_SECRET_KEY
+python3 -c "import secrets; print(secrets.token_hex(32))"   # paste into UM_SECRET_KEY
+
+# put your domain in the Caddyfile (replace monitor.example.com)
+nano Caddyfile
+
+docker compose up -d --build</code></pre>
+  <p>Caddy fetches a Let's Encrypt certificate on first request. Browse to
+  <code>https://your-domain</code> &mdash; the dashboards load immediately and <strong>flood collection
+  auto-starts</strong> (config <code>flood.autostart</code>).</p>
+
+  <h2>Turning on the power module</h2>
+  <p>Power scraping needs working EM-COP credentials and a visible Chrome (provided
+  by Xvfb in the container). Once its <code>forbidden.seam</code> blocker is resolved:</p>
+  <ul>
+    <li>Log in at <code>/admin</code> with your admin password.</li>
+    <li>Open <strong>Settings</strong>, enter EM-COP credentials, save.</li>
+    <li>On <strong>Admin</strong>, tick <em>Auto-start on server boot</em> for power (and <em>Start</em> it
+      once to verify). Leave headless <strong>off</strong> &mdash; EM-COP drops headless sessions.</li>
+  </ul>
+  <div class="callout">
+    <strong>Note on manual interaction:</strong> power occasionally needs a human to log
+    into EM-COP and acknowledge system messages. Because the container's Chrome runs
+    under a headless Xvfb display, add a noVNC/VNC path onto that display (or run the
+    power collector on a machine with a screen) so you can reach the live browser when
+    prompted &mdash; otherwise power collection stalls until the message is cleared.
+  </div>
+
+  <h2>Health checks</h2>
+  <ul>
+    <li><code>GET /health</code> returns JSON and HTTP 200 (or 503 if the DB is unreachable):
+      <code>db_ok</code>, <code>flood_running</code>, <code>power_running</code>,
+      <code>flood_last_heartbeat</code>, and the last collector errors. This distinguishes
+      &ldquo;web is up&rdquo; from &ldquo;still collecting&rdquo;.</li>
+    <li>The container has a Docker healthcheck hitting <code>/health</code>;
+      <code>docker compose ps</code> shows health, and <code>restart: unless-stopped</code>
+      brings it back after a crash.</li>
+    <li><strong>Add an external monitor</strong> (UptimeRobot / Better Stack / Healthchecks.io)
+      polling <code>https://your-domain/health</code> every 1&ndash;5 min for email/SMS alerts.</li>
+  </ul>
+
+  <h2>Backups</h2>
+  <p>Everything writable is on the mounted <code>./data</code> volume
+  (<code>unified_monitor.db</code>, <code>config.json</code>, <code>backups/</code>, log). The app also
+  snapshots the DB into <code>backups/</code> on each start (last 15 kept). Copy <code>./data</code>
+  off-box periodically:</p>
+<pre><code>tar czf pm-backup-$(date +%F).tgz data/</code></pre>
+
+  <h2>Updating</h2>
+<pre><code>git pull
+docker compose up -d --build</code></pre>
+  <p>The DB and config persist in <code>./data</code>. Existing named flood events are migrated
+  into date-range <strong>tags</strong> automatically on first start of the new build, so past
+  incidents stay selectable on the Flood page.</p>
+
+  <h2>Flood-only (smaller/cheaper) variant</h2>
+  <p>If you don't need power yet, you can shrink the image: delete the Chrome/Xvfb
+  lines from the <code>Dockerfile</code> and change the <code>CMD</code> to run <code>python run_web.py</code>
+  directly (no <code>xvfb-run</code>). A 1 GB VPS handles this easily.</p>
+</main>
+</body>
+</html>

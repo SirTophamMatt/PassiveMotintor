@@ -1,0 +1,45 @@
+# Passive Monitor on a single VPS: the app plus Caddy for automatic HTTPS.
+#
+# Set the secrets in a .env file next to this one (see .env.example) and put
+# your domain in the Caddyfile. Then: docker compose up -d --build
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Admin login password (required before exposing publicly).
+      UM_ADMIN_PASSWORD: ${UM_ADMIN_PASSWORD}
+      # Stable secret so admin sessions survive restarts. Generate once:
+      #   python -c "import secrets; print(secrets.token_hex(32))"
+      UM_SECRET_KEY: ${UM_SECRET_KEY}
+      UM_DATA_DIR: /data
+    volumes:
+      # Persist the SQLite DB, config.json, log and backups across redeploys.
+      - ./data:/data
+    expose:
+      - "8050"
+    # Chrome under Xvfb can use a lot of shared memory; give it room.
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8050/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
