@@ -9,6 +9,7 @@ Every state-changing callback re-checks auth.is_admin() server-side, so the
 gating does not rely on the UI merely hiding a button.
 """
 from dash import Input, Output, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 
 from app import auth
 from app import tags as tag_store
@@ -217,6 +218,11 @@ def register_callbacks(app):
         State("admin-password", "value"),
         prevent_initial_call=True)
     def do_login(_clicks, _submits, password):
+        # Dash fires callbacks when their input components are (re)inserted
+        # into the page even with prevent_initial_call=True, because the
+        # output (admin-body) already exists. Guard on real clicks only.
+        if not _clicks and not _submits:
+            raise PreventUpdate
         if auth.verify_password(password):
             auth.login()
             return _panel()
@@ -227,7 +233,12 @@ def register_callbacks(app):
         Output("admin-body", "children", allow_duplicate=True),
         Input("admin-logout-btn", "n_clicks"),
         prevent_initial_call=True)
-    def do_logout(_):
+    def do_logout(n_clicks):
+        # THE critical guard: when the panel is inserted after login, this
+        # callback fires with n_clicks=None (see note in do_login) — without
+        # the guard it would log the admin straight back out.
+        if not n_clicks:
+            raise PreventUpdate
         auth.logout()
         return _login_form()
 
@@ -239,6 +250,8 @@ def register_callbacks(app):
         State("admin-flood-autostart", "value"),
         prevent_initial_call=True)
     def flood_control(_s, _t, autostart):
+        if not _s and not _t:
+            raise PreventUpdate
         if not auth.is_admin():
             return "Not authorised."
         cfg = load_config()
@@ -258,6 +271,8 @@ def register_callbacks(app):
         State("admin-power-autostart", "value"),
         prevent_initial_call=True)
     def power_control(_s, _t, headless, autostart):
+        if not _s and not _t:
+            raise PreventUpdate
         if not auth.is_admin():
             return "Not authorised."
         cfg = load_config()
@@ -304,7 +319,9 @@ def register_callbacks(app):
         State("admin-tag-dates", "end_date"),
         State("admin-tag-notes", "value"),
         prevent_initial_call=True)
-    def create_tag(_, name, start_date, end_date, notes):
+    def create_tag(n_clicks, name, start_date, end_date, notes):
+        if not n_clicks:
+            raise PreventUpdate
         if not auth.is_admin():
             return "Not authorised.", no_update, no_update, no_update, no_update
         try:
@@ -323,7 +340,9 @@ def register_callbacks(app):
         Input("admin-tag-delete", "n_clicks"),
         State("admin-tag-delete-select", "value"),
         prevent_initial_call=True)
-    def delete_tag(_, tag_id):
+    def delete_tag(n_clicks, tag_id):
+        if not n_clicks:
+            raise PreventUpdate
         if not auth.is_admin():
             return "Not authorised.", no_update, no_update, no_update
         if not tag_id:
@@ -341,7 +360,9 @@ def register_callbacks(app):
         State("admin-export-dates", "end_date"),
         State("admin-export-modules", "value"),
         prevent_initial_call=True)
-    def do_export(_, tag_id, start_date, end_date, modules):
+    def do_export(n_clicks, tag_id, start_date, end_date, modules):
+        if not n_clicks:
+            raise PreventUpdate
         if not auth.is_admin():
             return no_update, "Not authorised."
         from app import export
@@ -376,7 +397,9 @@ def register_callbacks(app):
         Input("admin-pw-save", "n_clicks"),
         State("admin-new-password", "value"),
         prevent_initial_call=True)
-    def set_password(_, new_password):
+    def set_password(n_clicks, new_password):
+        if not n_clicks:
+            raise PreventUpdate
         if not auth.is_admin():
             return "Not authorised."
         if not new_password or len(new_password) < 6:
