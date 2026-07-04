@@ -6,14 +6,18 @@
 # lines for a much smaller image.
 FROM python:3.11-slim
 
+# TZ: the app stamps data with local time, and the BoM flood pages publish
+# observation labels in Melbourne time — the container must match or flood
+# timestamps resolve wrongly (see flood scraper _parse_obs_time).
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    UM_DATA_DIR=/data
+    UM_DATA_DIR=/data \
+    TZ=Australia/Melbourne
 
 # System deps: chrome for the power scraper, xvfb for a virtual display,
 # curl for the container healthcheck, fonts so rendered charts/PDFs look right.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        wget gnupg curl xvfb xauth \
+        wget gnupg curl xvfb xauth tzdata \
         fonts-liberation fonts-dejavu-core \
         libnss3 libxss1 libasound2 libgbm1 libgtk-3-0 \
     && wget -q -O /tmp/chrome.deb \
