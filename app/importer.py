@@ -12,18 +12,47 @@ import sqlite3
 import pandas as pd
 
 from app import database
-from app.config import LEGACY_ROOT
+from app.config import BUNDLE_DIR, LEGACY_ROOT
 
 log = logging.getLogger(__name__)
 
-# Suggested default paths into the old projects (one level up).
+# Reference data shipped WITH the app (unlike legacy imports, which live on the
+# machine). seed/Flood Levels.xlsx is bundled into the Docker image / repo and
+# auto-loaded at startup, so a fresh server deployment classifies flooding
+# correctly with no manual import step.
+SEED_FLOOD_LEVELS = os.path.join(BUNDLE_DIR, "seed", "Flood Levels.xlsx")
+
+# Suggested default paths into the old projects (one level up). Flood levels
+# prefer the bundled seed copy when present (always true on the server).
 DEFAULT_PATHS = {
     "flood_db": os.path.join(LEGACY_ROOT, "Flood Monitor", "flood_monitor.db"),
-    "flood_levels": os.path.join(LEGACY_ROOT, "Flood Monitor", "Flood Levels.xlsx"),
+    "flood_levels": (SEED_FLOOD_LEVELS if os.path.exists(SEED_FLOOD_LEVELS)
+                     else os.path.join(LEGACY_ROOT, "Flood Monitor", "Flood Levels.xlsx")),
     "power_csv": os.path.join(LEGACY_ROOT, "power_data.csv"),
     "tracker_csv": os.path.join(LEGACY_ROOT, "outage_tracker.csv"),
     "geo_cache": os.path.join(LEGACY_ROOT, "geo_cache.json"),
 }
+
+
+def ensure_flood_levels_seed():
+    """Auto-load the bundled flood levels at startup if none are loaded yet.
+
+    Only fills an EMPTY flood_levels table — it never clobbers levels that were
+    imported or updated by hand. To force a refresh after changing the seed
+    file, re-import it from the Import page (the path defaults to the seed)."""
+    try:
+        n = int(database.read_df("SELECT COUNT(*) AS n FROM flood_levels").iloc[0]["n"])
+    except Exception:
+        n = 0
+    if n:
+        return
+    if not os.path.exists(SEED_FLOOD_LEVELS):
+        log.info("Flood levels table is empty and no seed file at %s — "
+                 "flooding classification is off until levels are imported.",
+                 SEED_FLOOD_LEVELS)
+        return
+    log.info("Flood levels table is empty — loading bundled seed: %s",
+             import_flood_levels(SEED_FLOOD_LEVELS))
 
 FLOOD_COLUMN_MAP = {
     "Catchment": "catchment",

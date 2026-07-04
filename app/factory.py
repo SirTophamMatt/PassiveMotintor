@@ -146,6 +146,11 @@ def create_app(autostart=False):
     setup_logging()
     database.init_db()
 
+    # Load bundled reference data (flood levels) if the table is empty, so a
+    # fresh deployment classifies flooding without a manual import.
+    from app import importer
+    importer.ensure_flood_levels_seed()
+
     app = Dash(
         __name__,
         suppress_callback_exceptions=True,
