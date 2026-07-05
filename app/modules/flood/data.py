@@ -76,6 +76,54 @@ def load_flood_levels():
     }
 
 
+def load_gauge_impacts(station_key):
+    """Local Flood Guide impact rows for one station, highest height first.
+    Returns a DataFrame with gauge_name, town, source_pdf, height_m, impact."""
+    df = database.read_df(
+        "SELECT gauge_name, town, source_pdf, height_m, impact "
+        "FROM gauge_impacts WHERE station_key = ? "
+        "ORDER BY height_m DESC, town", [str(station_key).strip().lower()])
+    if not df.empty:
+        df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
+    return df
+
+
+def stations_with_guides():
+    """Set of station_keys that have Local Flood Guide impact data."""
+    df = database.read_df("SELECT DISTINCT station_key FROM gauge_impacts")
+    return set(df["station_key"].tolist())
+
+
+def station_latest(station_key):
+    """Most recent observation row for a station (matched case-insensitively),
+    or None."""
+    df = database.read_df(
+        "SELECT * FROM flood_observations "
+        "WHERE LOWER(TRIM(station_name)) = ? "
+        "ORDER BY timestamp DESC LIMIT 1", [str(station_key).strip().lower()])
+    if df.empty:
+        return None
+    row = df.iloc[0].to_dict()
+    row["height_m"] = pd.to_numeric(row.get("height_m"), errors="coerce")
+    return row
+
+
+def station_history(station_key, days=None):
+    """Full (or last-N-days) height history for a station, oldest first."""
+    query = ("SELECT timestamp, height_m FROM flood_observations "
+             "WHERE LOWER(TRIM(station_name)) = ?")
+    params = [str(station_key).strip().lower()]
+    if days:
+        query += " AND timestamp >= datetime('now', 'localtime', ?)"
+        params.append(f"-{int(days)} days")
+    df = database.read_df(query + " ORDER BY timestamp", params)
+    if not df.empty:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
+        df = df.dropna(subset=["height_m"])
+    return df
+
+
 def classify_station(latest_height, levels):
     """Returns (priority, label, colour) for a station's latest height.
 
