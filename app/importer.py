@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 # auto-loaded at startup, so a fresh server deployment classifies flooding
 # correctly with no manual import step.
 SEED_FLOOD_LEVELS = os.path.join(BUNDLE_DIR, "seed", "Flood Levels.xlsx")
+SEED_LFG_IMPACTS = os.path.join(BUNDLE_DIR, "seed", "lfg_impacts.json")
 
 # Suggested default paths into the old projects (one level up). Flood levels
 # prefer the bundled seed copy when present (always true on the server).
@@ -48,6 +49,49 @@ def ensure_flood_levels_seed():
         return
     log.info("Loading bundled flood levels: %s",
              import_flood_levels(SEED_FLOOD_LEVELS))
+
+
+def ensure_lfg_impacts_seed():
+    """(Re)load Local Flood Guide impacts on every startup, same policy as the
+    flood levels seed: the bundled JSON is the source of truth and updates
+    arrive via redeploy."""
+    if not os.path.exists(SEED_LFG_IMPACTS):
+        log.info("No bundled LFG impacts seed at %s — keeping existing table.",
+                 SEED_LFG_IMPACTS)
+        return
+    log.info("Loading bundled LFG impacts: %s",
+             import_lfg_impacts(SEED_LFG_IMPACTS))
+
+
+def import_lfg_impacts(path):
+    """Loads seed/lfg_impacts.json (height->impact rows extracted from the
+    VICSES Local Flood Guides) into the gauge_impacts table."""
+    if not os.path.exists(path):
+        return f"File not found: {path}"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        rows = []
+        for guide in data.get("guides", []):
+            key = guide.get("station_key")
+            if not key:
+                continue
+            for imp in guide.get("impacts", []):
+                rows.append({
+                    "station_key": key,
+                    "gauge_name": guide.get("gauge_name"),
+                    "town": guide.get("town"),
+                    "source_pdf": guide.get("source_pdf"),
+                    "height_m": imp["height_m"],
+                    "impact": imp["impact"],
+                })
+        database.execute("DELETE FROM gauge_impacts")
+        database.insert_rows("gauge_impacts", rows)
+        stations = len({r["station_key"] for r in rows})
+        return f"Loaded {len(rows):,} impact rows for {stations} gauges."
+    except Exception as e:
+        log.exception("LFG impacts import failed")
+        return f"Import failed: {e}"
 
 FLOOD_COLUMN_MAP = {
     "Catchment": "catchment",

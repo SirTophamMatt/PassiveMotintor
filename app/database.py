@@ -74,6 +74,20 @@ CREATE TABLE IF NOT EXISTS flood_levels (
     major REAL
 );
 
+-- Height->impact rows extracted from VICSES Local Flood Guides, one row per
+-- expected impact / historical flood level at a gauge height. Reloaded from
+-- seed/lfg_impacts.json on every boot (seed file is the source of truth).
+CREATE TABLE IF NOT EXISTS gauge_impacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    station_key TEXT NOT NULL,      -- lowercased station name (= flood_levels key)
+    gauge_name TEXT,
+    town TEXT,                      -- community the guide is written for
+    source_pdf TEXT,                -- Local Flood Guide filename
+    height_m REAL NOT NULL,
+    impact TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gauge_impacts_key ON gauge_impacts (station_key);
+
 CREATE TABLE IF NOT EXISTS power_timeseries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,

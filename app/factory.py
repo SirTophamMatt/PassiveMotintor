@@ -12,7 +12,8 @@ DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
 from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
-from app.pages import admin, flood, importer_page, overview, power, settings
+from app.pages import (admin, flood, importer_page, overview, power,
+                       settings, station)
 
 log = logging.getLogger(__name__)
 
@@ -156,6 +157,7 @@ def create_app(autostart=False):
     # fresh deployment classifies flooding without a manual import.
     from app import importer
     importer.ensure_flood_levels_seed()
+    importer.ensure_lfg_impacts_seed()
 
     app = Dash(
         __name__,
@@ -184,6 +186,9 @@ def create_app(autostart=False):
 
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def route(pathname):
+        # Dynamic station detail pages: /flood/station/<station_key>
+        if pathname and pathname.startswith("/flood/station/"):
+            return station.layout(station.key_from_path(pathname))
         for path, _, module in ALL_PAGES:
             if pathname == path:
                 if path in RESTRICTED and not auth.is_admin():
@@ -207,6 +212,7 @@ def create_app(autostart=False):
 
     for _, _, module in ALL_PAGES:
         module.register_callbacks(app)
+    station.register_callbacks(app)
 
     if autostart:
         from app.collector import manager
