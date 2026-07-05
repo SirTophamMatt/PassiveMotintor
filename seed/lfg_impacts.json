@@ -1,0 +1,3146 @@
+{
+ "generated": "2026-07-05",
+ "source": "VICSES Local Flood Guides (LFG folder)",
+ "guides": [
+  {
+   "source_pdf": "Bacchus Marsh Local Flood Guide LFG.pdf",
+   "town": "Bacchus Marsh",
+   "gauge_name": "Werribee River at Bacchus Marsh",
+   "station_key": "werribee river at bacchus marsh",
+   "guide_levels": {
+    "major": 5.6,
+    "moderate": 5.2,
+    "minor": 4.4
+   },
+   "impacts": [
+    {
+     "height_m": 5.75,
+     "impact": "1891 flood level."
+    },
+    {
+     "height_m": 5.6,
+     "impact": "Major flood level (height shown on map, see page 4)"
+    },
+    {
+     "height_m": 5.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 5.2,
+     "impact": "At moderate flood level, the Werribee River will break its southern bank at Grant Street, resulting in a significant overland flow through residential, commercial and farming areas."
+    },
+    {
+     "height_m": 5.19,
+     "impact": "November 1995 flood level (height shown on map, see page 4) - Werribee River broke its bank, also local flooding in the Parwan Creek."
+    },
+    {
+     "height_m": 4.4,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 3.35,
+     "impact": "October 1983 flood level—flooding occurred along both the Werribee and Lerderderg Rivers."
+    },
+    {
+     "height_m": 3.28,
+     "impact": "September 1993 flood level."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Baringhup Local Flodd Guide LFG.pdf",
+   "town": "Baringhup Local Flodd Guide",
+   "gauge_name": "Loddon River at Cairn Curran Reservior (TW)",
+   "station_key": "loddon river at cairn curran reservior (tw)",
+   "guide_levels": {
+    "major": 4.0,
+    "moderate": 3.5,
+    "minor": 2.0
+   },
+   "impacts": [
+    {
+     "height_m": 4.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 3.5,
+     "impact": "Moderate flood level Traffic routes affected. The Loddon River will spill over river banks and cover large ar- eas of land. Water may reach above floor levels in some houses and buildings."
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Minor flood level The Loddon River may spill over river banks and into nearby low-lying areas. The relocation of stock may be required in some cases."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Batesford - Local Flood Guide (LFG).pdf",
+   "town": "Batesford",
+   "gauge_name": "Moorabool River at Batesford",
+   "station_key": "moorabool river at batesford",
+   "guide_levels": {
+    "major": 4.9,
+    "moderate": 4.0,
+    "minor": 2.7
+   },
+   "impacts": [
+    {
+     "height_m": 5.44,
+     "impact": "November 1995 flood event. 25 residential buildings flooded above floor level and 20 properties were evacuated. Cross Street, Bridge Street, Midland Highway and River Street were flooded."
+    },
+    {
+     "height_m": 5.1,
+     "impact": "45 buildings are flooded, with 25 flooded above floor level, mostly on the east side of the river."
+    },
+    {
+     "height_m": 4.9,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.35,
+     "impact": "Significant floodwater breaks out of the Moorabool River, flooding 4 buildings above floor level in Bridge Street, Old Ballarat Road, and River Street. Water spills over Cross Street, cutting access to the north. Access to Bridge Street is cut, with deep flooding to the east. Deep flooding cuts access to the western section of Old Ballarat Road."
+    },
+    {
+     "height_m": 4.32,
+     "impact": "November 2022 flood event"
+    },
+    {
+     "height_m": 4.15,
+     "impact": "April 2001 flood event."
+    },
+    {
+     "height_m": 4.07,
+     "impact": "January 2011 flood event."
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.99,
+     "impact": "September 2016 flood level"
+    },
+    {
+     "height_m": 2.7,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Benalla Local Flood Guide.pdf",
+   "town": "Benalla",
+   "gauge_name": "Broken River at Benalla",
+   "station_key": "broken river at benalla",
+   "guide_levels": {
+    "major": 4.5,
+    "moderate": 3.7,
+    "minor": 2.2
+   },
+   "impacts": [
+    {
+     "height_m": 5.69,
+     "impact": "1916 flood level. Pre Benalla Weir construction. The water flow rate was about 1/3 less than the 1993 flood."
+    },
+    {
+     "height_m": 5.5,
+     "impact": "October 1993 flood level and 1% flood level (height shown on map pg 2). There is a 1% chance of a flood this size occurring in any year. 1993 was the largest flood since records began. Most of Benalla, Baddaginnie and rural farm areas were significantly affected. Many people were evacuated from their homes. Many areas experienced floodwater travelling backwards through the stormwater drains, unexpectedly affecting many homes and properties, eg. in the Thomas St area. If a flood of this height happened today, over 870 homes and 210 businesses are likely to experience above floor flooding."
+    },
+    {
+     "height_m": 5.07,
+     "impact": "About 361 homes and 138 businesses are likely to be affected by above floor flooding."
+    },
+    {
+     "height_m": 4.97,
+     "impact": "June 1917 Flood level. Before Lake Benalla and Benalla Weir’s construction."
+    },
+    {
+     "height_m": 4.7,
+     "impact": "Floodwater likely to start entering properties and businesses in Carrier St, Walker St and Smythe St."
+    },
+    {
+     "height_m": 4.65,
+     "impact": "Floodwater likely to start entering additional properties in Arundel St and Nunn St."
+    },
+    {
+     "height_m": 4.57,
+     "impact": "December 1966 and December 1954 Flood levels."
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.48,
+     "impact": "Floodwater likely to start entering properties in Neil Ave, Arundel St and businesses in Bridge St East CBD. About 36 homes and 21 businesses are likely to be affected by above floor flooding."
+    },
+    {
+     "height_m": 4.4,
+     "impact": "Floodwater likely to start flowing into the lower areas of the CBD, including the bottle shop (old Arnott’s Motors), Crockford St and Market St."
+    },
+    {
+     "height_m": 4.36,
+     "impact": "September 1933 flood level."
+    },
+    {
+     "height_m": 4.3,
+     "impact": "Floodwater likely to start entering properties in Psaltis Pde."
+    },
+    {
+     "height_m": 4.28,
+     "impact": "May 1974 flood level."
+    },
+    {
+     "height_m": 4.26,
+     "impact": "September 2010 flood level."
+    },
+    {
+     "height_m": 4.0,
+     "impact": "July 1981(approx flood level) About 8 homes and 4 businesses likely to be affected by above floor flooding."
+    },
+    {
+     "height_m": 3.7,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 3.68,
+     "impact": "1996 flood level. Floodwater likely to start covering Bridge St near the Rose Gardens."
+    },
+    {
+     "height_m": 3.6,
+     "impact": "Floodwater likely to surround the Art Gallery, spread through the Rose Gardens, ovals and enters the cricket and hardcourt tennis clubrooms."
+    },
+    {
+     "height_m": 3.5,
+     "impact": "Floodwater likely to enter the Benalla Basketball Pavilion and CFA Fire Station."
+    },
+    {
+     "height_m": 3.45,
+     "impact": "Floodwater likely to enter the Rose Gardens pavilion and over roads in Arundel St South, Market St and Benson St."
+    },
+    {
+     "height_m": 3.05,
+     "impact": "Floodwater likely to enter area below the Benalla Dunlop Library, nearby carparks and skate park."
+    },
+    {
+     "height_m": 2.74,
+     "impact": "Floodwater likely to flow into the Benalla Aquatic Centre outdoor pool and under the Art Gallery."
+    },
+    {
+     "height_m": 2.5,
+     "impact": "Floodwater likely to start covering roads and paths in the Rose Gardens."
+    },
+    {
+     "height_m": 2.2,
+     "impact": "Minor flood level. Access to Ackerly Ave (Stock Bridge) is cut at both ends. Boardwalks and pedestrian tracks around Lake Benalla become impassable. Manual River flood gauge under the Art Gallery, Benalla"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Carisbrook Local Flood Guide.pdf",
+   "town": "Carisbrook",
+   "gauge_name": "Mccallums Creek at Carisbrook",
+   "station_key": "mccallums creek at carisbrook",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 5.46,
+     "impact": "September 2010 flood event (estimated)"
+    },
+    {
+     "height_m": 5.39,
+     "impact": "May 1956 flood 5.07m"
+    },
+    {
+     "height_m": 5.07,
+     "impact": "February 1973"
+    },
+    {
+     "height_m": 4.94,
+     "impact": "Overland flooding from the local catchment begins to affect some residences and businesses."
+    },
+    {
+     "height_m": 4.47,
+     "impact": "December 1999 flood"
+    },
+    {
+     "height_m": 4.23,
+     "impact": "Floodwater begins to rise and affect houses."
+    },
+    {
+     "height_m": 4.14,
+     "impact": "September 1983 flood"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Casterton Local Flood Guide LFG.pdf",
+   "town": "Casterton",
+   "gauge_name": "Glenelg River at Casterton",
+   "station_key": "glenelg river at casterton",
+   "guide_levels": {
+    "major": 6.0
+   },
+   "impacts": [
+    {
+     "height_m": 6.14,
+     "impact": "September 2016 flood level"
+    },
+    {
+     "height_m": 6.0,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Charlton Local Flood Guide.pdf",
+   "town": "Charlton",
+   "gauge_name": "Avoca River at Charlton Town",
+   "station_key": "avoca river at charlton town",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 8.05,
+     "impact": "6.09m 8.60m January 2011 flood level. Record flood level for Charlton. At this level, 369 properties flooded with 270 over floor, flooding of the main street affecting businesses. Community services and infrastructure badly affected including loss of power supply and interruption to phone and internet services. The Calder Highway and many other roads closed. (Refer to map on page 2)"
+    },
+    {
+     "height_m": 7.3,
+     "impact": "5.64m 7.91m September 2010 flood. At this height, 83 properties flooded as well as the police station. Major roads closed including the Calder Highway and Boort and St Arnaud roads"
+    },
+    {
+     "height_m": 7.2,
+     "impact": "7.20m October 1996 Flood Level"
+    },
+    {
+     "height_m": 7.09,
+     "impact": "5.07m 7.17m November 2010 flood level. During this flood, two properties were flooded."
+    }
+   ]
+  },
+  {
+   "source_pdf": "City of Casey Local Flood Guide.pdf",
+   "town": "City of Casey",
+   "gauge_name": "Dandenong Creek at Rowville",
+   "station_key": "dandenong creek at rowville",
+   "guide_levels": {
+    "major": 5.5,
+    "moderate": 5.0
+   },
+   "impacts": [
+    {
+     "height_m": 5.69,
+     "impact": "Highest recorded flood 18th September 1984"
+    },
+    {
+     "height_m": 5.5,
+     "impact": "Major flood level ◼ Dandenong Creek Trail flooded at various sections ◼ Myuna Farm on Kidds Road, Doveton likely to be impacted ◼ Water over road at Brady Road, Endeavour Hills at Dandenong Creek Bridge"
+    },
+    {
+     "height_m": 5.0,
+     "impact": "Moderate flood level ◼ Height of Levee on southern side of Heatherton Road ◼ Bus Route 695 impacted by flooding along Heatherton Road ◼ Water over road at Heatherton Road, Doveton between Stud Road and Monash Freeway possibly flooded"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Clayton and East Oakleigh Local Flood Guide LFG.pdf",
+   "town": "Clayton and East Oakleigh",
+   "gauge_name": "Clayton South Drain at Clayton (Retarding Basin)",
+   "station_key": "clayton south drain at clayton (retarding basin)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.9,
+     "impact": "1% Annual Exceedance Probability (1% chance of occurring in any one year) Properties at risk: 304 total. Monash Medical Centre may experience significant depths around the southern carpark and loading bay. Fregon Reserve, Kanooka Child Care Centre may also experience flooding. Water over the road at a depth of 300 millimeters or more may occur on: • Dandenong Road, East Oakleigh • Bonham Crescent, East Oakleigh • Roy Street, East Oakleigh • Alfred Grove, East Oakleigh • Greta Street, East Oakleigh • Flora Road, Clayton • Fulton Street, Clayton • Manton Street, Clayton • Edinburgh Street, Clayton • Alice Street, Clayton • Thompson Street, Clayton • Carnish Road, Clayton • Faulkiner Street, Clayton • Yarram Crescent, Clayton • Centre Road, Clayton • Browns Road, Clayton • Rose Street, Clayton"
+    },
+    {
+     "height_m": 2.53,
+     "impact": "5% Annual Exceedance Probability (5% chance of occurring in any one year) Properties at risk: 138 total Monash Medical Centre may experience significant depths around the southern carpark and loading bay Water over the road at a depth of 300 millimeters or more may occur on: • Dandenong Road, East Oakleigh • Alfred Grove, East Oakleigh • Greta Street, East Oakleigh • Manton Road, Clayton • Alice Street, Clayton • Carnish Road, Clayton • Browns Road, Clayton"
+    },
+    {
+     "height_m": 2.01,
+     "impact": "20% Annual Exceedance Probability (20% chance of occurring in any one year) Properties at risk: 30 total Water over the road at a depth of 300 millimetres or more may occur on Carnish Rd, Clayton and Browns Road, Clayton"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Clunes Local Flood Guide.pdf",
+   "town": "Clunes",
+   "gauge_name": "Creswick Creek at Clunes",
+   "station_key": "creswick creek at clunes",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 6.39,
+     "impact": "January 2011 flood event ◼ 200 millimetres of rain fell in four days. Slightly deeper water than September 2010 flood event, but same areas impacted. ◼ Service Street Bridge was overtopped by water, bowling club flooded and water impacted the commercial buildings."
+    },
+    {
+     "height_m": 5.36,
+     "impact": "September 2010 flood event ◼ 85.4 millimetres fell over two days. ◼ Flooding impacted Purcell Street, the sports stadium, caravan park and many properties between the creek and Fraser Street."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Dimboola Local Flood Guide LFG.pdf",
+   "town": "Dimboola",
+   "gauge_name": "Wimmera River at Dimboola (Upstream)",
+   "station_key": "wimmera river at dimboola (upstream)",
+   "guide_levels": {
+    "moderate": 5.7
+   },
+   "impacts": [
+    {
+     "height_m": 5.75,
+     "impact": "January 2011 flood event. ◼ Nine buildings were flooded above floor level, but many others were protected by extensive sandbagging around the town. ◼ Homes were evacuated, and many roads in the town and the surrounding area were closed."
+    },
+    {
+     "height_m": 5.7,
+     "impact": "Moderate flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Donald Local Flood Guide.pdf",
+   "town": "Donald",
+   "gauge_name": "Richardson River at Donald (Upstream)",
+   "station_key": "richardson river at donald (upstream)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 4.99,
+     "impact": "4.65 112.86 January Flood 2011"
+    },
+    {
+     "height_m": 4.21,
+     "impact": "3.72 - December Flood 2010 September Flood 2016"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Echuca Local Flood Guide.pdf",
+   "town": "Echuca",
+   "gauge_name": "Murray River at Echuca Wharf",
+   "station_key": "murray river at echuca wharf",
+   "guide_levels": {
+    "major": 94.4,
+    "moderate": 93.9,
+    "minor": 93.5
+   },
+   "impacts": [
+    {
+     "height_m": 96.2,
+     "impact": "1870 flood - Highest recorded flood"
+    },
+    {
+     "height_m": 95.6,
+     "impact": "Height shown on map at page 2 (1% AEP*)"
+    },
+    {
+     "height_m": 95.35,
+     "impact": "At this level, flooding has reached the top of bank of the Echuca levee system."
+    },
+    {
+     "height_m": 95.0,
+     "impact": "Floodwater begins to wet properties in the area bounded by Ogilvie Avenue, Bowen and Snowden Streets."
+    },
+    {
+     "height_m": 94.9,
+     "impact": "Properties at the river end of Martin Street along with properties on the west side of the Ogilvie Avenue bridge would start getting wet."
+    },
+    {
+     "height_m": 94.77,
+     "impact": "October 1993 flood"
+    },
+    {
+     "height_m": 94.75,
+     "impact": "October 1975 flood"
+    },
+    {
+     "height_m": 94.7,
+     "impact": "Some flooding of Haverfield and Eyre streets with water encroaching on the rear of properties in Rutley Crescent. Water would also encroach into properties at the river end of streets in the area to the west of Dickson Street and north of Cohuna – Echuca Road."
+    },
+    {
+     "height_m": 94.6,
+     "impact": "There would be flooding into McBride Place from the Campaspe River and water over Etona Avenue and Mary Anne Road likely to be impassable from Ogilvie Avenue to the Murray River."
+    },
+    {
+     "height_m": 94.52,
+     "impact": "May 1974 flood"
+    },
+    {
+     "height_m": 94.4,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 94.3,
+     "impact": "There would be areas of deep flooding in parts of Echuca to the West of the Campaspe River. It’s likely Hansen Street and the river end of Jarman Street would be surrounded by water and all other streets west of the Campaspe would be flooded. The Campaspe River end of Martin Street would be flooding, as well as the Southern Cross Drain near the intersection of Pakenham and Bynan Streets with Mary Anne Road getting wet."
+    },
+    {
+     "height_m": 94.2,
+     "impact": "October 1992 flood"
+    },
+    {
+     "height_m": 93.9,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 93.6,
+     "impact": "Flooding becomes established in some parts of Echuca to the west of the Campaspe River and the lower end of the Campaspe Esplanade would become impassable."
+    },
+    {
+     "height_m": 93.5,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 92.85,
+     "impact": "January 2011 flood This was predominately a Campaspe River flood that caused some backing up of the Murray River. Flooding occurred in parts of Echuca to the west of the Campaspe River and to the east of the Campaspe River south of the Murray Valley Highway."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Euroa Local Flood Guide LFG.pdf",
+   "town": "Euroa",
+   "gauge_name": "Seven Creeks at Euroa",
+   "station_key": "seven creeks at euroa",
+   "guide_levels": {
+    "major": 4.6,
+    "moderate": 4.0,
+    "minor": 2.5
+   },
+   "impacts": [
+    {
+     "height_m": 6.04,
+     "impact": "1916 flood and 1% flood level (height shown on map pg. 2 & 3). There is a 1 in 100 chance o a flood this size (or greater) occurring in any year. 644 properties are likely to be flooded, 206 above floor level. Access to the hospital likely to be compromised."
+    },
+    {
+     "height_m": 6.01,
+     "impact": "September 1975"
+    },
+    {
+     "height_m": 5.8,
+     "impact": "May 1974. 463 properties were inundated with 106 flooded over-floor."
+    },
+    {
+     "height_m": 5.79,
+     "impact": "July 1986"
+    },
+    {
+     "height_m": 5.68,
+     "impact": "October 1993. Over-floor flooding of 150 houses and 550 properties were impacted."
+    },
+    {
+     "height_m": 5.36,
+     "impact": "September 2010. 22 properties were impacted (a handful over-floor) and 19 people were displaced. 11 caravans/cabins were inundated in the Caravan park along with the Show Grounds, Memorial Oval and Golf Course."
+    },
+    {
+     "height_m": 5.21,
+     "impact": "October 1992. The Ambulance and Police Station are likely to be surrounded by water."
+    },
+    {
+     "height_m": 5.07,
+     "impact": "December 2017. Kirkland Avenue, Templeton, Turnbull, Dunn and Beaton Street likely to begin to be inundated with water. Euroa-Shepparton Road likely to be affected."
+    },
+    {
+     "height_m": 4.8,
+     "impact": "December 2010. Caravan Park is likely to be completely inundated and the Memorial Oval surrounded by water. Six properties are likely to be inundated with one flooded over-floor."
+    },
+    {
+     "height_m": 4.6,
+     "impact": "Major flood level. The first house is likely to be flooded and Creek Drive becoming isolated. Parker, Turnbull, Saxon, Slee, Dunn, Railway and Templeton Streets likely to get wet."
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Moderate flood level. Factory Road is likely to begin being inundated with water."
+    },
+    {
+     "height_m": 3.5,
+     "impact": "January 2011"
+    },
+    {
+     "height_m": 3.14,
+     "impact": "April 2020. Area around the Memorial Oval was inundated with water, closing the walking track. Minor flooding occurred on local roads. Moglonemby Road was inundated with water."
+    },
+    {
+     "height_m": 2.5,
+     "impact": "Minor flood level. Euroa Caravan Park, Rotary Park, park area around the Memorial Oval and Bowls Club likely to begin to be inundated with water. Seven Creeks Gauge at Euroa during the flood in April 2020. Rockies Bridge downstream of the Seven Creeks Gauge at Euroa during the flood in April 2020."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Euroa Local Flood Guide LFG.pdf",
+   "town": "Euroa",
+   "gauge_name": "Castle Creek at Telfords Bridge",
+   "station_key": "castle creek at telfords bridge",
+   "guide_levels": {
+    "major": 2.4,
+    "moderate": 1.8,
+    "minor": 1.2
+   },
+   "impacts": [
+    {
+     "height_m": 4.6,
+     "impact": "The levee has no freeboard remaining and is likely to be overtopped if water rises. Levees can fail before this level."
+    },
+    {
+     "height_m": 4.26,
+     "impact": "1% flood level. The flow path between the Castle and Sevens Creek via Brock and Anderson Street likely to experience significant flows."
+    },
+    {
+     "height_m": 4.16,
+     "impact": "Euroa Main Road is likely to have a depth of up to 150 millimetres along a stretch of around 300 metres of road."
+    },
+    {
+     "height_m": 3.83,
+     "impact": "Water is likely to get deeper upstream of Euroa Main Road and the railway embankment. Euroa Main Road is likely to have a depth of up to 100 millimetres on it. Castle and Seven Creeks are likely to begin interaction with a flow path forming via Brock Street and Euroa- Shepparton Road near Wood Road."
+    },
+    {
+     "height_m": 3.79,
+     "impact": "Water is likely to overtop Euroa Main Road and further inundate the floodplain."
+    },
+    {
+     "height_m": 3.42,
+     "impact": "December 2017"
+    },
+    {
+     "height_m": 2.75,
+     "impact": "December 2010"
+    },
+    {
+     "height_m": 2.58,
+     "impact": "September 2010"
+    },
+    {
+     "height_m": 2.4,
+     "impact": "Major flood level. Water is likely to overtop the bank and likely to wet the Euroa Golf Course and surrounding floodplain."
+    },
+    {
+     "height_m": 1.8,
+     "impact": "Moderate flood level."
+    },
+    {
+     "height_m": 1.2,
+     "impact": "Minor flood level."
+    },
+    {
+     "height_m": 1.13,
+     "impact": "April 2020. Floodplain south of Euroa Main Road began to be inundated with water run off from the Hume Freeway, no properties were impacted/inundated. Castle Creek Gauge at Telfords Bridge on Euroa-Mansfield Rd."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Geelong Local Flood Guide (LFG).pdf",
+   "town": "Geelong",
+   "gauge_name": "Barwon River at Geelong",
+   "station_key": "barwon river at geelong",
+   "guide_levels": {
+    "minor": 2.3
+   },
+   "impacts": [
+    {
+     "height_m": 5.94,
+     "impact": "November 1995 flood event The largest flood on record in Geelong."
+    },
+    {
+     "height_m": 5.47,
+     "impact": "June 1952 flood event"
+    },
+    {
+     "height_m": 5.39,
+     "impact": "Bottom of Breakwater Rail Bridge floods. 42 buildings are flooded above floor level."
+    },
+    {
+     "height_m": 4.5,
+     "impact": "November 1978 flood event 40 buildings are flooded above floor. Flooding impacts the Riverglen Holiday & City Southside Caravan Parks."
+    },
+    {
+     "height_m": 3.84,
+     "impact": "October 2022 flood event"
+    },
+    {
+     "height_m": 3.8,
+     "impact": "October 1983 flood event"
+    },
+    {
+     "height_m": 3.68,
+     "impact": "January 2011 flood event"
+    },
+    {
+     "height_m": 2.58,
+     "impact": "September 2010 flood event Floodwater begins to impact low lying parkland along the Barwon River including the Barwon Valley Golf Club & the Geelong Water Ski Club."
+    },
+    {
+     "height_m": 2.3,
+     "impact": "Minor flood level The Barrabool Road flood gates are closed."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Glen Iris at Gardiners Creek Local Flood Guide.pdf",
+   "town": "Glen Iris at Gardiners Creek",
+   "gauge_name": "Gardiners Creek at Gardiner",
+   "station_key": "gardiners creek at gardiner",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 6.0,
+     "impact": "Levee overtopped between Tooronga Road and Toorak Road"
+    },
+    {
+     "height_m": 5.72,
+     "impact": "Gardiners Creek Trail flooded at various locations"
+    },
+    {
+     "height_m": 5.6,
+     "impact": "February 2011 Properties affected by flooding on Gardiners Parade, Glen Iris. Solway Pedestrian Bridge was washed away"
+    },
+    {
+     "height_m": 4.77,
+     "impact": "September 1984 Flood level peak"
+    },
+    {
+     "height_m": 4.14,
+     "impact": "Bank full at gauging location"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Glenorchy Local Flood Guide.pdf",
+   "town": "Glenorchy",
+   "gauge_name": "Wimmera River at Glenorchy",
+   "station_key": "wimmera river at glenorchy",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 4.72,
+     "impact": "August 1980 flood event"
+    },
+    {
+     "height_m": 4.69,
+     "impact": "August 1992 flood event"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Harrow Local Flood Guide.pdf",
+   "town": "Harrow",
+   "gauge_name": "Glenelg River at Harrow",
+   "station_key": "glenelg river at harrow",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 3.28,
+     "impact": "◼ The Harrow Hall (Mechanics Institute) may be flooded above floor level."
+    },
+    {
+     "height_m": 3.23,
+     "impact": "◼ 1 in 200 year AEP (0.5% AEP) ◼ Access is likely to be cut to Blair Street, with seven buildings expected to be isolated and impacted below floor level."
+    },
+    {
+     "height_m": 3.17,
+     "impact": "◼ 1 in 100 year AEP (1% AEP) Flood height shown on map, see page 4 ◼ Likely Blair Street inundated by depth of up to 0.27m, Whittaker Street up to depth of 2.10m and Donaldson Place depth of up to 1.92m"
+    },
+    {
+     "height_m": 3.09,
+     "impact": "◼ Three additional buildings may be flooded above floor in Blair Street, these include the Pivot Shed, RSL and the toilet block beside the Hall on Blair Street. ◼ The Whittaker Street flood depth is up to 2.05m. Flooding may cut access to Blair Street next to the Harrow Hall (Mechanics Institute)."
+    },
+    {
+     "height_m": 2.85,
+     "impact": "◼ December 2010 flood event ◼ Significant flood impacts to buildings, roads and bridges. The RSL building in Blair Street was at risk of flooding and was sandbagged. ◼ There were several houses and businesses that were impacted by below floor flooding."
+    },
+    {
+     "height_m": 2.51,
+     "impact": "◼ January 2011 flood event. ◼ The levee surrounding the Johnny Mullagh Oval was overtopped. ◼ Flooding surrounded the Harrow Hall (Mechanics Institute), Library and telephone exchange, isolating the buildings. ◼ Flooding cut access to Whittaker Street and Donaldson Place."
+    },
+    {
+     "height_m": 2.2,
+     "impact": "◼ September 2010 flood event impacted farmland along the Glenelg River and cut access to minor roads and river crossings. Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Use the portal to zoom in on your property and see if it's likely to be affected in a large flood event. ◼ Visit the Portal for Flood Advice for properties inside the mapped area. Go to flood.ghcma.vic.gov.au. The GHCMA Flood Portal, developed by the Glenelg Hopkins Catchment Management Authority, is a tool for residents and businesses to assess their flood risk. *The height measurement is at the Glenelg River Harrow Gauge. ^This table includes information from previous flood events. Download your Property Flood Report ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Healesville Local Flood Guide (LFG).pdf",
+   "town": "Healesville",
+   "gauge_name": "Watts River at Healesville",
+   "station_key": "watts river at healesville",
+   "guide_levels": {
+    "major": 4.0,
+    "moderate": 3.2,
+    "minor": 2.85
+   },
+   "impacts": [
+    {
+     "height_m": 4.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 3.35,
+     "impact": "Community infrastructure that may be impacted by floodwater includes: ◼ Bus Routes 684, 685, 686, 687 & 965 (Night Bus) likely impacted along Maroondah Highway and Routes 686, 685 & 965 along Don Road, Healesville."
+    },
+    {
+     "height_m": 3.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.85,
+     "impact": "Minor Flood Level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Hollands Landing Local Flood Guide LFG.pdf",
+   "town": "Hollands Landing",
+   "gauge_name": "Mclennan Straight at Hollands Landing",
+   "station_key": "mclennan straight at hollands landing",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.0,
+     "impact": "1% Annual Exceedance Probability (AEP) height, see page 4."
+    },
+    {
+     "height_m": 1.2,
+     "impact": "2007 flood level ◼ Areas of Gippsland recorded more than 120mm of rainfall in 24 hours. ◼ 16 people were isolated within the Hollands Landing Caravan Park. ◼ Hollands Landing was isolated for up to14 days."
+    },
+    {
+     "height_m": 1.08,
+     "impact": "2012 flood level ◼ Residents of Hollands Landing were asked to evacuate. ◼ Hollands Landing Road and the town was isolated for up to 4 days."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Horsham Local Flood Guide LFG.pdf",
+   "town": "Horsham",
+   "gauge_name": "Wimmera River at Horsham (Walmer)",
+   "station_key": "wimmera river at horsham (walmer)",
+   "guide_levels": {
+    "major": 3.6,
+    "moderate": 3.1,
+    "minor": 2.8
+   },
+   "impacts": [
+    {
+     "height_m": 4.4,
+     "impact": "◼ 302 buildings are flooded above floor level ◼ 890 properties impacted by flooding. ◼ Deep flooding may cut access to houses along Barnes Boulevard between Dixon Court and Wotonga Drive. .5% AEP (or greater) chance in any year"
+    },
+    {
+     "height_m": 4.29,
+     "impact": "◼ 182 buildings are flooded above floor level ◼ 773 properties impacted by flooding. ◼ Deep flooding may cut access to Brigid Court and Coughlin Court. 1% AEP (or greater) chance in any year"
+    },
+    {
+     "height_m": 4.27,
+     "impact": "◼ More than 182 buildings were flooded above floor including buildings at the Holy Trinity Lutheran College, St Brigids College and the 298 Campus of the Horsham Primary School. ◼ Several buildings were impacted by stormwater flooding. ◼ Access was cut to a significant number of roads, isolating more than 570 properties. January 2011 flood event"
+    },
+    {
+     "height_m": 4.15,
+     "impact": "◼ 578 properties are impacted by flooding, 58 buildings flooded above floor level ◼ There is extensive flooding through the centre of town, from the Botanic Gardens to St Brigids College. ◼ Flooding may impact the 298 Campus of the Horsham Primary School, Holy Trinity Lutheran College, Kurrajong Lodge Retirement Village and the Sunnyside Lutheran Retirement Village. ◼ Access may be cut to the CFA Station, SES Unit and Ambulance buildings. ◼ Deep flooding may cut access to McPherson Street, Menadue Street, Ocallaghans Parade and Cameron Road. 2% AEP (or greater) chance in any year"
+    },
+    {
+     "height_m": 3.92,
+     "impact": "◼ One building is flooded above floor in Riverside East Road, and 172 properties are impacted by flooding. ◼ Deep flooding may cut access to the Holy Trinity Lutheran College, the Sunnyside Lutheran Retirement Village and St Brigids College (0.5m depth). ◼ Extensive flooding may impact the Coughlin Park Bowls Club and Tennis Courts. ◼ Deep flooding may cut access to Hamilton Street, Macbain Street, Gillespie Street, Robinson Street, Trinity Drive and Baillie Street. 5% AEP (or greater) chance in any year Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community."
+    },
+    {
+     "height_m": 3.7,
+     "impact": "10% AEP (or greater) chance in any year ◼ 111 properties are impacted by flooding, including Barnes Boulevard, Peppertree Lane, Cameron Road. ◼ The Wotonga Basin Weir may be overtopped."
+    },
+    {
+     "height_m": 3.6,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 3.1,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.8,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Inverleigh Local flood guide (LFG).pdf",
+   "town": "Inverleigh",
+   "gauge_name": "Leigh River at Mount Mercer",
+   "station_key": "leigh river at mount mercer",
+   "guide_levels": {
+    "moderate": 3.0,
+    "minor": 2.0
+   },
+   "impacts": [
+    {
+     "height_m": 3.0,
+     "impact": "Moderate flood level No flooding in Inverleigh township"
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Jamieson Local Flood Guide LFG.pdf",
+   "town": "Jamieson",
+   "gauge_name": "Goulburn River at Dohertys",
+   "station_key": "goulburn river at dohertys",
+   "guide_levels": {
+    "major": 6.0,
+    "moderate": 3.5,
+    "minor": 2.0
+   },
+   "impacts": [
+    {
+     "height_m": 6.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 5.33,
+     "impact": "September 2010 flood level. Flash flooding caused 27 properties to be flooded and roads to be flooded. Caravan Park significantly inundated."
+    },
+    {
+     "height_m": 4.66,
+     "impact": "September 1998 flood level. Significant flooding from both rivers with some properties being flooded above floor level and roads flooded."
+    },
+    {
+     "height_m": 3.95,
+     "impact": "June 2007 flood level. Flash flooding in both the Goulburn and Jamieson Rivers. Sheds in yards backing onto the Goulburn River inundated with many roads flooded."
+    },
+    {
+     "height_m": 3.86,
+     "impact": "September 1993 flood level. Significant rainfall in Victoria’s North East. Many North East towns and communities received significant flooding and damage. In Jamieson, half of the Jamieson caravan Park grounds flooded. Rural sheds and roads were flooded in along the Goulburn River."
+    },
+    {
+     "height_m": 3.71,
+     "impact": "October 1996 flood level. Half of the Jamieson Caravan Park grounds flooded. Many low lying properties along both rivers flooded around their house but not above floor level."
+    },
+    {
+     "height_m": 3.58,
+     "impact": "July 1974 flood level. A year that saw significant rainfall and flooding across North East Victoria."
+    },
+    {
+     "height_m": 3.5,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 3.33,
+     "impact": "June 1995 flood level."
+    },
+    {
+     "height_m": 3.11,
+     "impact": "August 1955 flood level."
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 0.9,
+     "impact": "May 1975 flood level. Of note, the gauges show that this flood was predominately a Jamieson River flood. . Life-threatening Emergency 000"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Katamatite Local Flood Guide LFG.pdf",
+   "town": "Katamatite",
+   "gauge_name": "Broken Creek at Katamatite",
+   "station_key": "broken creek at katamatite",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.88,
+     "impact": "March 2012 flood level. 1% flood level. Height shown on map on page 2."
+    },
+    {
+     "height_m": 2.8,
+     "impact": "May 1974 flood level."
+    },
+    {
+     "height_m": 2.73,
+     "impact": "October 1993 flood level."
+    },
+    {
+     "height_m": 2.46,
+     "impact": "October 1975 flood level."
+    },
+    {
+     "height_m": 2.43,
+     "impact": "August 1973 flood level."
+    },
+    {
+     "height_m": 2.4,
+     "impact": "September 1973 flood level."
+    },
+    {
+     "height_m": 2.35,
+     "impact": "July 1981 flood level."
+    },
+    {
+     "height_m": 2.31,
+     "impact": "July 1995 flood level."
+    },
+    {
+     "height_m": 2.06,
+     "impact": "September 1989 flood level."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Kensington  North and West Melbourne Local Flood Guide.pdf",
+   "town": "Kensington North and West Melbourne",
+   "gauge_name": "Maribyrnong River at Maribyrnong",
+   "station_key": "maribyrnong river at maribyrnong",
+   "guide_levels": {
+    "major": 2.9,
+    "moderate": 2.3,
+    "minor": 1.7
+   },
+   "impacts": [
+    {
+     "height_m": 4.73,
+     "impact": "1% (or greater) chance in any year 911 properties are at risk of flooding in Kensington."
+    },
+    {
+     "height_m": 4.37,
+     "impact": "2% (or greater) chance in any year 543 properties are at risk of flooding in Kensington."
+    },
+    {
+     "height_m": 4.22,
+     "impact": "14th October 2022 Flood Level Peak. Three business were severely impacted in West Melbourne, five businesses had light to medium impact and there was one residential apartment block in Hobsons Road, Kensington, where the carpark flooded. This event was the third highest flood event on record for the area."
+    },
+    {
+     "height_m": 3.8,
+     "impact": "5% (or greater) chance in any year 5 properties are at risk of flooding in Kensington."
+    },
+    {
+     "height_m": 3.24,
+     "impact": "10%(or greater) chance in any year 5 properties are at risk of flooding in Kensington."
+    },
+    {
+     "height_m": 2.9,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 2.44,
+     "impact": "20%(or greater) chance in any year"
+    },
+    {
+     "height_m": 2.3,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 1.7,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Kerang Local Flood Guide.pdf",
+   "town": "Kerang",
+   "gauge_name": "Loddon River at Kerang (Murray Valley Highway Bridge)",
+   "station_key": "loddon river at kerang (murray valley highway bridge)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 78.03,
+     "impact": "19 January 2011 flood During the January 2011 flood, Kerang was protected by town levees but many properties, roads and levees were damaged in the surrounding area as outlined above. The extent of flood inundation is shown on page 2."
+    },
+    {
+     "height_m": 77.9,
+     "impact": "Design level for Kerang flood levee.*"
+    },
+    {
+     "height_m": 77.84,
+     "impact": "1981 flood – before the town levees were completed."
+    },
+    {
+     "height_m": 77.6,
+     "impact": "September 1993 flood."
+    },
+    {
+     "height_m": 77.4,
+     "impact": "10 December 2010 flood/September 2016 Flood"
+    },
+    {
+     "height_m": 77.2,
+     "impact": "Properties start to become isolated to the north and south of Kerang."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Lara Local Flood Guide LFG.pdf",
+   "town": "Lara",
+   "gauge_name": "Hovells Creek at Lara (Flinders Ave)",
+   "station_key": "hovells creek at lara (flinders ave)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 9.42,
+     "impact": "◼ 12 houses may be flooded above floor level in Melrose Street, Flinders Avenue, Minyip Road, Park Avenue, Bacchus Marsh Road, Goulburn Park Drive, Patullos Road & Benjamin Drive. ◼ Levees may be overtopped at Flinders Ave and Wingara Drive"
+    },
+    {
+     "height_m": 9.4,
+     "impact": "December 1988 flood event"
+    },
+    {
+     "height_m": 9.19,
+     "impact": "◼ 8 houses may be flooded above floor level in Melrose Street, Flinders Avenue, Minyip Road, Park Avenue, Bacchus Marsh Road and Goulburn Park Drive ◼ Over 3,500 properties may be impacted. ◼ Shallow flooding may impact Station Lake Road and Princes Freeway Southbound. Access may be cut to the Princes Freeway Northbound."
+    },
+    {
+     "height_m": 9.05,
+     "impact": "February 1973 flood event"
+    },
+    {
+     "height_m": 8.83,
+     "impact": "◼ 6 houses may be flooded above floor level in Melrose Street, Flinders Avenue, Minyip Road, Park Avenue and Bacchus Marsh Road. ◼ Shallow flooding may impact the Princes Freeway Northbound."
+    },
+    {
+     "height_m": 8.49,
+     "impact": "◼ Over 3,000 properties may be impacted. ◼ Significant flooding occurs upstream of Hovells Creek, north of the town and in Lara East. ◼ Several major and minor roads are impacted by flooding including Old Melbourne Road, Forest Road North, and Lime Crescent."
+    },
+    {
+     "height_m": 8.33,
+     "impact": "February 2005 flood event"
+    },
+    {
+     "height_m": 7.9,
+     "impact": "◼ 4 houses may be flooded above floor level. Over 2,500 properties may be impacted. Areas impacted include West Gateway and around the Flinders Re- serve South areas. ◼ There is extensive flooding throughout farmland in Lara."
+    },
+    {
+     "height_m": 7.06,
+     "impact": "◼ A house may be flooded above floor level. Up to 2,500 properties may be impacted. Areas impacted include Walkers Road, Flinders Avenue, Melrose Street, Thomas Street & Station Lake Road. ◼ Flooding of the Elcho Drain begins to inundate private property. ◼ Elcho Park Golf Course & North Geelong Soccer Club grounds impacted. ◼ Water begins to spill over Duggans Lane & Kees Road. ◼ Flooding cuts access to Flinders Avenue, Windermere Road, Challorans Road and Peak School Road."
+    },
+    {
+     "height_m": 6.84,
+     "impact": "April 2017 flood levels"
+    },
+    {
+     "height_m": 6.84,
+     "impact": "◼ Hovells Creek flood depth is at road level on Flinders Ave."
+    },
+    {
+     "height_m": 6.6,
+     "impact": "◼ Flinders Avenue Floodway Gates Closed. ◼ Access to Rennie Street cut, depth may be above 0.3m."
+    },
+    {
+     "height_m": 5.8,
+     "impact": "◼ Rennie Street Floodway gates closed due to deep flooding. Page 5 What might happen in a flood in your area? Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. *The height measurement is at the Hovells Creek at Lara gauge located in Flinders Avenue. ^This table includes information from previous flood events and flood studies, which are scientific models used to predict impacts at different flood heights and flows."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Licola Local Flood Guide LFG.pdf",
+   "town": "Licola",
+   "gauge_name": "Macalister River at Licola",
+   "station_key": "macalister river at licola",
+   "guide_levels": {
+    "major": 3.6,
+    "moderate": 3.2,
+    "minor": 2.7
+   },
+   "impacts": [
+    {
+     "height_m": 3.6,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 3.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.7,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Bairnsdale.pdf",
+   "town": "Bairnsdale",
+   "gauge_name": "Mitchell River at Bairnsdale",
+   "station_key": "mitchell river at bairnsdale",
+   "guide_levels": {
+    "moderate": 6.5
+   },
+   "impacts": [
+    {
+     "height_m": 6.5,
+     "impact": "Moderate Flood Level"
+    },
+    {
+     "height_m": 6.48,
+     "impact": "October 2023 flood event"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Bemm River.pdf",
+   "town": "Bemm River",
+   "gauge_name": "Bemm River at Princes Highway",
+   "station_key": "bemm river at princes highway",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 3.2,
+     "impact": "◼ Sydenham Inlet Road becomes unpassable. ◼ Properties or areas at the end of Sydenham Parade can become isolated or impacted by flood water. ◼ Floodwater breaches the banks to the East of the Bemm River onto the land between Sydenham Inlet Road and Sydenham Parade, including Bobs Bay and Cozy Nook Flats. During a flood that is larger than 3.2m; ◼ Sydenham Inlet Road becomes unpassable. ◼ Flooding extends from the Bemm River Bridge to the southern point of the flood plain and across to Bobs Bay. ◼ Riverside camp areas and some low lying caravan parks impacted. ◼ Relocation of stock required in some cases. Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community. *The height measurement is at the Bemm River upstream gauge. ^This table includes information from previous flood events and flood studies, which are scientific models used to predict impacts at different flood heights and flows. What roads are likely to flood? During a flood, the roads listed above may flood and could be closed. For current road closures, check VicTraffic. VicEmergency may include road closures in its warnings, see page 7 for more information. Stay safe by never driving through floodwater. It can take just 15cm of flowing water to float a car, that’s the height of an average pen."
+    },
+    {
+     "height_m": 2.3,
+     "impact": "◼ Floodwater on the Sydenham Inlet Road rises to a depth greater than 0.3 meters. ◼ The floodwater flow speed and depth increases and limits access of Sydenham Inlet Road."
+    },
+    {
+     "height_m": 1.9,
+     "impact": "◼ Floodwater covers large areas southeast of Pardew Track affecting agricultural properties and livestock. ◼ Areas of the Sydenham Inlet Road between Bemm River and Bemm River Bridge flood up to 0.3 meters."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Bruthen Wiseleigh and Mossiface.pdf",
+   "town": "Bruthen Wiseleigh and Mossiface",
+   "gauge_name": "Tambo River at Ramrod Creek (Downstream)",
+   "station_key": "tambo river at ramrod creek (downstream)",
+   "guide_levels": {
+    "major": 10.0
+   },
+   "impacts": [
+    {
+     "height_m": 10.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 9.7,
+     "impact": "2012 flood event, see page 6."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Buchan.pdf",
+   "town": "Buchan",
+   "gauge_name": "Buchan River at Buchan",
+   "station_key": "buchan river at buchan",
+   "guide_levels": {
+    "moderate": 4.9
+   },
+   "impacts": [
+    {
+     "height_m": 4.9,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.45,
+     "impact": "June 2012 flood event"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Cann River.pdf",
+   "town": "Cann River",
+   "gauge_name": "Cann River at Cann River Offtake (Upstream)",
+   "station_key": "cann river at cann river offtake (upstream)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 6.75,
+     "impact": "1% AEP Flood event 5.83m at Cann River at Weeragua gauge"
+    },
+    {
+     "height_m": 5.97,
+     "impact": "2011 flood event"
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Potential Impacts: ◼ Widespread flooding. ◼ Many houses and businesses are inundated above floor level. ◼ Properties and whole areas may be isolated. ◼ Major roads and rail routes closed. ◼ Many evacuations required. ◼ Impact to utility services (water, power, sewerage) Cann River Flood Class Levels and Potential Impacts The Minor, Moderate and Major flood class level categories are standards set across Australia by the Bureau of Meteorology to provide consistent understanding about the consequences and impacts of flooding in the table below. Monitor the water levels of these gauges at the Bureau of Meteorology website: Latest Rivers Heights at Cann River"
+    },
+    {
+     "height_m": 3.5,
+     "impact": "Potential Impacts: ◼ Water spilling over riverbanks and covering large areas of land. ◼ Water above floor level in some houses and buildings. ◼ Evacuation may be required in some areas. ◼ Impact to roads and traffic routes. Major"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Potential Impacts: ◼ Water spilling over river banks and nearby low lying areas. ◼ Water coming up through drains in nearby streets. ◼ Boat ramps, jetties and lake side areas can be unusable. ◼ Water can cover minor paths, tracks, and low level bridges. ◼ Some backyards and buildings impacted below floor level ◼ Waterside camp areas and some low lying caravan parks impacted. ◼ Relocation of stock required in some cases. Moderate"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Eagle Point.pdf",
+   "town": "Eagle Point",
+   "gauge_name": "McMillan Strait at Paynesville",
+   "station_key": "mcmillan strait at paynesville",
+   "guide_levels": {
+    "major": 1.3
+   },
+   "impacts": [
+    {
+     "height_m": 1.35,
+     "impact": "1998 flood level"
+    },
+    {
+     "height_m": 1.3,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Genoa, Gipsy Point & Mallacoota.pdf",
+   "town": "Genoa, Gipsy Point & Mallacoota",
+   "gauge_name": "Genoa River at The Gorge",
+   "station_key": "genoa river at the gorge",
+   "guide_levels": {
+    "major": 4.0,
+    "moderate": 2.2,
+    "minor": 1.9
+   },
+   "impacts": [
+    {
+     "height_m": 4.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 3.1,
+     "impact": "December 2023 flood event"
+    },
+    {
+     "height_m": 2.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 1.9,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Lakes Entrance.pdf",
+   "town": "Lakes Entrance",
+   "gauge_name": "Bullock Island (Lakes Entrance)",
+   "station_key": "bullock island (lakes entrance)",
+   "guide_levels": {
+    "major": 1.3,
+    "minor": 0.9
+   },
+   "impacts": [
+    {
+     "height_m": 1.8,
+     "impact": "1% AEP Height, see page 4. 1952 flood height. • Areas of the Princes Highway, Golf Links Road, Roadknight Street, Palmers Road and Bullock Island Road are affected by flood water. • Flooding in areas below expands further and increases in depth, affecting most of the Lakes Entrance Peninsula and Eastern Beach area."
+    },
+    {
+     "height_m": 1.4,
+     "impact": "• Most areas on the Lakes Entrance Peninsula and the Eastern Beach area are affected by flood water, affecting up to 400 homes and isolating 250 properties."
+    },
+    {
+     "height_m": 1.3,
+     "impact": "Major flood level 2007 and 1998 flood event level. • Flooding in the areas below expands further and increases in depth potentially isolating properties and affecting businesses and travel through Lakes Entrance. • Low lying areas of Carpenter Street, Short Street, Jetty Road, Middle Street, Long Street, Fish Street and Marrungbaur Street may be affected by flood."
+    },
+    {
+     "height_m": 1.1,
+     "impact": "• Several areas of The Esplanade and Marine Parade and most of Laura Street, Carstairs Street, Box Street, Gray Street, Rowe Street, Bulmer Street and Stock Street may be affected by flood water. • Marine Parade Reserve Playground, Lions Park at Eastern Beach Road, Lakes Entrance Skate Park and Woolworths Carpark may be affected by flood water."
+    },
+    {
+     "height_m": 0.9,
+     "impact": "Minor flood level • Marine Parade, The Esplanade, Laura Street, Carstairs Avenue, Gray Street, Mechanics Street, Staunton Street and Devitt Street may have localised areas of flooding at storm water drains."
+    },
+    {
+     "height_m": 0.7,
+     "impact": "• Low lying areas including boat ramps, jetties, carparks, walking tracks and parks near water can experience flooding. • Boat mooring lines may need to be extended. Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community. Page What might happen in a flood in your area? *The height measurement is at the Bullock Island (Lakes Entrance) gauge. ^This table includes information from previous flood events and flood studies, which are scientific models used to predict impacts at different flood heights and flows."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Metung.pdf",
+   "town": "Metung",
+   "gauge_name": "Lake King at Metung Marina",
+   "station_key": "lake king at metung marina",
+   "guide_levels": {
+    "major": 1.9
+   },
+   "impacts": [
+    {
+     "height_m": 2.1,
+     "impact": "1% AEP height, see page 4"
+    },
+    {
+     "height_m": 1.9,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Orbost to Marlo.pdf",
+   "town": "Orbost to Marlo",
+   "gauge_name": "Snowy River at Jarrahmond",
+   "station_key": "snowy river at jarrahmond",
+   "guide_levels": {
+    "major": 8.9,
+    "moderate": 7.4,
+    "minor": 4.1
+   },
+   "impacts": [
+    {
+     "height_m": 12.1,
+     "impact": "February 1971 flood event, see page 7. What might happen in a flood in your area? Page 6 *The height measurement is at the Snowy River Gauge at Jarrahmond. ^This table includes information from previous flood events and flood studies, which are scientific models used to predict impacts at different flood heights and flows. • Griebenows Road • Gargans Lane • Birkins Road • Healeys Road • Huxters Road • James Road Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community."
+    },
+    {
+     "height_m": 8.9,
+     "impact": "Major flood level The roads and areas impacted by flooding continue to experience rises in floodwater and affecting a larger area, with some areas having depths of 1.2m of dangerously fast flowing floodwater."
+    },
+    {
+     "height_m": 8.4,
+     "impact": "• Marlo-Cabbage Tree Road at Emu Creek is affected by flood water. • Old Station Road and Beach Road at Ewings Marsh are affected by floodwater."
+    },
+    {
+     "height_m": 7.4,
+     "impact": "Moderate flood level • Marlo Road between Snaggers Lane and Marlo township is affected by floodwater • Buchan-Orbost Road between Burn Street and Bete Belong Road • Forrest Road between Marlo Road and Macleod Road including Forest Park • The Orbost Snowy River Caravan Park at Nicholson Street is flooded."
+    },
+    {
+     "height_m": 6.9,
+     "impact": "• Low lying areas of Marlo Road are affected by flood water up to 0.8m deep. • Corringle Road south of Ewings Marsh Road is affected by flood water up to 0.8m deep restricting access to the campground and Marlo Coastal Reserve. • Tabbara Road south of Sandy Flat Road is affected by floodwater. • Old Marlo Road and Beach Road, Marlo are affected by floodwater and boat ramps are inaccessible."
+    },
+    {
+     "height_m": 5.7,
+     "impact": "The Snowy River continues to extend across the floodplains at Bete Belong, Jarrahmond and between Orbost and Marlo at depths up to 1.2 metres including;"
+    },
+    {
+     "height_m": 4.1,
+     "impact": "Minor flood level The Snowy River begins to break out of its channel into low lying areas of the floodplains and drains at Jarrahmond and south of Orbost near the Brodribb River and Lake Curlip, with some areas having a 2 metre depth. • B Road (including Bouchers Lane) between Forrest Road and Nixons Road is closed due to flood water. • Buchan-Orbost Road between Bete Belong Road and Deaseys Cutting Road is affected by floodwater. • Jarramond Road between Guns and Huxters Road is affected by flood water. • Low lying areas on Lochend Road, Sandy Flat Road and Healeys are affected by floodwater. • Walking and cycling tracks are affected by floodwater."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Paynesville.pdf",
+   "town": "Paynesville",
+   "gauge_name": "McMillan Strait at Paynesville",
+   "station_key": "mcmillan strait at paynesville",
+   "guide_levels": {
+    "major": 1.3
+   },
+   "impacts": [
+    {
+     "height_m": 2.0,
+     "impact": "1% AEP height, see page 4."
+    },
+    {
+     "height_m": 1.5,
+     "impact": "2007 flood level"
+    },
+    {
+     "height_m": 1.35,
+     "impact": "1998 flood level"
+    },
+    {
+     "height_m": 1.3,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Raymond Island.pdf",
+   "town": "Raymond Island",
+   "gauge_name": "McMillan Strait at Paynesville",
+   "station_key": "mcmillan strait at paynesville",
+   "guide_levels": {
+    "major": 1.3
+   },
+   "impacts": [
+    {
+     "height_m": 1.35,
+     "impact": "1998 flood level"
+    },
+    {
+     "height_m": 1.3,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Swifts Creek.pdf",
+   "town": "Swifts Creek",
+   "gauge_name": "Tambo River at Swifts Creek",
+   "station_key": "tambo river at swifts creek",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 6.0,
+     "impact": "June 2012 Flood Event"
+    },
+    {
+     "height_m": 5.96,
+     "impact": "1% AEP Flood Event"
+    },
+    {
+     "height_m": 5.5,
+     "impact": "July 2016 flood event"
+    },
+    {
+     "height_m": 5.5,
+     "impact": "The Tambo River and the Swifts Creek have overflowed into a wider area throughout the Tambo Valley and Ensay affecting many homes, properties and travel routes and potentially isolating Swifts Creek. Great Alpine Road and Swifts Creek East Road are closed at: • Simpson Creek (approximately 2km south of Swifts Creek) • Old Sheep Station Creek (1km north of Ensay-Doctors Flat Road intersection) • Bald Hills Creek Road • North of Angora Range Road The following roads are also impacted by flooding: • McMillan Street bridge, and • Hollonds Road and Obriens Road bridge are closed • McLarty Road at the southend • Sheltons Lane • Cassilus Road Bridge near Rileys Creek Road • Ensay-Doctors Flat Road at Great Alpine Road, Ensay. • Bindi Road near the Great Alpine Road intersection • Nunniong Road at Old Bindi Road intersection • Sandy Creek Road bridge"
+    },
+    {
+     "height_m": 4.8,
+     "impact": "The Tambo River is starting to overflow into low lying areas. • The Hollonds Road and Obriens Road bridge over the Tambo River at Swifts Creek is starting to flood. • Nunniong Road bridge at the Tambo River in Bindi is blocked by water across the road. • Sandy Creek Road Bridge at the Tambo River in Ensay is closed. • Millers Access Road at Ensay has water over the road."
+    },
+    {
+     "height_m": 4.4,
+     "impact": "January 2022 flood event"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide - Woodglen Lindenow and Hillside.pdf",
+   "town": "Woodglen Lindenow and Hillside",
+   "gauge_name": "Mitchell River at Glenaladale",
+   "station_key": "mitchell river at glenaladale",
+   "guide_levels": {
+    "major": 5.5,
+    "moderate": 4.5,
+    "minor": 3.0
+   },
+   "impacts": [
+    {
+     "height_m": 9.3,
+     "impact": "1% Annual Exceedance Possibility, see page 4. • Bairnsdale-Dargo Road is unpassable between Bon Accord Road and Cowells Lane. • Low lying areas of Marshalls Road, Woodglen Road and Perry Road have water across the road, potentially isolating businesses and properties. • The Mitchell River Flats are flooded with most areas having fast flowing water. *The height measurement is at the Mitchell River at Glenaladale gauge. ^This table includes information flood studies, which are scientific models used to predict impacts at different flood heights and flows."
+    },
+    {
+     "height_m": 8.4,
+     "impact": "• Bairnsdale-Dargo Road at Windmill Road is unpassable due to water across the road. • Fernbank-Glenaladale Road at the Iguana Creek has water across the road, potentially isolating the Glenaladale township. • The Mitchell River Flats are now completely flooded with some areas having fast flowing water."
+    },
+    {
+     "height_m": 6.4,
+     "impact": "• Wy Yung-Calulu Road at Boggy Creek Bridge is unpassable due to water over the road, and Lindenow-Glenaladale Road has more areas affected by flood water. • Windmill Road, Settlement Road, Thatchers Lane, Bon Accord Road, Lubys Lane, Alexanders Road and Baudinetts Road between Scotts Road and Hillside Road have water over the road, possibly isolating properties. • Water covers a greater extent of the Mitchell River Flats with some areas having flowing water."
+    },
+    {
+     "height_m": 5.5,
+     "impact": "Major Flood level"
+    },
+    {
+     "height_m": 5.4,
+     "impact": "• Lindenow-Glenaladale Road at Rodericks Road and the Calulu Bridge and Fernbank -Glenaladale Road at Moilun Creek are unpassable due to water across the road. • Low lying areas of Soldiers Road, Bulmers Road, Ross Street and Hansfords Lane have water over the road and flood water is affecting farmland in Hillside. • Water is breaking out of the river channels and expanding across the low lying areas of the Mitchell River Flats and wetlands."
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Moderate Flood Level"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Minor Flood Level • Bairnsdale-Dargo Road at Bashfords Road and Lindenow-Glenaladale Road north of Bairnsdale-Dargo Road have water across the road • Water is confined to the river channel throughout the Mitchell River Flats."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Boisdale_Bushy Park.pdf",
+   "town": "Boisdale / Bushy Park",
+   "gauge_name": "Avon River at The Channel",
+   "station_key": "avon river at the channel",
+   "guide_levels": {
+    "major": 7.5,
+    "moderate": 6.9
+   },
+   "impacts": [
+    {
+     "height_m": 9.6,
+     "impact": "June 2007 flood event"
+    },
+    {
+     "height_m": 8.8,
+     "impact": "2012 flood event"
+    },
+    {
+     "height_m": 7.5,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 7.4,
+     "impact": "November, 2023 flood event"
+    },
+    {
+     "height_m": 6.9,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 6.89,
+     "impact": "June, 2021 flood event Boisdale, Valencia Creek, Briagolong and Stratford residents were asked to evacuate."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Boisdale_Bushy Park.pdf",
+   "town": "Boisdale / Bushy Park",
+   "gauge_name": "Freestone Creek at Briagolong",
+   "station_key": "freestone creek at briagolong",
+   "guide_levels": {
+    "minor": 5.0
+   },
+   "impacts": [
+    {
+     "height_m": 5.0,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 4.75,
+     "impact": "January 2024 Flood Event"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Maffra_Riverslea_Bundalaguah.pdf",
+   "town": "Maffra / Riverslea / Bundalaguah",
+   "gauge_name": "Macalister River at Lake Glenmaggie (Downstream)",
+   "station_key": "macalister river at lake glenmaggie (downstream)",
+   "guide_levels": {
+    "major": 5.3,
+    "moderate": 4.3,
+    "minor": 2.6
+   },
+   "impacts": [
+    {
+     "height_m": 9.57,
+     "impact": "June, 2007 flood event. ◼ The largest flood on record for the Macalister Catchment was experienced after record rainfall fell throughout Gippsland with Murderers Hill recording 222mm of rain in a 24 hour period. ◼ Lake Glenmaggie rose from 50% storage to spilling over through the night."
+    },
+    {
+     "height_m": 9.4,
+     "impact": "◼ 1% AEP Height, which means there is a 1% chance of this size flood (or greater) happening in any year."
+    },
+    {
+     "height_m": 6.96,
+     "impact": "October, 2023 flood event. ◼ The catchment received more than 174mm of rain in a 24 hour period causing major flood warnings notifying the townships of Maffra, Riverslea and Bundalaguah to evacuate the area or move to higher ground."
+    },
+    {
+     "height_m": 5.51,
+     "impact": "June, 2012 flood event. ◼ In some areas of Gippsland more than 200mm of rain fell causing major flooding in most of the Gippsland catchments, impacting major roads and isolating towns."
+    },
+    {
+     "height_m": 5.3,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.5,
+     "impact": "August 2011 flood event."
+    },
+    {
+     "height_m": 4.3,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.21,
+     "impact": "October 1996 flood event."
+    },
+    {
+     "height_m": 2.6,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 2.19,
+     "impact": "April 1990 flood event. ◼ Large amounts of rain fell in the upper Macalister catchment and resulted in Lake Glenmaggie storage levels increasing from 11% to 90% capacity by receiving 113,000 ML per day. ◼ Southern Rural Water commenced controlled releases as part of mitigating the flood down stream, which successfully reduced the flood effects for Maffra, Riverslea and Bundalaguah, and also down further at Sale."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Newry_Tinamba.pdf",
+   "town": "Newry / Tinamba",
+   "gauge_name": "Macalister River at Lake Glenmaggie (Downstream)",
+   "station_key": "macalister river at lake glenmaggie (downstream)",
+   "guide_levels": {
+    "major": 5.3,
+    "moderate": 4.3,
+    "minor": 2.6
+   },
+   "impacts": [
+    {
+     "height_m": 9.57,
+     "impact": "June, 2007 flood event. ◼ The largest flood on record for the Macalister Catchment was experienced after record rainfall fell throughout Gippsland with Murderers Hill recording 222mm of rain in a 24 hour period. ◼ Lake Glenmaggie went from 50% storage to spilling over through the night. This event isolated townships including Newry and Tinamba, and 91 residents were winched and airlifted by helicopter, or rescued by boat from the area."
+    },
+    {
+     "height_m": 6.96,
+     "impact": "October, 2023 flood event. ◼ The catchment received more than 150mm of rain in a 24 hour period causing the Macalister River to rise quickly needing urgent major flood warnings notifying the townships of Newry and Tinamba to evacuate."
+    },
+    {
+     "height_m": 5.51,
+     "impact": "June, 2012 flood event. ◼ In some areas of Gippsland more than 200mm of rain fell causing major flooding in most of the Gippsland catchments, impacting major roads and isolating towns."
+    },
+    {
+     "height_m": 5.3,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.5,
+     "impact": "August 2011 flood event."
+    },
+    {
+     "height_m": 4.3,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.21,
+     "impact": "October 1996 flood event."
+    },
+    {
+     "height_m": 2.6,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 2.19,
+     "impact": "April 1990 flood event. ◼ Large amounts of rain fell in the upper Macalister catchment and resulted in Lake Glenmaggie storage levels increasing from 11% to 90% capacity by receiving 113,000 ML per day. ◼ Southern Rural Water commenced controlled releases as part of mitigating the flood down stream, which successfully reduced the flood effects for Newry and Tinamba and avoided major flooding at Sale."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Rosedale.pdf",
+   "town": "Rosedale",
+   "gauge_name": "Latrobe River at Rosedale",
+   "station_key": "latrobe river at rosedale",
+   "guide_levels": {
+    "major": 5.5,
+    "moderate": 4.8,
+    "minor": 4.0
+   },
+   "impacts": [
+    {
+     "height_m": 5.71,
+     "impact": "1% AEP Flood, flood height shown on map page 4"
+    },
+    {
+     "height_m": 5.5,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 5.21,
+     "impact": "October 1953 flood event"
+    },
+    {
+     "height_m": 5.12,
+     "impact": "Mill Lane will be closed. Properties within the Rosedale township have the potential to be isolated within their properties due to floodwater affecting roads. Areas of the Rosedale township previously mentioned continue to experience rises and a further extent of floodwater."
+    },
+    {
+     "height_m": 4.8,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.8,
+     "impact": "June 2021 flood event"
+    },
+    {
+     "height_m": 4.74,
+     "impact": "September 1993 flood event"
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide LFG - Stratford.pdf",
+   "town": "Stratford",
+   "gauge_name": "Avon River at Stratford",
+   "station_key": "avon river at stratford",
+   "guide_levels": {
+    "moderate": 6.0,
+    "minor": 4.5
+   },
+   "impacts": [
+    {
+     "height_m": 8.86,
+     "impact": "June 2007 flood event."
+    },
+    {
+     "height_m": 8.32,
+     "impact": "June 2012 flood event."
+    },
+    {
+     "height_m": 6.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 5.6,
+     "impact": "December 2023 flood event."
+    },
+    {
+     "height_m": 4.8,
+     "impact": "January 2024 flood event."
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Local Flood Guide Tambo Upper to Swan Reach & Johnsonville.pdf",
+   "town": "Tambo Upper to Swan Reach & Johnsonville",
+   "gauge_name": "Tambo River at Ramrod Creek (Downstream)",
+   "station_key": "tambo river at ramrod creek (downstream)",
+   "guide_levels": {
+    "major": 10.0
+   },
+   "impacts": [
+    {
+     "height_m": 10.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 9.7,
+     "impact": "2012 flood event, see page 6."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Manningham Local Flood Guide LFG.pdf",
+   "town": "Manningham",
+   "gauge_name": "Yarra River at Banksia Street (Heidelberg)",
+   "station_key": "yarra river at banksia street (heidelberg)",
+   "guide_levels": {
+    "major": 9.2,
+    "moderate": 8.3
+   },
+   "impacts": [
+    {
+     "height_m": 9.2,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 9.0,
+     "impact": "One property will be impacted at this level. Community infrastructure that may be impacted by floodwater includes: ◼ Stand at Carey Baptist Grammar Sports Centre, Bulleen Road, Bulleen"
+    },
+    {
+     "height_m": 8.3,
+     "impact": "◼ 5th Feb 2011 flood peak level Community infrastructure that may be impacted by floodwater includes: ◼ Trinity Grammar School Sporting Complex, Bulleen Road ◼ Marcellin College Sports Grounds, Bulleen Road ◼ Carey Baptist Grammar Sports Centre"
+    },
+    {
+     "height_m": 8.3,
+     "impact": "Moderate flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Manningham Local Flood Guide LFG.pdf",
+   "town": "Manningham",
+   "gauge_name": "Yarra River at Fitzsimons Lane (Templestowe)",
+   "station_key": "yarra river at fitzsimons lane (templestowe)",
+   "guide_levels": {
+    "major": 8.0,
+    "moderate": 6.0,
+    "minor": 3.5
+   },
+   "impacts": [
+    {
+     "height_m": 8.6,
+     "impact": "12 properties at risk of flooding. ◼ Water over the road may occur on Riverwood Lane and Ruffey Street, Templestowe Lower"
+    },
+    {
+     "height_m": 8.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 6.7,
+     "impact": "One property will be impacted at this level. Community infrastructure that may be impacted by floodwater includes: ◼ Stand at Carey Baptist Grammar Sports Centre, Bulleen Road, Bulleen"
+    },
+    {
+     "height_m": 6.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Community infrastructure that may be impacted by floodwater includes: ◼ Yarra Valley Country Club, Templestowe Road ◼ Birrarung Park, Templestowe Road"
+    },
+    {
+     "height_m": 3.5,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Manningham Local Flood Guide LFG.pdf",
+   "town": "Manningham",
+   "gauge_name": "Yarra River at Warrandyte",
+   "station_key": "yarra river at warrandyte",
+   "guide_levels": {
+    "major": 6.5,
+    "moderate": 4.5,
+    "minor": 3.0
+   },
+   "impacts": [
+    {
+     "height_m": 8.72,
+     "impact": "◼ 7 properties in total at risk of flooding. ◼ Water over the road may occur on Police Street, Warrandyte"
+    },
+    {
+     "height_m": 8.35,
+     "impact": "◼ 6 properties in total at risk of flooding. ◼ Water over the road may occur on First Street, Warrandyte"
+    },
+    {
+     "height_m": 6.5,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Maribyrnong Local Flood Guide LFG.pdf",
+   "town": "Maribyrnong",
+   "gauge_name": "Maribyrnong River at Maribyrnong",
+   "station_key": "maribyrnong river at maribyrnong",
+   "guide_levels": {
+    "major": 2.9,
+    "moderate": 2.3,
+    "minor": 1.7
+   },
+   "impacts": [
+    {
+     "height_m": 4.5,
+     "impact": "September, 1906 flood event.—highest flood on record. Some houses submerged and swept away"
+    },
+    {
+     "height_m": 4.26,
+     "impact": "September, 1916 flood event. Second highest recorded flooding"
+    },
+    {
+     "height_m": 4.22,
+     "impact": "October, 2022 flood event—major disruptions and evacuations"
+    },
+    {
+     "height_m": 4.2,
+     "impact": "May, 1974 flood event - traffic gridlocked, 372 properties flooded 2%"
+    },
+    {
+     "height_m": 3.31,
+     "impact": "September, 1993 flood event. Anglers Tavern lounge and bistro areas under nearly two metres of water, and a further 50 residences flooded over floor level."
+    },
+    {
+     "height_m": 2.9,
+     "impact": "Major flood level Tram services along routes 57 & 82 and bus services 468 & 952 along Raleigh Road likely to be impacted"
+    },
+    {
+     "height_m": 2.83,
+     "impact": "November, 1954 flood event. Maribyrnong River breaks its banks causing 200 families to be temporarily homeless. More than 60 rescued by Army boats. 2.44 20%"
+    },
+    {
+     "height_m": 2.3,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.21,
+     "impact": "January, 2011 flood event. Flooding of the lower floor at Anglers Tavern commenced. Closure of Chifley Drive, Plantation Street and nearby adjoining roads. Infrastructure improvements then implemented and have reduced the risk of similar floods having the same impact."
+    },
+    {
+     "height_m": 1.7,
+     "impact": "Minor flood level ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community. Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. *The height measurement is at the Chifley Drive Gauge. ^This table includes information from previous flood events. Page 5"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Moonee Valley Local Flood Guide LFG.pdf",
+   "town": "Moonee Valley",
+   "gauge_name": "Maribyrnong River at Maribyrnong",
+   "station_key": "maribyrnong river at maribyrnong",
+   "guide_levels": {
+    "major": 2.9,
+    "moderate": 2.3
+   },
+   "impacts": [
+    {
+     "height_m": 2.9,
+     "impact": "Major flood level Properties may start to be impacted or isolated by floodwater."
+    },
+    {
+     "height_m": 2.3,
+     "impact": "Moderate flood level Maribyrnong River Trail flooded at various locations."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Murchison Local Flood Guide LFG.pdf",
+   "town": "Murchison",
+   "gauge_name": "Goulburn River at Murchison",
+   "station_key": "goulburn river at murchison",
+   "guide_levels": {
+    "major": 10.7,
+    "moderate": 10.2,
+    "minor": 9.0
+   },
+   "impacts": [
+    {
+     "height_m": 12.22,
+     "impact": "September 1916 Largest flood known (approx.). If this level occurred today it would cause significant numbers of rural properties to be isolated and more properties would have above floor flooding along Station, Hutchinson, Gillam and Willoughby Streets, Phillip Lane, and High and River Road. 12.06 m October 2022 – Largest flood since Lake Eildon was constructed in 1956."
+    },
+    {
+     "height_m": 11.72,
+     "impact": "1% flood level (height shown on map pg 2). A flood of this height could cause flooding in low lying areas including Phillip Lane, Willoughby, Hutchison and Gillam Streets, High Road, the town swimming pool and cemetery."
+    },
+    {
+     "height_m": 11.33,
+     "impact": "May 1974."
+    },
+    {
+     "height_m": 11.28,
+     "impact": "1917."
+    },
+    {
+     "height_m": 11.25,
+     "impact": "1934."
+    },
+    {
+     "height_m": 10.8,
+     "impact": "Levee near River Haven Caravan Park overflows flooding the area."
+    },
+    {
+     "height_m": 10.7,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 10.66,
+     "impact": "October 1993."
+    },
+    {
+     "height_m": 10.57,
+     "impact": "September 1993."
+    },
+    {
+     "height_m": 10.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 10.15,
+     "impact": "September 2010. People were moved to Murchison Relief Centre in Watson Street and caravans were moved to higher ground."
+    },
+    {
+     "height_m": 9.93,
+     "impact": "January 2011. No significant impacts were experienced in Murchison."
+    },
+    {
+     "height_m": 9.81,
+     "impact": "December 2010. No significant impacts were experienced in Murchison."
+    },
+    {
+     "height_m": 9.42,
+     "impact": "November 2011. No significant impacts were experienced in Murchison."
+    },
+    {
+     "height_m": 9.0,
+     "impact": "Minor flood level. Low-lying rural properties upstream and downstream of Murchison likely to be flooded which may require the moving of stock and equipment to higher ground and the closure of some local roads and camping and fishing spots north of the Bridge."
+    },
+    {
+     "height_m": 7.12,
+     "impact": "March 2012."
+    },
+    {
+     "height_m": 5.62,
+     "impact": "December 2017. Photos: VICSES Murchison Unit – October 2022 Flood"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Myrtleford Local Flood Guide.pdf",
+   "town": "Myrtleford",
+   "gauge_name": "Ovens River at Myrtleford",
+   "station_key": "ovens river at myrtleford",
+   "guide_levels": {
+    "minor": 4.5
+   },
+   "impacts": [
+    {
+     "height_m": 4.79,
+     "impact": "March 2012 flood event"
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Nathalia Local Flood Guide LFG.pdf",
+   "town": "Nathalia",
+   "gauge_name": "Broken Creek at Walshs Bridge",
+   "station_key": "broken creek at walshs bridge",
+   "guide_levels": {
+    "major": 3.4,
+    "moderate": 3.0,
+    "minor": 2.0
+   },
+   "impacts": [
+    {
+     "height_m": 3.96,
+     "impact": "Water likely to overtop most of the town levees resulting in most of the town flooding to depth over 1.2 m. Levees can fail before this level"
+    },
+    {
+     "height_m": 3.82,
+     "impact": "Water likely to overtop Nathalia-Katamatite Road town levee near town weir. Levees can fail before this level"
+    },
+    {
+     "height_m": 3.66,
+     "impact": "1% flood level. A 1% flood means there is a 1% chance of this type of flooding happening every year"
+    },
+    {
+     "height_m": 3.57,
+     "impact": "March 2012 flood level Height shown on map on page 2. 17 houses were damaged during this flood"
+    },
+    {
+     "height_m": 3.5,
+     "impact": "October 1993 flood level"
+    },
+    {
+     "height_m": 3.41,
+     "impact": "Demountable flood barriers installed along Bromley Street between the Murray Valley Highway bridge and levee end wall"
+    },
+    {
+     "height_m": 3.4,
+     "impact": "Demountable flood barriers installed across Murray Valley Highway north of town. Road access is closed"
+    },
+    {
+     "height_m": 3.4,
+     "impact": "Major flood level."
+    },
+    {
+     "height_m": 3.35,
+     "impact": "Demountable flood barriers installed across Railway Street closing road access"
+    },
+    {
+     "height_m": 3.3,
+     "impact": "Demountable flood barriers installed along Weir Street, west of Murray Valley Highway Bridge near fire station to the public toilets"
+    },
+    {
+     "height_m": 3.25,
+     "impact": "1974 flood level without levees, impacts wouldn’t be the same today"
+    },
+    {
+     "height_m": 3.13,
+     "impact": "1995 flood level"
+    },
+    {
+     "height_m": 3.1,
+     "impact": "Flooding two-four kilometres north of town likely to close Murray Valley Highway"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 2.95,
+     "impact": "Flooding to the lowest part of Weir Street likely"
+    },
+    {
+     "height_m": 2.6,
+     "impact": "Drain 13 channel spillway will begin operating around this level with flow path to the north west"
+    },
+    {
+     "height_m": 2.55,
+     "impact": "December 2010 flood level. Low-lying road and land beside Creek flooded"
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Minor flood level Life-threatening Emergency 000"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Newstead Local flood guide LFG.pdf",
+   "town": "Newstead",
+   "gauge_name": "Loddon River at Newstead",
+   "station_key": "loddon river at newstead",
+   "guide_levels": {
+    "moderate": 4.5,
+    "minor": 3.0
+   },
+   "impacts": [
+    {
+     "height_m": 4.5,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Minor flood level Newstead can become isolated when main roads are cut during a flood, with flood waters likely to cut off the Midland Highway at Newstead, depending on the river's flow."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Numurkah Local Flood Guide LFG.pdf",
+   "town": "Numurkah",
+   "gauge_name": "Broken Creek at Numurkah (Melville St)",
+   "station_key": "broken creek at numurkah (melville st)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 7.93,
+     "impact": "1% flood level Height shown on map page 2."
+    },
+    {
+     "height_m": 7.9,
+     "impact": "March 2012 and 1916 flood levels. In 2012 over 160 buildings were damaged above floor level. The Shepparton-Numurkah railway line was badly damaged. 130 local roads were closed including the Goulburn Valley Highway, Katamatite Road and Numurkah-Nathalia Road isolating many properties. Floodwater from the Muckatah Depression added to flooding in Numurkah, Yarrawonga, Burramine South, Katatmatite East and Naring."
+    },
+    {
+     "height_m": 7.8,
+     "impact": "May 1974 flood level. During this flood very heavy rain fell across local catchments of the Muckatah Depression, the Boosey, Broken, Nine Mile, Wild Dog and Box Creeks. The Broken, Nine Mile and Box Creeks all merged and flooding lasted nearly two months. Wild Dog and Box Creeks significantly added to flooding upstream of Numurkah. Commerical and residential areas flooded with 7 buildings damged by flood water. Major sandbagging efforts by locals saved the town from more damage."
+    },
+    {
+     "height_m": 7.77,
+     "impact": "October 1993 flood level. This flood was caused by heavy rainfall across the Broken River area near Benalla causing significant flooding and damage to rural properties. No major effects in the Numurkah township. Katamatite-Nathalia Road was closed."
+    },
+    {
+     "height_m": 7.18,
+     "impact": "Estimated 1939 flood Ievel"
+    },
+    {
+     "height_m": 7.01,
+     "impact": "Estimated 1956 flood level Life-threatening Emergency 000 DRAFT For community consultation and feedback."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Port Fairy-Local Flood Guide LFG.pdf",
+   "town": "Port Fairy",
+   "gauge_name": "Moyne River at Toolong",
+   "station_key": "moyne river at toolong",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 4.5,
+     "impact": "August 1978 Flood Level"
+    },
+    {
+     "height_m": 4.47,
+     "impact": "October 2020 Flood Level 47 buildings were impacted above and below floor at the Gardens Caravan Park. 16 buildings were impacted by flooding in Port Fairy. 12 buildings were impacted by flooding north of Port Fairy in Kirkstall, Killarney, Koroit, Crossley and Rosebrook."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Quambatook Local Flood Guide.pdf",
+   "town": "Quambatook",
+   "gauge_name": "Avoca River at Quambatook",
+   "station_key": "avoca river at quambatook",
+   "guide_levels": {
+    "major": 2.4,
+    "moderate": 2.2,
+    "minor": 2.0
+   },
+   "impacts": [
+    {
+     "height_m": 3.04,
+     "impact": "January 2011 Flood The January 2011 flood is the largest on record. At this level the majority of Quambatook could be affected, including the 120 residences, shops, public infrastructure and recreational facilities. The main roads to Kerang, Boort, Charlton and Swan Hill and many minor roads are flooded. 94.95"
+    },
+    {
+     "height_m": 2.5,
+     "impact": "September 1983 Flood. 93.91"
+    },
+    {
+     "height_m": 2.4,
+     "impact": "Major flood level 93.81"
+    },
+    {
+     "height_m": 2.23,
+     "impact": "September 2010 Flood/ September 2016 Flood. 93.64"
+    },
+    {
+     "height_m": 2.2,
+     "impact": "Moderate flood level 93.61"
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Minor flood level 93.41"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Robinvale Local Flood Guide LFG.pdf",
+   "town": "Robinvale",
+   "gauge_name": "Murray River at Euston Weir",
+   "station_key": "murray river at euston weir",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 10.59,
+     "impact": "August 1956 flood level"
+    },
+    {
+     "height_m": 10.25,
+     "impact": "July 1931 flood level"
+    },
+    {
+     "height_m": 9.91,
+     "impact": "1975 flood level"
+    },
+    {
+     "height_m": 9.84,
+     "impact": "1974 flood level"
+    },
+    {
+     "height_m": 9.59,
+     "impact": "October 1955 flood level"
+    },
+    {
+     "height_m": 9.56,
+     "impact": "November 1993 flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Rupanyup Local Flood Guide LFG.pdf",
+   "town": "Rupanyup",
+   "gauge_name": "Wimmera River at Glenorchy",
+   "station_key": "wimmera river at glenorchy",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 5.05,
+     "impact": "More than 5 buildings may be impacted above floor in Rupanyup. More than 1103 properties are impacted by flooding and may houses are isolated along Dunmunkle Creek."
+    },
+    {
+     "height_m": 5.03,
+     "impact": "During the January 2011 flood event Rupanyup was impacted by stormwater (localised) and riverine flooding from Dunmunkle Creek causing significant damage to buildings, roads and other infrastructure. Over 149mm fell over 3 days. More than 18 buildings were threatened by flooding. Due to extensive sandbagging only 7 buildings were flooded above floor. Most of the roads in Rupanyup were impacted by flooding. Flood mitigation works undertaken since this flood event has significantly reduced flood risk in Rupanyup (refer to the mitigation works summary on page 4)."
+    },
+    {
+     "height_m": 5.01,
+     "impact": "Flooding may cut access to 17 buildings along Dunmunkle Creek, more than 937 properties may be impacted by flooding."
+    },
+    {
+     "height_m": 4.96,
+     "impact": "Deep flooding may cut access to the Wimmera Highway (north of Rupanyup) and Stawell-Warracknabeal Road (north of Rupanyup), Boyds Road and McIntyres Road. One building may be flooded above floor. Floodwater may break out from Dunmunkle Creek through the Rupanyup Golf Course, north of Rupanyup (0.5m depth).Flooding may cut access to 16 buildings along Dunmunkle Creek, more than 905 properties may be impacted by flooding."
+    },
+    {
+     "height_m": 4.89,
+     "impact": "Shallow flooding starts to overtop the Wimmera Highway (north of Rupanyup) and Stawell-Warracknabeal Road (north of Rupanyup). Deep flooding may cut access to Connolly Parade and Ron Lingham Drive. Flooding may cut access to 13 buildings along Dunmunkle Creek, more than 738 properties may be impacted by flooding."
+    },
+    {
+     "height_m": 4.81,
+     "impact": "Flooding may reach Rupanyup. Shallow flooding may begin impact roads along Dunmunkle Creek, these include Stawell-Warracknabeal Road, Horsham-Lubeck Road and C Readings Road."
+    },
+    {
+     "height_m": 4.68,
+     "impact": "Flooding along Dunmunkle Creek is driven by high flows in the Wimmera River. Floodwater breaks out into Dunmunkle Creek above the minor flood level. Along the Dunmunkle Creek several stock and domestic channels influence drainage and floodwater."
+    },
+    {
+     "height_m": 3.95,
+     "impact": "Minor flooding along low lying land and minor roads along the Wimmera River."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Sale Local Flood Guide LFG.pdf",
+   "town": "Sale",
+   "gauge_name": "Thomson River at Sale Wharf",
+   "station_key": "thomson river at sale wharf",
+   "guide_levels": {
+    "major": 4.0,
+    "moderate": 3.0
+   },
+   "impacts": [
+    {
+     "height_m": 4.1,
+     "impact": "June 2010 flood event"
+    },
+    {
+     "height_m": 4.0,
+     "impact": "Major flood level, See page 4."
+    },
+    {
+     "height_m": 3.75,
+     "impact": "April 1990 flood event"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Moderate flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Shelford Local Flood Guide.pdf",
+   "town": "Shelford",
+   "gauge_name": "Leigh River at Shelford (Hwy Bridge)",
+   "station_key": "leigh river at shelford (hwy bridge)",
+   "guide_levels": {
+    "major": 8.0,
+    "moderate": 7.0,
+    "minor": 6.0
+   },
+   "impacts": [
+    {
+     "height_m": 8.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 7.9,
+     "impact": "January 2011 flood event ◼ 8 properties, primary school and cricket clubrooms flooded above floor level. ◼ Water across the main road through Shelford. ◼ Significant impact to rural properties surrounding Shelford."
+    },
+    {
+     "height_m": 7.2,
+     "impact": "Inverleigh-Shelford Road and Shelford-Bannockburn Road closed by floodwater."
+    },
+    {
+     "height_m": 7.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 6.0,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 5.7,
+     "impact": "April 2001 flood event."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Shepparton Mooroopna Kialla Local Flood Guide LFG.pdf",
+   "town": "Shepparton Mooroopna Kialla",
+   "gauge_name": "Goulburn River at Shepparton",
+   "station_key": "goulburn river at shepparton",
+   "guide_levels": {
+    "major": 11.0,
+    "moderate": 10.7,
+    "minor": 9.5
+   },
+   "impacts": [
+    {
+     "height_m": 12.3,
+     "impact": "1% Flood level - as shown on page 3 map."
+    },
+    {
+     "height_m": 12.25,
+     "impact": "Estimated 1916 flood level."
+    },
+    {
+     "height_m": 12.14,
+     "impact": "2022 flood level Goulburn Dominant flood."
+    },
+    {
+     "height_m": 12.1,
+     "impact": "1974 flood level. Goulburn River dominant flood. Mooroopna was isolated."
+    },
+    {
+     "height_m": 12.09,
+     "impact": "1974 flood level – a Goulburn River dominant flood. Mooroopna was isolated."
+    },
+    {
+     "height_m": 12.0,
+     "impact": "Peter Ross-Edwards Causeway between Mooroopna and Shepparton closed."
+    },
+    {
+     "height_m": 11.71,
+     "impact": "1993 flood level."
+    },
+    {
+     "height_m": 11.66,
+     "impact": "Princess Park levee overflows."
+    },
+    {
+     "height_m": 11.18,
+     "impact": "Victoria Lake levee overflows."
+    },
+    {
+     "height_m": 11.1,
+     "impact": "Balmoral Estate levee overflows."
+    },
+    {
+     "height_m": 11.09,
+     "impact": "2010 flood level. 620 homes isolated. 13 homes and 31 other buildings flooded."
+    },
+    {
+     "height_m": 11.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 10.98,
+     "impact": "Macguire Reserve levee overflows to near Daintons Bridge."
+    },
+    {
+     "height_m": 10.81,
+     "impact": "2010 flood level."
+    },
+    {
+     "height_m": 10.7,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 10.7,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 10.68,
+     "impact": "1981 flood level."
+    },
+    {
+     "height_m": 10.4,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 10.18,
+     "impact": "2011 flood level."
+    },
+    {
+     "height_m": 9.96,
+     "impact": "2012 flood level."
+    },
+    {
+     "height_m": 9.82,
+     "impact": "2011 flood level."
+    },
+    {
+     "height_m": 9.5,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 9.0,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 8.75,
+     "impact": "Watt Road and Raftery Road start to flood."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Shepparton Mooroopna Kialla Local Flood Guide LFG.pdf",
+   "town": "Shepparton Mooroopna Kialla",
+   "gauge_name": "Seven Creeks at Kialla West",
+   "station_key": "seven creeks at kialla west",
+   "guide_levels": {
+    "moderate": 5.0,
+    "minor": 4.5
+   },
+   "impacts": [
+    {
+     "height_m": 8.23,
+     "impact": "1993 flood level."
+    },
+    {
+     "height_m": 7.85,
+     "impact": "1974 flood level."
+    },
+    {
+     "height_m": 7.26,
+     "impact": "2022 flood level Goulburn Dominant flood."
+    },
+    {
+     "height_m": 6.6,
+     "impact": "2010 flood level."
+    },
+    {
+     "height_m": 6.5,
+     "impact": "Balmoral Street, Kialla starts to flood."
+    },
+    {
+     "height_m": 6.02,
+     "impact": "2012 and 1996 flood levels."
+    },
+    {
+     "height_m": 5.0,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.5,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Shepparton Mooroopna Kialla Local Flood Guide LFG.pdf",
+   "town": "Shepparton Mooroopna Kialla",
+   "gauge_name": "Broken River at Orrvale",
+   "station_key": "broken river at orrvale",
+   "guide_levels": {
+    "major": 7.9,
+    "moderate": 7.2,
+    "minor": 6.8
+   },
+   "impacts": [
+    {
+     "height_m": 8.44,
+     "impact": "1993 flood level. Major Broken River dominant flood."
+    },
+    {
+     "height_m": 8.34,
+     "impact": "2022 flood level Goulburn Dominant flood."
+    },
+    {
+     "height_m": 8.33,
+     "impact": "1974 flood level."
+    },
+    {
+     "height_m": 8.21,
+     "impact": "2010 flood level."
+    },
+    {
+     "height_m": 7.9,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 7.86,
+     "impact": "1996 flood level."
+    },
+    {
+     "height_m": 7.4,
+     "impact": "Gordon Drive, Kialla and bridge flooded."
+    },
+    {
+     "height_m": 7.3,
+     "impact": "Archer St, Kialla starts to flood."
+    },
+    {
+     "height_m": 7.2,
+     "impact": "Kialla Lakes Drive starts to flood."
+    },
+    {
+     "height_m": 7.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 7.15,
+     "impact": "Lake Kialla overflows into Gordon Drive"
+    },
+    {
+     "height_m": 7.01,
+     "impact": "2012 flood level."
+    },
+    {
+     "height_m": 6.8,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 6.01,
+     "impact": "2011 flood level."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Skipton Local Flood Guide (LFG).pdf",
+   "town": "Skipton",
+   "gauge_name": "Mount Emu Creek at Skipton",
+   "station_key": "mount emu creek at skipton",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 6.04,
+     "impact": "January 2011 flood level"
+    },
+    {
+     "height_m": 5.55,
+     "impact": "October 2022 flood level"
+    },
+    {
+     "height_m": 4.18,
+     "impact": "20% chance in any year ◼ Stewart Park fills early. No overbank flows of Mt. Emu Creek within Skipton. No properties flooded. ◼ Flooding of the Smythe Street Bridge blocks access."
+    },
+    {
+     "height_m": 2.35,
+     "impact": "October 2020 flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Traralgon Local Flood Guide.pdf",
+   "town": "Traralgon",
+   "gauge_name": "Traralgon Creek at Traralgon Town",
+   "station_key": "traralgon creek at traralgon town",
+   "guide_levels": {
+    "major": 4.8
+   },
+   "impacts": [
+    {
+     "height_m": 4.8,
+     "impact": "Major flood level Low lying areas of some properties in the following streets may be affected by floodwater, and roads may be closed: Areas mentioned below and on page 6 & page 7 will experience floodwater expanding across a further area and rising, affecting homes and businesses."
+    },
+    {
+     "height_m": 4.32,
+     "impact": "June, 2013 flood event Residents received door knocking and warning to evacuate. 6 people were relocated, some properties isolated due to roads flooding."
+    },
+    {
+     "height_m": 4.3,
+     "impact": "Low lying areas of some properties in the following streets may be affected by floodwater, and roads may be closed: Princes Highway (Argyle Street) between Liddiard Road and Wren Street. Areas mentioned on page 6 & page 7 will experience floodwater expanding across a further area and rising, possibly affecting homes, businesses and travel routes. Traralgon Tennis Centre and may be affected by floodwater. The height measurement is at the Traralgon Creek at Traralgon Town gauge. ^This table includes information from previous flood studies. Flood studies are scientific models used to predict impacts at different flood heights and flows. ◼ Atherley Close ◼ Bond Street ◼ Coventry Street ◼ Esler Street ◼ Euston Road ◼ Northumberland ◼ Oxford Street ◼ Pall Mall ◼ Park Lane ◼ Pentonville ◼ Phelan Street ◼ Piccadilly Road ◼ Regent Street ◼ The Angel Islington ◼ The Strand ◼ White Chapel Road ◼ Whitehall ◼ Berry Street ◼ Cameron Street ◼ Fleet Street ◼ Gordon Street ◼ Janette Street ◼ Milton Court ◼ Moonabeal Court ◼ Moore Street ◼ Munro Street ◼ Oxford Place ◼ Queens Parade ◼ Tennyson Street ◼ Thomas Street ◼ Trafalgar Square"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Traralgon Local Flood Guide.pdf",
+   "town": "Traralgon",
+   "gauge_name": "Traralgon Creek at Traralgon South",
+   "station_key": "traralgon creek at traralgon south",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 5.3,
+     "impact": "June, 2012 flood event. More than 100 people were evacuated, 45 homes were flooded and more than 100 roads were closed in the Gippsland area including Princes Highway between Traralgon and Rosedale."
+    },
+    {
+     "height_m": 4.9,
+     "impact": "September, 1993 flood event. # height of previous flood gauge adjusted to current gauge height. 24 homes and 3 public buildings were flooded above flood level, and an additional 99 properties, farm land and recreational areas were flooded below flood level. Damage was estimated at $770, 000."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Tungamah Local Flood Guide LFG.pdf",
+   "town": "Tungamah",
+   "gauge_name": "Boosey Creek at Tungamah",
+   "station_key": "boosey creek at tungamah",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.88,
+     "impact": "March 2012 flood level. 10-20 houses and the Recreation Reserve were inundated. Height shown on map on page 2."
+    },
+    {
+     "height_m": 2.81,
+     "impact": "1% flood level. A 1% flood means that there is a 1% chance of a flood measuring 2.81 metres on the Tungamah Station Gauge occurring in any year."
+    },
+    {
+     "height_m": 2.8,
+     "impact": "May 1974 flood level"
+    },
+    {
+     "height_m": 2.73,
+     "impact": "October 1993 flood level"
+    },
+    {
+     "height_m": 2.46,
+     "impact": "October 1975 flood level"
+    },
+    {
+     "height_m": 2.43,
+     "impact": "August 1973 flood level"
+    },
+    {
+     "height_m": 2.35,
+     "impact": "July 1981 flood level"
+    },
+    {
+     "height_m": 2.31,
+     "impact": "Jully 1995 flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Upper  Murray Local Flood Guide LFG.pdf",
+   "town": "Upper Murray",
+   "gauge_name": "Murray River at Jingellic",
+   "station_key": "murray river at jingellic",
+   "guide_levels": {
+    "major": 7.5
+   },
+   "impacts": [
+    {
+     "height_m": 7.91,
+     "impact": "March 2012 flood event Flood height shown on map, see page 4 and page 5. ◼ Walwa: Low-lying areas were evacuated, and one house was flooded. People were rescued from the caravan park, which was damaged along with the golf course and football ground."
+    },
+    {
+     "height_m": 7.64,
+     "impact": "October 2010 flood event ◼ Towong Shire: Many roads were closed and bridges damaged. ◼ Towong: The Murray River Bridge at Towong was closed for two days. ◼ Jingellic: Flooding of low-lying areas, including the camping ground, which was covered by 2 meters of water. Nearly all roads were cut off. ◼ Walwa: Homes on O’Halloran Street isolated by floodwater. Caravan park, golf course, and football ground flooded, caravan park evacuated."
+    },
+    {
+     "height_m": 7.51,
+     "impact": "1974 flood event"
+    },
+    {
+     "height_m": 7.5,
+     "impact": "Major flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Valencia Creek Local Flood Guide LFG.pdf",
+   "town": "Valencia Creek",
+   "gauge_name": "Avon River at The Channel",
+   "station_key": "avon river at the channel",
+   "guide_levels": {
+    "major": 7.5,
+    "moderate": 6.9
+   },
+   "impacts": [
+    {
+     "height_m": 11.23,
+     "impact": "April 1990 flood event, largest flood on record. ◼ Valencia Creek at Gillios Road gauge recorded a 7.77m river height. ◼ Valencia Creek rainfall station recorded 240mm over 2 days. ◼ Properties in Valencia Creek were isolated for up to 2 weeks."
+    },
+    {
+     "height_m": 10.9,
+     "impact": "1% AEP, flood height shown on map, see page 4."
+    },
+    {
+     "height_m": 9.6,
+     "impact": "June 2007 flood event, see page 6. ◼ Valencia Creek at Gillios Road gauge recorded a 5.81m river height."
+    },
+    {
+     "height_m": 7.5,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 6.9,
+     "impact": "Moderate flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Valencia Creek Local Flood Guide LFG.pdf",
+   "town": "Valencia Creek",
+   "gauge_name": "Freestone Creek at Briagolong",
+   "station_key": "freestone creek at briagolong",
+   "guide_levels": {
+    "minor": 5.0
+   },
+   "impacts": [
+    {
+     "height_m": 5.6,
+     "impact": "March 2012 flood event"
+    },
+    {
+     "height_m": 5.0,
+     "impact": "Minor flood level"
+    },
+    {
+     "height_m": 4.75,
+     "impact": "January 2024 flood event."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Violet Town Local Flood Guide LFG.pdf",
+   "town": "Violet Town",
+   "gauge_name": "Honeysuckle Creek at Violet Town (Upstream)",
+   "station_key": "honeysuckle creek at violet town (upstream)",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 4.27,
+     "impact": "1 in 500 Water continues to bank up south of the railway line likely to be one metre or deeper. 92 properties likely to be flooded above floor level. Vast areas of deep rural flooding north and west of town."
+    },
+    {
+     "height_m": 4.23,
+     "impact": "1 in 200 0.5 % chance in any year Water building up south of the railway line to one metre or deeper. 73 properties and the Nursing Home likely to be flooded above floor level. Water up to half a metre deep near Police and Fire stations. Extensive rural flooding north and west of town."
+    },
+    {
+     "height_m": 4.18,
+     "impact": "1 in 100 1% chance in any year 1993 flood level (approximate)/1% flood level. Height shown on map page 2. Water likely to build up south of the railway line between half to one metre deep, or more in places. 63 properties likely to be flooded above floor level in sections of Baird, Cowslip, Crocus, Dahlia, Daisy, Daphne, High, Hyacinth, Lily, Nicholson, Primrose, Railway, Rose and Tulip Streets. Water surrounds the Nursing Home with some reported minor inundation. Widespread rural flooding north and west of town."
+    },
+    {
+     "height_m": 4.11,
+     "impact": "1 in 50 2% chance in any year Water likely to build up south of the railway line to one metre deep. 55 properties likely to be flooded above floor level in areas of Baird, Cowslip, Dahlia, Daisy, Daphne, High, Hyacinth, Lily, Primrose, Rose and Tulip Streets. Significant rural flooding north and west of town."
+    },
+    {
+     "height_m": 3.97,
+     "impact": "1 in 20 5% chance in any year Many rural properties flooded north and west of town along Lambing Gunyah and Honeysuckle Creek floodplains. Water likely to continue building up south of railway line. 37 properties flooded above floor level in Baird, Cowslip, Dahlia, Daisy, Daphne, Hyacinth, Lily, Primrose, Rose and Tulip Streets."
+    },
+    {
+     "height_m": 3.86,
+     "impact": "1 in 10 10% chance in any year Floodwater up to 25 centimetres deep around the Police and Fire stations. Floodwater builds up south of the railway line. Properties are likely to be flooded in low areas of Baird, Cowslip, Daisy, Hyacinth, Primrose and Rose Streets. This Baird St Gauge table lists possible impacts that could occur at a particular flood height. The “Design Flood AEP” section gives the connection between gauge heights and design floods that are given in more detail in the Goulburn Broken Community Flood Intelligence Portal. (See p.6) \\ What YOU can do to be ready and informed"
+    },
+    {
+     "height_m": 1.58,
+     "impact": "September 2010"
+    },
+    {
+     "height_m": 1.27,
+     "impact": "August 1996"
+    },
+    {
+     "height_m": 1.2,
+     "impact": "February 2011"
+    },
+    {
+     "height_m": 1.12,
+     "impact": "November 1992 and July 1990"
+    },
+    {
+     "height_m": 0.97,
+     "impact": "April 2020"
+    },
+    {
+     "height_m": 0.94,
+     "impact": "October 2016"
+    },
+    {
+     "height_m": 0.86,
+     "impact": "August 2012"
+    },
+    {
+     "height_m": 0.81,
+     "impact": "Check your kit often. Make sure things still work. Replace out of date items. Special needs (e.g. for babies, the elderly, pets etc) _____________________________________ Photos ________________________________________________________________________ Family keepsakes _______________________________________________________________ Valuables _____________________________________________________________________ Other ________________________________________________________________________ \\ Make an Emergency Plan and Emergency Kit"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Wangaratta Local Flood Guide LFG.pdf",
+   "town": "Wangaratta",
+   "gauge_name": "Fifteen Mile Creek at Greta South",
+   "station_key": "fifteen mile creek at greta south",
+   "guide_levels": {
+    "major": 6.0,
+    "moderate": 4.2
+   },
+   "impacts": [
+    {
+     "height_m": 6.08,
+     "impact": "September 2010 flood level."
+    },
+    {
+     "height_m": 6.0,
+     "impact": "Major flood level Roads and land along the One Mile and Three Mile Creeks are likely to start flooding. More extensive flooding into sheds and back yards of homes in Wangaratta and farmland north and south of the Hume Freeway between the One Mile and Fifteen Mile Creeks near Greta Road."
+    },
+    {
+     "height_m": 5.86,
+     "impact": "December 2010 flood level."
+    },
+    {
+     "height_m": 5.73,
+     "impact": "1974 flood level."
+    },
+    {
+     "height_m": 4.2,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 3.98,
+     "impact": "October 2016 flood level."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Wangaratta Local Flood Guide LFG.pdf",
+   "town": "Wangaratta",
+   "gauge_name": "Ovens River at Wangaratta",
+   "station_key": "ovens river at wangaratta",
+   "guide_levels": {
+    "major": 12.7,
+    "moderate": 12.4,
+    "minor": 11.9
+   },
+   "impacts": [
+    {
+     "height_m": 12.98,
+     "impact": "October 1993 and estimated 1917 flood levels. Extensive flooding likely across many areas of Wangaratta affecting houses, businesses, caravan parks, roads, bridges, drinking water and sewage systems, farms, farm equipment, fences and livestock."
+    },
+    {
+     "height_m": 12.97,
+     "impact": "Current declared 1% flood level. Height shown on map page 4."
+    },
+    {
+     "height_m": 12.8,
+     "impact": "September 2010 and estimated 1974 flood levels. 2010 flood caused significant riverbank erosion with several areas advised to evacuate. In 1974 flood, widespread flooding caused more than 260 houses to be flooded prompting the construction of the town levees and diversion channel. Likely key road closures include Old Hume Highway, now Parfitt Rd to the north of town."
+    },
+    {
+     "height_m": 12.78,
+     "impact": "October 2016 flood level."
+    },
+    {
+     "height_m": 12.77,
+     "impact": "October 2022 flood level. September 1998 flood level. Over 300 mm of rainfall across the Ovens and King catchments. Extensive King Valley flooding. Yogi gets covered in Apex Park."
+    },
+    {
+     "height_m": 12.76,
+     "impact": "December 2010 flood level. Wilson Rd levee area evacuated due to levee failing."
+    },
+    {
+     "height_m": 12.7,
+     "impact": "Major flood level Painters Island Caravan park closes. Extensive road closures. Widespread flood- ing around the airport and Ovens River flats north of Wangaratta to Peechelba. Water to Yogi’s nose in Apex Park."
+    },
+    {
+     "height_m": 12.48,
+     "impact": "March 2012 flood level. Widespread heavy rain caused flooding from the Warby Ranges to north of Wangaratta through to Rutherglen."
+    },
+    {
+     "height_m": 12.4,
+     "impact": "Moderate flood level Residents in Wilson and Parfitt Rd levee areas advised to prepare to evacuate (unless levees are damaged or fail before this). Great Alpine Rd is likely to be closed by flood- ing near Wangaratta, detour via Detour Rd in North Wangaratta. Extensive flooding through Apex Park, water to Yogi’s mouth. Deep water floods Bick- erton St and Mundgee Place carparks closed and access road to Painters Island Cara- van Park flooded. Shallow flooding to Pinkerton Cres and backyards along Templeton St and Baker St."
+    },
+    {
+     "height_m": 11.9,
+     "impact": "Minor flood level Apex Park and farmland along the Ovens and King floodplains north, south and east of Wangaratta begin flooding. Bike paths and walking tracks closed at 11.6m around Apex Park and the Northern Beaches and riverside carparks are closed before flood- ing: Sydney Beach, Bickerton St and Baker St. Water levels will vary and may reach Yogi’s Chin in Apex Park."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Wangaratta Local Flood Guide LFG.pdf",
+   "town": "Wangaratta",
+   "gauge_name": "King River at Docker Rd Bridge",
+   "station_key": "king river at docker rd bridge",
+   "guide_levels": {
+    "major": 4.1,
+    "moderate": 3.95,
+    "minor": 3.7
+   },
+   "impacts": [
+    {
+     "height_m": 4.86,
+     "impact": "1% flood level."
+    },
+    {
+     "height_m": 4.84,
+     "impact": "October 1993 flood level."
+    },
+    {
+     "height_m": 4.5,
+     "impact": "December 2010 flood level"
+    },
+    {
+     "height_m": 4.44,
+     "impact": "September 1998 flood level.."
+    },
+    {
+     "height_m": 4.3,
+     "impact": "September 2010 flood level."
+    },
+    {
+     "height_m": 4.1,
+     "impact": "Major flood level More widespread flooding of Agricultural land, sheds and stockyards."
+    },
+    {
+     "height_m": 3.95,
+     "impact": "Moderate flood level Low lying agricultural farmland starts to flood. Water over road Docker-Carboor Road is closed between Wangaratta to Whitfield Road and the Oxley to Meadow Creek Road"
+    },
+    {
+     "height_m": 3.7,
+     "impact": "Minor flood level No known impacts at this level."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Warburton Local Flood Guide LFG.pdf",
+   "town": "Warburton",
+   "gauge_name": "Yarra River at Warburton Highway",
+   "station_key": "yarra river at warburton highway",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 3.5,
+     "impact": "Community infrastructure that may be impacted by floodwater: ◼ Warburton Christian School, Warburton Highway ◼ Warburton Sports Ground"
+    },
+    {
+     "height_m": 3.0,
+     "impact": "Community infrastructure that may be impacted by floodwater: ◼ Yarra River walking trail at Warburton Christian School floods. Water over road: ◼ Kellys Road, Warburton"
+    },
+    {
+     "height_m": 2.0,
+     "impact": "Community infrastructure that may be impacted by floodwater: ◼ Warburton Holiday Park starts to flood."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Warracknabeal Local Flood Guide.pdf",
+   "town": "Warracknabeal",
+   "gauge_name": "Yarriambiack Creek at Warracknabeal",
+   "station_key": "yarriambiack creek at warracknabeal",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.3,
+     "impact": "January, 2011 flood event. (Height shown on map page 4) ◼ During this flood a significant number of properties were affected by floodwater. ◼ At this height, many roads are flooded including the Borung Highway, Kelsall Street and Warracknabeal-Jeparit Road. The Henty Highway will be impacted."
+    },
+    {
+     "height_m": 2.17,
+     "impact": "◼ Apex Park and most of the Warracknabeal Caravan Park is inundated. ◼ Warracknabeal-Jeparit Road is closed by floodwater."
+    },
+    {
+     "height_m": 1.2,
+     "impact": "◼ The creek breaks its banks across Cemetery Road and Warunda Avenue ◼ Edges of the caravan park begin to flood. ◼ Craig Avenue and a number of properties in the area are flooded below floor height. ◼ The creek end of Asquith Avenue begins to flood."
+    },
+    {
+     "height_m": 0.84,
+     "impact": "◼ Water over Cemetery Road near the creek. ◼ Flood water is mostly contained within the creek’s banks. Although no two floods are the same and the environment is constantly changing, the below table provides an idea of what to expect at different flood heights. ◼ Before a flood: Use the floodwater heights in the table to help you decide when you will need to act to protect yourself and your property in a flood event. ◼ During a flood: When a warning is issued by VicEmergency, use the predicted floodwater height and warning information to understand what the potential impacts may be for you and your community. *The height measurement is at the Warracknabeal Weir Gauge. ^This table includes information from previous flood events and flood studies, which are scientific models used to predict impacts at different flood heights and flows."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Wickliffe Local Flood Guide.pdf",
+   "town": "Wickliffe",
+   "gauge_name": "Hopkins River at Wickliffe",
+   "station_key": "hopkins river at wickliffe",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 5.89,
+     "impact": "January, 2011 flood level (flood extent shown on map page 2) 11 buildings were flooded above floor including the Wickliffe Hotel and Cookie’s Old Store."
+    },
+    {
+     "height_m": 5.88,
+     "impact": "6 buildings are flooded above floor in Walker Street. The Glenelg Highway bridge, south side of Wickliffe is close to being overtopped."
+    },
+    {
+     "height_m": 5.58,
+     "impact": "3 buildings are flooded above floor, including the CFA Station. Flooding impacts 9 properties."
+    },
+    {
+     "height_m": 5.18,
+     "impact": "Two properties in Walker Street start to be impacted by flooding. No buildings are impacted by flooding above floor. The Glenelg Highway and Walker Street is impassable to traffic to the north of Wickliffe, flood depth up to 0.5m."
+    },
+    {
+     "height_m": 4.48,
+     "impact": "Shallow flooding overtops the Glenelg Highway to a depth up to 0.15m."
+    },
+    {
+     "height_m": 4.39,
+     "impact": "October 1986 flood event."
+    },
+    {
+     "height_m": 4.13,
+     "impact": "August 1992 flood event."
+    }
+   ]
+  },
+  {
+   "source_pdf": "Yarra Glen Local Flood Guide LFG.pdf",
+   "town": "Yarra Glen",
+   "gauge_name": "Yarra River at Yarra Glen",
+   "station_key": "yarra river at yarra glen",
+   "guide_levels": {
+    "major": 5.0,
+    "moderate": 4.57,
+    "minor": 4.1
+   },
+   "impacts": [
+    {
+     "height_m": 5.0,
+     "impact": "Major flood level"
+    },
+    {
+     "height_m": 4.57,
+     "impact": "Moderate flood level"
+    },
+    {
+     "height_m": 4.1,
+     "impact": "Minor flood level"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Yarra Junction Local Flood Guide LFG.pdf",
+   "town": "Yarra Junction",
+   "gauge_name": "Little Yarra River at Yarra Junction",
+   "station_key": "little yarra river at yarra junction",
+   "guide_levels": {},
+   "impacts": [
+    {
+     "height_m": 2.04,
+     "impact": "10 June 2021 flood peak level Flood event: ◼ 31 residents from Doon Reserve Caravan Park evacuated. ◼ Corduroy Road, Doon Road, Settlement Road and Lowes Road, Yarra Junction, flooded. Roads were blocked with widespread flooding to paddocks and yards ◼ Warburton Highway at Little Yarra River flooded."
+    },
+    {
+     "height_m": 1.44,
+     "impact": "Area shown on map, see page 4. 1% (or greater) chance in any year ◼ 10 properties maybe impacted at this level"
+    },
+    {
+     "height_m": 1.4,
+     "impact": "2% (or greater) chance in any year 26 properties may be impacted at this level. Community infrastructure that may be impacted by floodwater include : ◼ Doon Reserve Caravan Park on Doon Road, Yarra Junction ◼ Bus route 683 may be restricted along the Warburton Highway"
+    },
+    {
+     "height_m": 1.24,
+     "impact": "20% (or greater) chance in any year 10 properties may be impacted at this level. Community infrastructure that may be impacted by floodwater include: Warburton Trail, Yarra Junction—south of Railway Road / Set- tlement Road intersection. ◼ Corduroy Road ◼ Doon Road ◼ Lowes Road ◼ Settlement Road"
+    }
+   ]
+  },
+  {
+   "source_pdf": "Yea Local Flood Guide.pdf",
+   "town": "Yea",
+   "gauge_name": "Yea River at Yea",
+   "station_key": "yea river at yea",
+   "guide_levels": {
+    "major": 3.1
+   },
+   "impacts": [
+    {
+     "height_m": 3.51,
+     "impact": "October 2022 flood event"
+    },
+    {
+     "height_m": 3.4,
+     "impact": "1% AEP Flood Level. Food height shown on map, see page 4."
+    },
+    {
+     "height_m": 3.1,
+     "impact": "Major flood level (2% AEP)"
+    }
+   ]
+  }
+ ]
+}
