@@ -187,3 +187,48 @@ label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
 .app.has-titlebar .body-row { flex: 1; min-height: 0; height: auto; }
 .app.has-titlebar .sidebar { height: auto; position: static; }
 .app.has-titlebar .content { overflow-y: auto; }
+
+/* ---- station detail page (gauge stick + LFG impacts) ---- */
+.gauge-link {
+    display: block;
+    padding: 8px 12px 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+}
+.gauge-link:hover { text-decoration: underline; }
+
+.station-row { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+.station-stick-card { flex: 0 1 360px; min-width: 300px; }
+.station-graph-card { flex: 1 1 480px; min-width: 320px; }
+
+.impact-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+}
+.impact-table th, .impact-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+.impact-table th {
+    background: var(--bg-sidebar);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+}
+.impact-height { white-space: nowrap; font-weight: 700; }
+.impact-reached { color: #1f77b4; font-weight: 700; white-space: nowrap; }
+.impact-row-reached td { background: rgba(31, 119, 180, 0.10); }
+
+/* markdown station links inside the flood table */
+.dash-table-container .dash-cell a { color: var(--accent); text-decoration: none; }
+.dash-table-container .dash-cell a:hover { text-decoration: underline; }
+.dash-table-container .dash-cell p { margin: 0; }
