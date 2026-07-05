@@ -75,7 +75,35 @@ If a session drops, the scraper re-logs-in on the next cycle.
   `./data:/data` volume) + Caddyfile (auto-HTTPS). `UM_DATA_DIR` points writable state at the volume.
   `/health` returns JSON + 200/503 for uptime monitors.
 
+## Watchdog + notifications (built 2026-07-04)
+- `app/watchdog.py` — `supervisor` daemon thread (started with web autostart): every 60s
+  restarts stalled/dead collectors (rate-limited 4/hr each; respects the admin's explicit
+  stop via `manager.flood_wanted()/power_wanted()`; auto-starts power once creds appear)
+  and sends alerts on state CHANGES only: customers-off crossing low/high thresholds (+
+  recovery), stations entering/escalating/clearing flood levels, new collector errors,
+  watchdog restarts. State is in-process; `/health` exposes a `watchdog` block.
+- `app/notify.py` — webhook sender (Slack/Teams `{"text"}`, Discord `{"content"}` auto-detected).
+  Config `notify.webhook_url` + per-kind toggles, set on the Settings page; test button on Admin.
+- Flood levels seed (`seed/Flood Levels.xlsx`) reloads on EVERY boot (source of truth);
+  admin can re-import manually from the Import page.
+
+## Station detail pages + LFG impacts (built 2026-07-05)
+- **Gauge pages:** every gauge is clickable (flood-page graph cards + table station names,
+  overview flooding cards) → `/flood/station/<station_key>` (`app/pages/station.py`).
+  Page shows a **linear flood-gauge stick** (Plotly: class bands, current water level,
+  hoverable impact markers), the station history graph (7/30/90d/all), severity-coloured
+  **watch points & expected impacts** table (rows the water has reached are flagged), and a
+  **Gauge Briefing PDF** button (`reporting.build_station_pdf`).
+- **LFG impact data:** `seed/lfg_impacts.json` — height→impact rows extracted from the
+  VICSES Local Flood Guide PDFs in `../LFG/` (86 guide tables, 77 BoM stations, ~540 rows).
+  Reloaded into the `gauge_impacts` table on every boot (same policy as flood levels).
+  `seed/lfg_extract_tool.py` is the one-off extraction script — re-run it if the LFG folder
+  gets new guides (it contains hand-checked per-file overrides; unmatched/scanned guides are
+  documented there). Guides with no BoM gauge (urban flash-flood LFGs) are intentionally absent.
+
 ## Backlog (not started)
-Threshold notifications · full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map
-view · event timeline/compare · BoM forecast overlay · data retention/archive · collector health
-watchdog (auto-restart on stall) · power-dependent-customer 24h focus.
+Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
+lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·
+event timeline/compare · BoM forecast overlay · data retention/archive · deploy pipeline
+(GitHub Action + Watchtower) · in-browser file upload on Import page · auto-tagging of events ·
+viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus.
