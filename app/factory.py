@@ -139,6 +139,12 @@ def _register_health(app):
             "flood_last_error": status["flood"].get("last_error"),
             "power_last_error": status["power"].get("last_error"),
         }
+        try:
+            from app.watchdog import supervisor
+            payload["watchdog"] = {"alive": supervisor.is_alive(),
+                                   **supervisor.state}
+        except Exception:
+            payload["watchdog"] = {"alive": False}
         return flask.jsonify(payload), (200 if db_ok else 503)
 
 
@@ -205,5 +211,9 @@ def create_app(autostart=False):
     if autostart:
         from app.collector import manager
         manager.autostart()
+        # Watchdog + threshold alerting for the always-on deployment: restarts
+        # stalled collectors and sends webhook notifications on state changes.
+        from app.watchdog import supervisor
+        supervisor.ensure_started()
 
     return app

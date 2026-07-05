@@ -35,23 +35,18 @@ DEFAULT_PATHS = {
 
 
 def ensure_flood_levels_seed():
-    """Auto-load the bundled flood levels at startup if none are loaded yet.
+    """(Re)load the bundled flood levels on every startup.
 
-    Only fills an EMPTY flood_levels table — it never clobbers levels that were
-    imported or updated by hand. To force a refresh after changing the seed
-    file, re-import it from the Import page (the path defaults to the seed)."""
-    try:
-        n = int(database.read_df("SELECT COUNT(*) AS n FROM flood_levels").iloc[0]["n"])
-    except Exception:
-        n = 0
-    if n:
-        return
+    The seed file shipped with the app is the source of truth: levels rarely
+    change, and when they do the updated file arrives via a redeploy (or an
+    admin re-imports from the Import page, whose default path points at the
+    seed). If the seed file is absent, whatever is already in the table is
+    left untouched."""
     if not os.path.exists(SEED_FLOOD_LEVELS):
-        log.info("Flood levels table is empty and no seed file at %s — "
-                 "flooding classification is off until levels are imported.",
+        log.info("No bundled flood levels seed at %s — keeping existing table.",
                  SEED_FLOOD_LEVELS)
         return
-    log.info("Flood levels table is empty — loading bundled seed: %s",
+    log.info("Loading bundled flood levels: %s",
              import_flood_levels(SEED_FLOOD_LEVELS))
 
 FLOOD_COLUMN_MAP = {

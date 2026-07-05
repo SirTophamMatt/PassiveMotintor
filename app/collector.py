@@ -6,6 +6,7 @@ collection. Each collector keeps its own status for display in the UI.
 """
 import logging
 import threading
+import time
 from datetime import datetime
 
 from app.config import load_config, credentials_set
@@ -23,9 +24,14 @@ class _Collector(threading.Thread):
         self.work = work
         self.on_stop = on_stop
         self._stop_event = threading.Event()
-        self.status = {"last_run": None, "last_error": None, "runs": 0}
+        # last_cycle_ts / started_ts are time.time() floats for the watchdog:
+        # a cycle that ERRORS still advances last_cycle_ts (the thread is alive
+        # and retrying); only a HUNG cycle lets it go stale.
+        self.status = {"last_run": None, "last_error": None, "runs": 0,
+                       "last_cycle_ts": None, "started_ts": None}
 
     def run(self):
+        self.status["started_ts"] = time.time()
         while not self._stop_event.is_set():
             try:
                 self.work()
@@ -35,6 +41,7 @@ class _Collector(threading.Thread):
             except Exception as e:
                 log.exception("%s cycle failed", self.name)
                 self.status["last_error"] = str(e)
+            self.status["last_cycle_ts"] = time.time()
             self._stop_event.wait(self.interval)
         if self.on_stop:
             try:
@@ -53,12 +60,18 @@ class CollectorManager:
         self.flood_event = None
         self._power = None
         self._power_scraper = None
+        # Desired state, tracked so the watchdog can tell "admin stopped this
+        # on purpose" (leave it alone) from "it should be running" (restart).
+        # None = no explicit action yet, fall back to the autostart config.
+        self._flood_desired = None
+        self._power_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
         """Start always-on flood collection. Readings are stored under the
         fixed LIVE_EVENT bucket; slicing into events is done later via tags."""
         with self._lock:
+            self._flood_desired = True
             if self._flood and self._flood.is_alive():
                 return False, "Flood collection is already running."
             cfg = load_config()
@@ -72,10 +85,16 @@ class CollectorManager:
 
     def stop_flood(self):
         with self._lock:
+            self._flood_desired = False
             if self._flood:
                 self._flood.stop()
                 self._flood = None
             return True, "Flood collection stopped."
+
+    def restart_flood(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_flood()
+        return self.start_flood()
 
     # --- power ---------------------------------------------------------------
     def start_power(self):
@@ -85,6 +104,7 @@ class CollectorManager:
             cfg = load_config()
             if not credentials_set(cfg):
                 return False, "EM-COP credentials are not set. Add them in Settings first."
+            self._power_desired = True
             interval = max(15, cfg["power"]["interval_seconds"])
             self._power_scraper = PowerScraper(cfg)
             self._power = _Collector(
@@ -96,10 +116,33 @@ class CollectorManager:
 
     def stop_power(self):
         with self._lock:
+            self._power_desired = False
             if self._power:
                 self._power.stop()
                 self._power = None
             return True, "Power collection stopped."
+
+    def restart_power(self):
+        """Stop-then-start for the watchdog. The old scraper's Chrome is quit
+        in a side thread: if the old collector thread is hung mid-cycle it
+        holds the scraper lock, and we must not let the watchdog block on it."""
+        old_scraper = self._power_scraper
+        self.stop_power()
+        if old_scraper is not None:
+            threading.Thread(target=old_scraper.stop, daemon=True,
+                             name="power-scraper-cleanup").start()
+        return self.start_power()
+
+    # --- desired state (watchdog) ---------------------------------------------
+    def flood_wanted(self, cfg):
+        if self._flood_desired is not None:
+            return self._flood_desired
+        return cfg["flood"].get("autostart", True)
+
+    def power_wanted(self, cfg):
+        if self._power_desired is not None:
+            return self._power_desired
+        return cfg["power"].get("autostart", False)
 
     # --- autostart --------------------------------------------------------------
     def autostart(self):

@@ -66,6 +66,15 @@ DEFAULTS = {
         "high_customers_off": 20000,
         "low_customers_off": 10000,
     },
+    "notify": {
+        # Incoming-webhook URL (Slack / Teams / Discord). Empty = disabled.
+        "webhook_url": "",
+        # auto = detect Discord from the URL, otherwise send {"text": ...}.
+        "webhook_format": "auto",
+        "on_power_alert": True,
+        "on_flood_alert": True,
+        "on_watchdog": True,
+    },
     "web": {
         # Admin password hash set from the Admin page. The UM_ADMIN_PASSWORD
         # environment variable, if set, takes precedence over this.
