@@ -52,6 +52,25 @@ def layout():
                 _field("Low alert above", "set-alert-low",
                        cfg["alerts"]["low_customers_off"], input_type="number", min=0),
             ], className="panel"),
+            html.Div([
+                html.H4("Notifications"),
+                _field("Webhook URL (Slack / Teams / Discord)",
+                       "set-notify-webhook", cfg["notify"]["webhook_url"],
+                       placeholder="https://hooks.slack.com/services/…"),
+                dcc.Checklist(
+                    id="set-notify-toggles",
+                    options=[
+                        {"label": " Power threshold alerts", "value": "power"},
+                        {"label": " Flood level alerts", "value": "flood"},
+                        {"label": " Watchdog / collector issues", "value": "watchdog"},
+                    ],
+                    value=[v for v, key in (("power", "on_power_alert"),
+                                            ("flood", "on_flood_alert"),
+                                            ("watchdog", "on_watchdog"))
+                           if cfg["notify"].get(key, True)]),
+                html.Div("Send a test from the Admin page after saving.",
+                         className="muted", style={"fontSize": "12px"}),
+            ], className="panel"),
         ], className="panel-row"),
         html.Button("Save Settings", id="settings-save-btn", className="btn btn-primary"),
         html.Div(id="settings-status", className="muted", style={"marginTop": "8px"}),
@@ -73,9 +92,12 @@ def register_callbacks(app):
         State("set-power-interval", "value"),
         State("set-alert-high", "value"),
         State("set-alert-low", "value"),
+        State("set-notify-webhook", "value"),
+        State("set-notify-toggles", "value"),
         prevent_initial_call=True)
     def save(_, username, password, login_url, power_url, after_url,
-             flood_interval, power_interval, alert_high, alert_low):
+             flood_interval, power_interval, alert_high, alert_low,
+             notify_webhook, notify_toggles):
         if not auth.is_admin():
             return "Not authorised."
         cfg = load_config()
@@ -88,6 +110,11 @@ def register_callbacks(app):
         cfg["power"]["interval_seconds"] = int(power_interval or 60)
         cfg["alerts"]["high_customers_off"] = int(alert_high or 20000)
         cfg["alerts"]["low_customers_off"] = int(alert_low or 10000)
+        toggles = notify_toggles or []
+        cfg["notify"]["webhook_url"] = (notify_webhook or "").strip()
+        cfg["notify"]["on_power_alert"] = "power" in toggles
+        cfg["notify"]["on_flood_alert"] = "flood" in toggles
+        cfg["notify"]["on_watchdog"] = "watchdog" in toggles
         try:
             save_config(cfg)
             return "✅ Settings saved."

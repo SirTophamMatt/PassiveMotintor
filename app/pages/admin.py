@@ -11,11 +11,12 @@ gating does not rely on the UI merely hiding a button.
 from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from app import auth
+from app import auth, notify
 from app import tags as tag_store
 from app import ui
 from app.collector import manager
 from app.config import load_config, save_config
+from app.watchdog import supervisor
 
 
 # --------------------------------------------------------------------------- #
@@ -170,6 +171,10 @@ def _panel():
                 html.Br(),
                 dcc.Link("Import legacy data", href="/import", className="nav-link"),
                 html.Br(),
+                html.Button("Send test notification", id="admin-notify-test",
+                            className="btn", style={"marginTop": "10px"}),
+                html.Div(id="admin-notify-status", className="muted",
+                         style={"marginTop": "6px"}),
                 html.Button("Set / change admin password",
                             id="admin-pw-toggle", className="btn",
                             style={"marginTop": "10px"}),
@@ -303,8 +308,20 @@ def register_callbacks(app):
                 parts.append(html.Div(f"⚠ {d['last_error']}", className="error-text"))
             return html.Div(parts, style={"marginBottom": "6px"})
 
+        wd = supervisor.state
+        watchdog_bits = [html.Strong("Watchdog: "),
+                         ui.status_pill(supervisor.is_alive())]
+        if wd.get("last_check"):
+            watchdog_bits.append(html.Span(
+                f" — checked {wd['last_check']} ({wd['checks']} passes, "
+                f"{wd['flood_restarts']} flood / {wd['power_restarts']} power "
+                "restarts)"))
+        if wd.get("last_action"):
+            watchdog_bits.append(html.Div(f"Last action: {wd['last_action']}",
+                                          className="muted"))
         return html.Div([html.H4("Collector status"),
-                         line("Flood", s["flood"]), line("Power", s["power"])])
+                         line("Flood", s["flood"]), line("Power", s["power"]),
+                         html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #
     @app.callback(
@@ -390,6 +407,23 @@ def register_callbacks(app):
         except Exception as e:
             return no_update, f"⚠ Export failed: {e}"
         return dcc.send_bytes(data, filename), f"✅ Exported {filename}."
+
+    # --- notifications ----------------------------------------------------- #
+    @app.callback(
+        Output("admin-notify-status", "children"),
+        Input("admin-notify-test", "n_clicks"),
+        prevent_initial_call=True)
+    def test_notification(n_clicks):
+        if not n_clicks:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        if not notify.configured():
+            return "⚠ No webhook URL set — add one in Settings first."
+        ok = notify.send("Test notification — webhook configuration works. 🎉",
+                         force=True)
+        return ("✅ Test sent — check your channel."
+                if ok else "❌ Send failed — see unified_monitor.log for detail.")
 
     # --- admin password --------------------------------------------------- #
     @app.callback(
