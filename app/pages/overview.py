@@ -142,13 +142,19 @@ def register_callbacks(app):
         outages = power_data.active_outages(include_planned=True)
         map_fig = power_page._map_figure(outages, dark)
 
-        # Flood: a graph per currently-flooding station
+        # Flood: a graph per currently-flooding station, linked to its
+        # detail page (gauge stick, LFG impacts, briefing PDF).
+        from app.pages import station as station_page
         flooding = flood_data.current_flooding_stations()
         if flooding:
             flood_graphs = [
-                html.Div(dcc.Graph(figure=flood_page._station_figure(
-                    hist, station, label, levels, dark)),
-                    className="graph-card", style={"border": f"3px solid {colour}"})
+                html.Div([
+                    dcc.Link("Gauge details, impacts & briefing →",
+                             href=station_page.path_for(station),
+                             className="gauge-link"),
+                    dcc.Graph(figure=flood_page._station_figure(
+                        hist, station, label, levels, dark)),
+                ], className="graph-card", style={"border": f"3px solid {colour}"})
                 for station, hist, label, colour, levels in flooding
             ]
         else:

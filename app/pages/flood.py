@@ -12,6 +12,7 @@ from dash import Input, Output, dash_table, dcc, html
 from app import tags as tag_store
 from app import ui
 from app.modules.flood import data as flood_data
+from app.pages import station as station_page
 
 LIVE_DAYS = 7  # how much recent data the "Live" view shows
 
@@ -143,10 +144,15 @@ def register_callbacks(app):
 
         levels_map = flood_data.load_flood_levels()
 
-        # latest reading per station for the table
+        # latest reading per station for the table; station names link to
+        # their detail page.
         latest = df.sort_values("timestamp").groupby("station_name").tail(1)
         table_df = latest[[c for c, _ in TABLE_COLUMNS]].copy()
-        columns = [{"name": name, "id": col} for col, name in TABLE_COLUMNS]
+        table_df["station_name"] = table_df["station_name"].map(
+            lambda s: f"[{s}]({station_page.path_for(s)})")
+        columns = [{"name": name, "id": col,
+                    **({"presentation": "markdown"} if col == "station_name" else {})}
+                   for col, name in TABLE_COLUMNS]
 
         graphs = []
         for station in df["station_name"].dropna().unique():
@@ -159,9 +165,12 @@ def register_callbacks(app):
             priority, label, colour = flood_data.classify_station(latest_height, levels)
             if flooding_only and priority >= 4:
                 continue
-            graphs.append((priority, station, html.Div(
+            graphs.append((priority, station, html.Div([
+                dcc.Link("Gauge details, impacts & briefing →",
+                         href=station_page.path_for(station),
+                         className="gauge-link"),
                 dcc.Graph(figure=_station_figure(station_df, station, label, levels, dark)),
-                className="graph-card",
+            ], className="graph-card",
                 style={"border": f"3px solid {colour}"})))
 
         graphs.sort(key=lambda item: (item[0], item[1]))
