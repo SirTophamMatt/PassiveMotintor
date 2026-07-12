@@ -137,7 +137,35 @@ def _history_figure(hist, station_name, label, levels, dark):
     from app.pages.flood import _station_figure
     fig = _station_figure(hist, station_name, label, levels, dark)
     fig.update_layout(height=560)
+    _add_rainfall_overlay(fig, hist, station_name)
     return fig
+
+
+def _add_rainfall_overlay(fig, hist, station_name):
+    """Overlay rain-since-9am for the nearest monitored town on a secondary
+    axis — the upstream leading indicator. Only shown when there's actual rain
+    in the displayed window, so dry periods stay uncluttered."""
+    from app.modules.weather import data as weather_data
+    loc = weather_data.location_for_gauge(station_name)
+    if not loc:
+        return
+    rain = weather_data.rainfall_history(loc["location_key"], days=None)
+    if rain.empty:
+        return
+    if not hist.empty:
+        rain = rain[rain["timestamp"] >= hist["timestamp"].min()]
+    rain = rain.dropna(subset=["rain_since_9am_mm"])
+    if rain.empty or rain["rain_since_9am_mm"].max() <= 0:
+        return
+    fig.add_trace(go.Scatter(
+        x=rain["timestamp"], y=rain["rain_since_9am_mm"], yaxis="y2",
+        name=f"Rain @ {loc['name']} (mm)", mode="lines",
+        line=dict(color="#1f77b4", width=1, dash="dot"),
+        fill="tozeroy", fillcolor="rgba(31,119,180,0.12)"))
+    fig.update_layout(
+        yaxis2=dict(title="Rain since 9am (mm)", overlaying="y", side="right",
+                    showgrid=False, rangemode="tozero"),
+        showlegend=True, legend=dict(orientation="h", y=1.08))
 
 
 def _impact_table(impacts_df, current, levels):

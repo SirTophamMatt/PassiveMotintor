@@ -1,7 +1,32 @@
 """Weather data queries and warning classification."""
+import re
+
 import pandas as pd
 
 from app import database
+
+# Trailing BoM gauge-type markers to strip when extracting a town from a gauge
+# name, e.g. "Buffalo River at Lake Buffalo HG" -> "Lake Buffalo".
+_GAUGE_SUFFIX = re.compile(r"\s*\((?:HG|TW)\)\s*$|\s+(?:HG|TW)\s*$", re.I)
+_SPLITTERS = (" downstream of ", " upstream of ", " at ")
+
+
+def gauge_town(station_name):
+    """Extract a searchable town/place from a BoM gauge name (shared by rainfall
+    location seeding and gauge->rainfall matching). Returns None if nothing
+    usable remains."""
+    if not station_name:
+        return None
+    s = str(station_name).strip()
+    low = s.lower()
+    for sep in _SPLITTERS:
+        idx = low.rfind(sep)
+        if idx != -1:
+            s = s[idx + len(sep):]
+            break
+    s = _GAUGE_SUFFIX.sub("", s)
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s).strip()  # drop trailing parentheticals
+    return s or None
 
 # BoM warning_group_type -> (sort priority, colour). Lower = more severe.
 GROUP_STYLE = {
@@ -93,6 +118,60 @@ def warning_version_message(warning_id, issue_time):
     if df.empty:
         return None
     return df.iloc[0]["message"]
+
+
+def latest_rainfall():
+    """Most recent rainfall reading per monitored location, with its catchment."""
+    df = database.read_df(
+        "SELECT r.location_key, r.name, r.latitude, r.longitude, "
+        "       r.rain_since_9am_mm, r.forecast_max_mm, r.forecast_chance, "
+        "       r.timestamp, l.catchment "
+        "FROM rainfall_observations r "
+        "JOIN (SELECT location_key, MAX(timestamp) AS mt FROM rainfall_observations "
+        "      GROUP BY location_key) m "
+        "  ON r.location_key = m.location_key AND r.timestamp = m.mt "
+        "LEFT JOIN weather_locations l ON l.location_key = r.location_key")
+    if not df.empty:
+        for c in ("rain_since_9am_mm", "forecast_max_mm", "forecast_chance"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df = df.sort_values("rain_since_9am_mm", ascending=False, na_position="last")
+    return df
+
+
+def rainfall_history(location_key, days=7):
+    """Rain-since-9am time series for one location (for the gauge overlay)."""
+    query = ("SELECT timestamp, rain_since_9am_mm FROM rainfall_observations "
+             "WHERE location_key = ?")
+    params = [location_key]
+    if days:
+        query += " AND timestamp >= datetime('now', 'localtime', ?)"
+        params.append(f"-{int(days)} days")
+    df = database.read_df(query + " ORDER BY timestamp", params)
+    if not df.empty:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601",
+                                         errors="coerce")
+        df["rain_since_9am_mm"] = pd.to_numeric(df["rain_since_9am_mm"],
+                                                errors="coerce")
+    return df
+
+
+def location_for_gauge(station_name):
+    """The monitored rainfall location matching a flood gauge's town, or None."""
+    town = gauge_town(station_name)
+    if not town:
+        return None
+    df = database.read_df(
+        "SELECT * FROM weather_locations WHERE location_key = ?", [town.lower()])
+    return None if df.empty else df.iloc[0].to_dict()
+
+
+def rainfall_summary():
+    """(num_locations, wettest_name, wettest_mm) from the latest readings."""
+    df = latest_rainfall()
+    if df.empty:
+        return 0, None, None
+    top = df.iloc[0]
+    return len(df), top["name"], top["rain_since_9am_mm"]
 
 
 def heartbeat_summary():

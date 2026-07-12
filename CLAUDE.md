@@ -197,12 +197,21 @@ and **Active Fire Incidents & Warnings** (tables, so they render even where kale
 - **Admin page `/analytics`** (`app/pages/analytics.py`, in RESTRICTED): views/visitors KPIs
   (24h/7d/30d), a daily views+visitors trend, and a top-pages bar (public views only).
 
-## Weather module — rainfall (Phase 2b, NOT started)
-- Derive monitored locations from flood-gauge towns/catchments -> resolve to BoM geohash via
-  `/locations?search=` (cache in `weather_locations`), poll `/observations` (rain since 9am) +
-  `/forecasts/daily` each cycle into `rainfall_observations`. Rainfall map + per-catchment totals
-  on the Weather page. **High-value overlay:** rainfall as a secondary trace on the flood station
-  detail graph (`app/pages/station.py`) — "rain upstream before the gauge responds".
+## Weather module — rainfall (Phase 2b, built 2026-07-12)
+- **Locations derived from flood gauges.** `ensure_locations()` (one-time seed) extracts a town
+  from each gauge name via `weather_data.gauge_town` (handles "... at X", "Downstream of X",
+  strips "(HG)"/"(TW)"), resolves it to a BoM geohash via `/locations?search=`, and caches it in
+  `weather_locations`. Coords come from **decoding the geohash** (`_geohash_decode`) — no extra
+  API call. Capped by `weather.max_rainfall_locations` (default 40) for politeness.
+- **Rainfall polling.** `fetch_rainfall` polls `/observations` (`rain_since_9am`) +
+  `/forecasts/daily` (today's max mm + chance) per location each cycle into `rainfall_observations`
+  (de-duped on location+timestamp). Wired into `fetch_weather_data` after warnings.
+- **Weather page** gains a Rainfall section: a map coloured by rain-since-9am and a table
+  (location / catchment / rain / forecast / chance), plus a "wettest" summary line.
+- **Gauge overlay (the payoff).** `station._add_rainfall_overlay` matches a gauge to its town's
+  rainfall (`data.location_for_gauge`) and draws rain-since-9am on a **secondary y-axis** of the
+  station history graph — only when there's actual rain in the window (dry periods stay clean).
+- Not done: rainfall on the station **PDF** (vector `_trend_drawing`), per-catchment rollups.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge

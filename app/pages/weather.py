@@ -5,6 +5,7 @@ later slice; this slice covers the warnings feed. Collection is always-on and
 managed from the Admin page.
 """
 import pandas as pd
+import plotly.express as px
 from dash import Input, Output, State, dash_table, dcc, html
 from dash.exceptions import PreventUpdate
 
@@ -13,6 +14,12 @@ from app.collector import manager
 from app.modules.weather import data as weather_data
 
 WARNING_PATH = "/weather/warning/"
+MELB_CENTER = {"lat": -37.0, "lon": 145.0}
+RAIN_COLUMNS = [
+    ("name", "Location"), ("catchment", "Catchment"),
+    ("rain_since_9am_mm", "Rain since 9am (mm)"),
+    ("forecast_max_mm", "Forecast today (mm)"), ("forecast_chance", "Chance (%)"),
+]
 
 
 def warning_path_for(warning_id):
@@ -62,7 +69,39 @@ def layout():
             sort_action="native",
             style_cell={"whiteSpace": "normal", "height": "auto"},
         ),
+        html.H3("Rainfall", style={"marginTop": "18px"}),
+        html.Div("Rain since 9am and today's forecast for towns near the flood "
+                 "gauges — an upstream leading indicator.", className="muted"),
+        html.Div(id="weather-rain-summary", className="muted",
+                 style={"margin": "6px 0"}),
+        html.Div(dcc.Graph(id="weather-rain-map", style={"height": "520px"}),
+                 className="graph-card"),
+        dash_table.DataTable(
+            id="weather-rain-table", page_size=15,
+            filter_action="native", sort_action="native"),
     ])
+
+
+def _rain_map(df, dark):
+    if df.empty or df[["latitude", "longitude"]].dropna().empty:
+        fig = px.scatter_mapbox(
+            pd.DataFrame({"latitude": [], "longitude": []}),
+            lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
+            mapbox_style="open-street-map",
+            title="Rainfall (no locations resolved yet)")
+        return ui.apply_theme(fig, dark)
+    plot = df.dropna(subset=["latitude", "longitude"]).copy()
+    plot["_size"] = plot["rain_since_9am_mm"].fillna(0).clip(lower=0) + 2
+    fig = px.scatter_mapbox(
+        plot, lat="latitude", lon="longitude",
+        color="rain_since_9am_mm", size="_size", size_max=24,
+        color_continuous_scale="Blues", hover_name="name",
+        hover_data={"catchment": True, "rain_since_9am_mm": True,
+                    "forecast_max_mm": True, "forecast_chance": True,
+                    "latitude": False, "longitude": False, "_size": False},
+        zoom=5.2, center=MELB_CENTER, mapbox_style="open-street-map",
+        title="Rain since 9am (mm)")
+    return ui.apply_theme(fig, dark)
 
 
 def register_callbacks(app):
@@ -138,6 +177,34 @@ def register_callbacks(app):
                    for col, name in TABLE_COLUMNS]
         return (summary, kpis, table_df.to_dict("records"), columns,
                 *style_out, [])
+
+    @app.callback(
+        Output("weather-rain-summary", "children"),
+        Output("weather-rain-map", "figure"),
+        Output("weather-rain-table", "data"),
+        Output("weather-rain-table", "columns"),
+        Output("weather-rain-table", "style_table"),
+        Output("weather-rain-table", "style_cell"),
+        Output("weather-rain-table", "style_header"),
+        Output("weather-rain-table", "style_data"),
+        Input("weather-interval", "n_intervals"),
+        Input("theme-store", "data"))
+    def refresh_rain(_, dark):
+        dark = bool(dark)
+        styles = ui.table_styles(dark)
+        style_out = (styles["style_table"], styles["style_cell"],
+                     styles.get("style_header", {}), styles.get("style_data", {}))
+        df = weather_data.latest_rainfall()
+        n, wettest, wmm = weather_data.rainfall_summary()
+        summary = f"{n} location(s) monitored."
+        if wettest and pd.notna(wmm):
+            summary += f"  Wettest since 9am: {wettest} ({wmm:.1f} mm)."
+        fig = _rain_map(df, dark)
+        if df.empty:
+            return (summary, fig, [], [], *style_out)
+        tdf = df[[c for c, _ in RAIN_COLUMNS]].copy()
+        columns = [{"name": name, "id": col} for col, name in RAIN_COLUMNS]
+        return (summary, fig, tdf.to_dict("records"), columns, *style_out)
 
     @app.callback(
         Output("warning-message-frame", "srcDoc"),

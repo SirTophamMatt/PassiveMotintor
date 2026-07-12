@@ -55,9 +55,12 @@ DEFAULTS = {
     },
     "weather": {
         # BoM warnings + rainfall (api.weather.bom.gov.au). Public, no creds.
-        # Kept gentle on BoM: warnings every 10 min.
+        # Kept gentle on BoM: warnings + rainfall every 10 min.
         "interval_minutes": 10,
         "autostart": True,
+        # Cap on rainfall locations polled per cycle (derived from flood gauge
+        # towns). Each polls 2 endpoints, so this bounds load on BoM.
+        "max_rainfall_locations": 40,
     },
     "power": {
         "interval_seconds": 60,
