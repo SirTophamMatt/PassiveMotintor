@@ -60,7 +60,7 @@ def load_observations(start=None, end=None, catchment=None):
         query += " WHERE " + " AND ".join(clauses)
     df = database.read_df(query + " ORDER BY timestamp", params)
     if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", errors="coerce")
         df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
     return df
 
@@ -118,7 +118,7 @@ def station_history(station_key, days=None):
         params.append(f"-{int(days)} days")
     df = database.read_df(query + " ORDER BY timestamp", params)
     if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", errors="coerce")
         df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
         df = df.dropna(subset=["height_m"])
     return df
@@ -189,7 +189,7 @@ def current_flooding_stations(max_stations=12):
         hist = database.read_df(
             "SELECT timestamp, height_m FROM flood_observations "
             "WHERE station_name = ? ORDER BY timestamp", [station])
-        hist["timestamp"] = pd.to_datetime(hist["timestamp"], errors="coerce")
+        hist["timestamp"] = pd.to_datetime(hist["timestamp"], format="ISO8601", errors="coerce")
         hist["height_m"] = pd.to_numeric(hist["height_m"], errors="coerce")
         hist = hist.dropna(subset=["height_m"])
         if not hist.empty:

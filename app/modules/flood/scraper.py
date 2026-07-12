@@ -271,7 +271,11 @@ def fetch_flood_data(event_name="live"):
 
     ``event_name`` is the always-on 'live' bucket; date-range slicing into named
     events is applied later via tags rather than at collection time."""
-    scrape_ts = datetime.now().isoformat(sep=" ", timespec="seconds")
+    # Minute precision so the fallback timestamp matches _parse_obs_time and the
+    # history backfill (both minute precision). A uniform column keeps pandas
+    # from coercing the odd-one-out format to NaT, and lets repeated fallback
+    # readings in the same minute dedup instead of piling up.
+    scrape_ts = datetime.now().isoformat(sep=" ", timespec="minutes")
     rows = []
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(_fetch_single, url, scrape_ts) for url in BOM_URLS]
