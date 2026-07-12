@@ -40,6 +40,12 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
   observation time** (parsed from the summary table; backfill uses the history page's full
   datetime) and **de-duped** on (event, station, timestamp, height) — re-scraping the same
   reading adds nothing. A `flood_heartbeat` row is written every cycle (continuity proof).
+- **Flood outlier guard:** each scrape drops a reading that jumps more than
+  `MAX_HEIGHT_JUMP_M` (50 m) from a station's last known good height, or exceeds the
+  `MAX_PLAUSIBLE_HEIGHT_M` (900 m) ceiling when the station has no history — this kills BoM
+  garbage spikes (a 2 m gauge briefly reporting ~1000 m) before storage/graphs. The check is
+  RELATIVE, so datum-referenced reservoir gauges (steadily hundreds of m) are never touched.
+  See `_reject_spikes` in `modules/flood/scraper.py`.
 - **Flood near-flood backfill:** when a station is at/within 90% of its minor level, its
   per-station BoM history page (`.tbl.shtml`) is fetched once so graphs show a trend
   immediately. Backfilled stations are tracked in-process to avoid re-fetching.
@@ -100,6 +106,27 @@ If a session drops, the scraper re-logs-in on the next cycle.
   `seed/lfg_extract_tool.py` is the one-off extraction script — re-run it if the LFG folder
   gets new guides (it contains hand-checked per-file overrides; unmatched/scanned guides are
   documented there). Guides with no BoM gauge (urban flash-flood LFGs) are intentionally absent.
+
+## Fire / Incidents module (built 2026-07-12)
+- **Source:** the public VicEmergency GeoJSON feed (`emergency.vic.gov.au/public/osom-geojson.json`,
+  no auth, served **gzip** — decompress the raw bytes). All live incidents + community warnings
+  state-wide. `app/modules/fire/{scraper,data}.py`, page `app/pages/fire.py`, route `/fire`.
+- **Model:** upsert each feature into `fire_incidents` on its stable feed `id`; an event that
+  drops out of the feed (or goes Safe/Complete) is marked `resolved=1`, never deleted. A per-cycle
+  `fire_timeseries` row holds KPI counts + doubles as the heartbeat. Planned-burn boundary polygons
+  (`feedType == "burn-area"`, ~60/cycle) are **skipped** — static plan data, not events. All other
+  categories are kept; the page presents fire first via the category filter.
+- **Feed quirks handled:** warning level lives in `category1` (Advice / Watch and Act / Emergency
+  Warning); `cap.event`/`cap.severity` carry the hazard + severity; geometry is a mix of
+  Point/Polygon/GeometryCollection (marker uses a vertex **centroid**); datetimes mix `Z` and
+  `+10:00` (normalised to one local-time seconds string — same pandas-NaT lesson as flood);
+  `sizeFmt` is sometimes a **list** (`['63 ha']`) so free-text fields are scalar-coerced before
+  binding.
+- **Wiring:** always-on collector (`fire.interval_minutes`=3, `fire.autostart`=true), watchdog
+  supervision + `fire_alert` notifications (new/escalated warnings and new fires in
+  `fire_alerts.alert_categories`, default `["Fire"]`; `notify.on_fire_alert`), `/health` exposes
+  `fire_running`/`fire_last_heartbeat`/`fire_last_error`, Overview gets Active-Fires /
+  Emergency-&-Watch-Act KPIs + a fire map + collector line.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
