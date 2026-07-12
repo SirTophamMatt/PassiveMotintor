@@ -128,6 +128,29 @@ If a session drops, the scraper re-logs-in on the next cycle.
   `fire_running`/`fire_last_heartbeat`/`fire_last_error`, Overview gets Active-Fires /
   Emergency-&-Watch-Act KPIs + a fire map + collector line.
 
+## Fire module — polygon rendering + burn scars (built 2026-07-12)
+- **Geometry stored + rendered.** `fire_incidents.geometry` holds the raw GeoJSON (non-Point
+  geometries only; points stay as centroid markers). `_ensure_column` migration adds the column
+  to pre-existing DBs. `fire.py:_map_figure` draws filled polygon overlays per kind via
+  `mapbox_layers` (magic-underscore, so map style/zoom are preserved), markers on top.
+- **Burn areas** (`feedType == "burn-area"`, sourceOrg VIC/DELWP): confirmed to be **historical
+  DELWP burn-area footprints** (named, past-dated, big polygons — ~60/cycle), NOT planned-burn
+  *incidents*. Now stored (no longer skipped) and excluded from live counts/table/alerts
+  (`active_incidents`/`latest_counts` filter `feed_type != 'burn-area'`); surfaced only via
+  `data.burn_areas()` and the Fire page **"Show burn areas (historical)"** toggle (default off).
+
+## Fire module — remaining refinements (ops feedback 2026-07-12)
+1. **Separate warning types from incident types.** Advice, Community Information,
+   Watch and Act, Emergency, Evacuation are *warning* levels (`feedType == "warning"`,
+   level in `category1`) and should be grouped/filtered apart from *incident* categories
+   (Fire, Hazmat, Tree Down, ...). Reflect this split in the map legend, filters and KPIs.
+2. **Per-kind map layer toggles** — extend the single burn-areas toggle to a checkbox per kind
+   (each warning level, fire, other incident) to show/hide that layer.
+3. **VicEmergency iconography** — prefer the **Australian Warning System (AWS)** standard
+   symbols (published by AFAC / state emergency services, intended for public reuse) mapped to
+   Advice/Watch&Act/Emergency, rather than lifting VicEmergency's own branded sprite assets
+   (copyright). Use as marker symbols on the map + legend.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·
