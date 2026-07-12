@@ -41,14 +41,16 @@ class Supervisor(threading.Thread):
     def __init__(self):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
-        self._restarts = {"flood": [], "power": []}
+        self._restarts = {"flood": [], "power": [], "fire": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
-        self._last_errors = {"flood": None, "power": None}
+        self._fire_events = {}             # source_id -> (priority, label)
+        self._first_fire_check = True
+        self._last_errors = {"flood": None, "power": None, "fire": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
-                      "last_action": None}
+                      "fire_restarts": 0, "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -121,9 +123,16 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_power()
                 self._record_restart("power", reason, msg)
 
+        if manager.fire_wanted(cfg):
+            reason = self._stall_reason(status["fire"],
+                                        max(1, cfg["fire"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("fire"):
+                ok, msg = manager.restart_fire()
+                self._record_restart("fire", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
-        for which in ("flood", "power"):
+        for which in ("flood", "power", "fire"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")
@@ -134,6 +143,7 @@ class Supervisor(threading.Thread):
         cfg = load_config()
         self._check_power_alert(cfg)
         self._check_flood_alert(cfg)
+        self._check_fire_alert(cfg)
 
     def _check_power_alert(self, cfg):
         from app.modules.power import data as power_data
@@ -205,6 +215,56 @@ class Supervisor(threading.Thread):
                             kind="flood_alert", cfg=cfg)
         self._flooding = current
         self._first_flood_check = False
+
+    def _check_fire_alert(self, cfg):
+        from app.modules.fire import data as fire_data
+        alert_cats = {c.strip().lower() for c in
+                      cfg.get("fire_alerts", {}).get("alert_categories", [])}
+        df = fire_data.active_incidents()
+        current = {}
+        for _, row in df.iterrows():
+            is_warning = row.get("feed_type") == "warning"
+            cat = str(row.get("category1") or "").strip().lower()
+            if not is_warning and cat not in alert_cats:
+                continue  # only warnings + configured incident categories alert
+            priority, _ = fire_data.classify(row.get("warning_level"),
+                                             row.get("category1"))
+            if is_warning:
+                label = (f"{row.get('warning_level') or 'Warning'} — "
+                         f"{row.get('location') or 'VIC'}")
+            else:
+                label = (f"{row.get('category1')} at "
+                         f"{row.get('location') or 'unknown'} "
+                         f"({row.get('status') or 'active'})")
+            current[row["source_id"]] = (priority, label)
+
+        if self._first_fire_check:
+            if current:
+                worst = sorted(current.values())[0][1]
+                notify.send(f"Monitor started — {len(current)} active fire/warning "
+                            f"event(s) (worst: {worst}).", kind="fire_alert", cfg=cfg)
+        else:
+            escalated = [
+                label for sid, (priority, label)
+                in sorted(current.items(), key=lambda kv: kv[1])
+                if sid not in self._fire_events
+                or priority < self._fire_events[sid][0]
+            ]
+            cleared = [self._fire_events[sid][1] for sid in self._fire_events
+                       if sid not in current]
+            if escalated:
+                notify.send("🔥 New/escalated incident or warning — "
+                            + "; ".join(escalated[:10])
+                            + (f" (+{len(escalated) - 10} more)"
+                               if len(escalated) > 10 else ""),
+                            kind="fire_alert", cfg=cfg)
+            if cleared:
+                notify.send("✅ Cleared: " + ", ".join(cleared[:10])
+                            + (f" (+{len(cleared) - 10} more)"
+                               if len(cleared) > 10 else ""),
+                            kind="fire_alert", cfg=cfg)
+        self._fire_events = current
+        self._first_fire_check = False
 
 
 supervisor = Supervisor()

@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from app.config import load_config, credentials_set
+from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
 from app.modules.power.scraper import PowerScraper
@@ -60,11 +61,13 @@ class CollectorManager:
         self.flood_event = None
         self._power = None
         self._power_scraper = None
+        self._fire = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
         self._flood_desired = None
         self._power_desired = None
+        self._fire_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -95,6 +98,33 @@ class CollectorManager:
         """Stop-then-start, used by the watchdog on a stalled collector."""
         self.stop_flood()
         return self.start_flood()
+
+    # --- fire ----------------------------------------------------------------
+    def start_fire(self):
+        """Start always-on VicEmergency incident/warning collection."""
+        with self._lock:
+            self._fire_desired = True
+            if self._fire and self._fire.is_alive():
+                return False, "Fire collection is already running."
+            cfg = load_config()
+            interval = max(1, cfg["fire"]["interval_minutes"]) * 60
+            self._fire = _Collector(
+                "fire-collector", interval, fire_scraper.fetch_fire_data)
+            self._fire.start()
+            return True, "Fire collection started."
+
+    def stop_fire(self):
+        with self._lock:
+            self._fire_desired = False
+            if self._fire:
+                self._fire.stop()
+                self._fire = None
+            return True, "Fire collection stopped."
+
+    def restart_fire(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_fire()
+        return self.start_fire()
 
     # --- power ---------------------------------------------------------------
     def start_power(self):
@@ -144,6 +174,11 @@ class CollectorManager:
             return self._power_desired
         return cfg["power"].get("autostart", False)
 
+    def fire_wanted(self, cfg):
+        if self._fire_desired is not None:
+            return self._fire_desired
+        return cfg["fire"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -156,6 +191,12 @@ class CollectorManager:
                 log.info("Autostart flood: %s", msg)
             except Exception:
                 log.exception("Autostart flood failed")
+        if cfg["fire"].get("autostart", True):
+            try:
+                ok, msg = self.start_fire()
+                log.info("Autostart fire: %s", msg)
+            except Exception:
+                log.exception("Autostart fire failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -167,6 +208,7 @@ class CollectorManager:
     def status(self):
         flood_alive = self._flood is not None and self._flood.is_alive()
         power_alive = self._power is not None and self._power.is_alive()
+        fire_alive = self._fire is not None and self._fire.is_alive()
         return {
             "flood": {
                 "running": flood_alive,
@@ -176,6 +218,10 @@ class CollectorManager:
             "power": {
                 "running": power_alive,
                 **(self._power.status if self._power else {}),
+            },
+            "fire": {
+                "running": fire_alive,
+                **(self._fire.status if self._fire else {}),
             },
         }
 

@@ -48,6 +48,11 @@ DEFAULTS = {
         # when the server boots (run_web.py). Ignored by the desktop build.
         "autostart": True,
     },
+    "fire": {
+        # VicEmergency incident/warning feed. Public, no credentials; always-on.
+        "interval_minutes": 3,
+        "autostart": True,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,
@@ -66,6 +71,11 @@ DEFAULTS = {
         "high_customers_off": 20000,
         "low_customers_off": 10000,
     },
+    "fire_alerts": {
+        # Alert on new incidents of these categories (case-insensitive) in
+        # addition to any new/upgraded community warning.
+        "alert_categories": ["Fire"],
+    },
     "notify": {
         # Incoming-webhook URL (Slack / Teams / Discord). Empty = disabled.
         "webhook_url": "",
@@ -73,6 +83,7 @@ DEFAULTS = {
         "webhook_format": "auto",
         "on_power_alert": True,
         "on_flood_alert": True,
+        "on_fire_alert": True,
         "on_watchdog": True,
     },
     "web": {

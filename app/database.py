@@ -116,6 +116,49 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
     longitude REAL
 );
 
+-- VicEmergency incidents + community warnings, upserted each cycle on the
+-- feed's stable feature id. An incident that drops out of the feed (or goes
+-- Safe/Complete) is marked resolved rather than deleted, so history is kept.
+CREATE TABLE IF NOT EXISTS fire_incidents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT UNIQUE,       -- VicEmergency feature id (stable across cycles)
+    feed_type TEXT,              -- incident | warning
+    category1 TEXT,              -- Fire, Tree Down, Advice, Watch and Act, ...
+    category2 TEXT,
+    event TEXT,                  -- cap.event for warnings (e.g. Riverine Flood)
+    warning_level TEXT,          -- Advice | Watch and Act | Emergency Warning (warnings)
+    severity TEXT,               -- cap.severity (Minor/Moderate/Severe/Extreme)
+    status TEXT,                 -- Going / Under Control / Safe / ...
+    size TEXT,                   -- descriptive (Small/Medium/Large); feed has no ha
+    resources INTEGER,
+    location TEXT,
+    source_org TEXT,
+    action TEXT,
+    headline TEXT,
+    url TEXT,
+    latitude REAL,
+    longitude REAL,
+    created TEXT,
+    updated TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    resolved INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_fire_incidents_active ON fire_incidents (resolved, category1);
+
+-- One aggregate row per collection cycle: KPI history for trend graphs and the
+-- continuity heartbeat (proves the collector ran even with no active events).
+CREATE TABLE IF NOT EXISTS fire_timeseries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    total_active INTEGER,
+    active_fires INTEGER,
+    emergency_warnings INTEGER,
+    watch_act INTEGER,
+    advice INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_fire_ts_time ON fire_timeseries (timestamp);
+
 -- Event tags: named date ranges applied over the always-on data stream. An
 -- event is no longer a collection-time label but a (name, start, end) window
 -- used to slice flood + power data for viewing and export. NULL end = ongoing.

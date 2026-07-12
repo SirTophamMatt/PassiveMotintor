@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 KIND_TOGGLES = {
     "power_alert": "on_power_alert",
     "flood_alert": "on_flood_alert",
+    "fire_alert": "on_fire_alert",
     "watchdog": "on_watchdog",
 }
 
