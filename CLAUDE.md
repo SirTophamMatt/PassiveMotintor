@@ -156,6 +156,31 @@ If a session drops, the scraper re-logs-in on the next cycle.
   on the map markers need a **Mapbox access token** (open-street-map tiles only support circle
   markers) — deferred; the AWS colour/shape key is the token-free stand-in.
 
+## Weather module — BoM warnings (Phase 2a, built 2026-07-12)
+- **Source:** `api.weather.bom.gov.au/v1` (public JSON behind the BoM website; no auth,
+  undocumented so parse defensively). `app/modules/weather/{scraper,data}.py`, page
+  `app/pages/weather.py`, route `/weather`. Uses `urllib` (not requests) — same as fire.
+- **Warnings:** `GET /warnings`, filtered to `state == "VIC"`, upserted into `weather_warnings`
+  on the BoM `id`; a warning no longer live (or past expiry) is marked `active=0`, kept.
+  `warning_group_type` (major/moderate/minor/severe) drives severity colour + KPIs. Timestamps
+  normalised to one local-seconds format (pandas-NaT lesson). Endpoints proven: `/warnings`,
+  `/locations?search=`, `/locations/{geohash6}/observations` (`rain_since_9am` mm),
+  `/locations/{geohash}/forecasts/daily` (rain amount/chance).
+- **Wiring:** always-on collector (`weather.interval_minutes`=10, `weather.autostart`=true; gentle
+  on BoM), watchdog supervision + `weather_alert` notifications (new/upgraded warnings, cleared),
+  `/health` `weather_running`/`weather_last_heartbeat`/`weather_last_error`, Overview "BoM
+  Warnings" KPI + collector line, Admin Start/Stop + autostart.
+- **Schema ready for 2b:** `weather_locations` (town/catchment -> geohash cache) and
+  `rainfall_observations` (rain_since_9am + forecast per location, de-duped) tables exist but are
+  not yet populated.
+
+## Weather module — rainfall (Phase 2b, NOT started)
+- Derive monitored locations from flood-gauge towns/catchments -> resolve to BoM geohash via
+  `/locations?search=` (cache in `weather_locations`), poll `/observations` (rain since 9am) +
+  `/forecasts/daily` each cycle into `rainfall_observations`. Rainfall map + per-catchment totals
+  on the Weather page. **High-value overlay:** rainfall as a secondary trace on the flood station
+  detail graph (`app/pages/station.py`) — "rain upstream before the gauge responds".
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·

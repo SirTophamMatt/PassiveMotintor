@@ -62,6 +62,7 @@ def _panel():
     flood_auto = cfg["flood"].get("autostart", True)
     power_auto = cfg["power"].get("autostart", False)
     fire_auto = cfg["fire"].get("autostart", True)
+    weather_auto = cfg["weather"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -95,6 +96,20 @@ def _panel():
                          "credentials.", className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-fire-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Weather collection"),
+                html.Button("Start", id="admin-weather-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-weather-stop", className="btn"),
+                dcc.Checklist(
+                    id="admin-weather-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if weather_auto else [], style={"marginTop": "8px"}),
+                html.Div("BoM warnings + rainfall (api.weather.bom.gov.au) — "
+                         "public, no credentials.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-weather-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -304,6 +319,26 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-weather-status", "children"),
+        Input("admin-weather-start", "n_clicks"),
+        Input("admin-weather-stop", "n_clicks"),
+        State("admin-weather-autostart", "value"),
+        prevent_initial_call=True)
+    def weather_control(_s, _t, autostart):
+        if not _s and not _t:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        cfg = load_config()
+        cfg["weather"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-weather-start":
+            _, msg = manager.start_weather()
+        else:
+            _, msg = manager.stop_weather()
+        return msg
+
+    @app.callback(
         Output("admin-power-status", "children"),
         Input("admin-power-start", "n_clicks"),
         Input("admin-power-stop", "n_clicks"),
@@ -348,15 +383,17 @@ def register_callbacks(app):
                          ui.status_pill(supervisor.is_alive())]
         if wd.get("last_check"):
             watchdog_bits.append(html.Span(
-                f" — checked {wd['last_check']} ({wd['checks']} passes, "
+                f" — checked {wd['last_check']} ({wd['checks']} passes; restarts: "
                 f"{wd['flood_restarts']} flood / {wd.get('fire_restarts', 0)} fire "
-                f"/ {wd['power_restarts']} power restarts)"))
+                f"/ {wd.get('weather_restarts', 0)} weather / "
+                f"{wd['power_restarts']} power)"))
         if wd.get("last_action"):
             watchdog_bits.append(html.Div(f"Last action: {wd['last_action']}",
                                           className="muted"))
         return html.Div([html.H4("Collector status"),
                          line("Flood", s["flood"]), line("Fire", s["fire"]),
-                         line("Power", s["power"]), html.Div(watchdog_bits)])
+                         line("Weather", s["weather"]), line("Power", s["power"]),
+                         html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #
     @app.callback(

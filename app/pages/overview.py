@@ -9,6 +9,7 @@ from app.modules.emcop import launcher
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
+from app.modules.weather import data as weather_data
 from app.pages import fire as fire_page
 from app.pages import flood as flood_page
 from app.pages import power as power_page
@@ -110,8 +111,14 @@ def register_callbacks(app):
             "Emergency / Watch & Act", str(emergencies),
             "#d62728" if emergencies else "#2ca02c"))
 
+        wcounts = weather_data.warning_counts()
+        kpis.append(ui.kpi_card(
+            "BoM Warnings", str(wcounts["total"]),
+            "#d62728" if wcounts["major"] else ("#ff7f0e" if wcounts["total"] else "#2ca02c")))
+
         status = manager.status()
-        flood_s, power_s, fire_s = status["flood"], status["power"], status["fire"]
+        flood_s, power_s = status["flood"], status["power"]
+        fire_s, weather_s = status["fire"], status["weather"]
 
         def line(label, s, extra=""):
             parts = [html.Strong(label + ": "), ui.status_pill(s["running"])]
@@ -126,6 +133,7 @@ def register_callbacks(app):
         collectors = [
             line("Flood", flood_s),
             line("Fire", fire_s),
+            line("Weather", weather_s),
             line("Power", power_s),
         ]
         return kpis, collectors

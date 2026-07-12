@@ -1,0 +1,15 @@
+# Keep the image small and never bake secrets/data into it.
+.venv/
+dist/
+build/
+backups/
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+*.log
+config.json
+.env
+power_debug.html
+.git/

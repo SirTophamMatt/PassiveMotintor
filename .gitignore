@@ -1,0 +1,19 @@
+# Secrets / local config — never commit
+config.json
+
+# Data
+*.db
+*.db-wal
+*.db-shm
+*.csv
+*.log
+backups/
+
+# Python / build
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+# PassiveMonitor.spec is hand-maintained build config — keep it tracked.

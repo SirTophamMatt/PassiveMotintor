@@ -53,6 +53,12 @@ DEFAULTS = {
         "interval_minutes": 3,
         "autostart": True,
     },
+    "weather": {
+        # BoM warnings + rainfall (api.weather.bom.gov.au). Public, no creds.
+        # Kept gentle on BoM: warnings every 10 min.
+        "interval_minutes": 10,
+        "autostart": True,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,
@@ -84,6 +90,7 @@ DEFAULTS = {
         "on_power_alert": True,
         "on_flood_alert": True,
         "on_fire_alert": True,
+        "on_weather_alert": True,
         "on_watchdog": True,
     },
     "web": {

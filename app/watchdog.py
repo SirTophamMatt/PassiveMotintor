@@ -41,16 +41,20 @@ class Supervisor(threading.Thread):
     def __init__(self):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
-        self._restarts = {"flood": [], "power": [], "fire": []}
+        self._restarts = {"flood": [], "power": [], "fire": [], "weather": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
         self._fire_events = {}             # source_id -> (priority, label)
         self._first_fire_check = True
-        self._last_errors = {"flood": None, "power": None, "fire": None}
+        self._warnings = {}                # warning_id -> (priority, label)
+        self._first_weather_check = True
+        self._last_errors = {"flood": None, "power": None, "fire": None,
+                             "weather": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
-                      "fire_restarts": 0, "last_action": None}
+                      "fire_restarts": 0, "weather_restarts": 0,
+                      "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -130,9 +134,16 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_fire()
                 self._record_restart("fire", reason, msg)
 
+        if manager.weather_wanted(cfg):
+            reason = self._stall_reason(status["weather"],
+                                        max(1, cfg["weather"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("weather"):
+                ok, msg = manager.restart_weather()
+                self._record_restart("weather", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
-        for which in ("flood", "power", "fire"):
+        for which in ("flood", "power", "fire", "weather"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")
@@ -144,6 +155,7 @@ class Supervisor(threading.Thread):
         self._check_power_alert(cfg)
         self._check_flood_alert(cfg)
         self._check_fire_alert(cfg)
+        self._check_weather_alert(cfg)
 
     def _check_power_alert(self, cfg):
         from app.modules.power import data as power_data
@@ -265,6 +277,44 @@ class Supervisor(threading.Thread):
                             kind="fire_alert", cfg=cfg)
         self._fire_events = current
         self._first_fire_check = False
+
+    def _check_weather_alert(self, cfg):
+        from app.modules.weather import data as weather_data
+        df = weather_data.active_warnings()
+        current = {}
+        for _, row in df.iterrows():
+            priority, _ = weather_data.classify(row.get("group_type"))
+            label = (f"{weather_data._pretty_type(row.get('type'))}"
+                     f" ({row.get('group_type') or 'warning'}): "
+                     f"{row.get('title') or ''}")
+            current[row["warning_id"]] = (priority, label[:160])
+
+        if self._first_weather_check:
+            if current:
+                worst = sorted(current.values())[0][1]
+                notify.send(f"Monitor started — {len(current)} active BoM "
+                            f"warning(s) for VIC (worst: {worst}).",
+                            kind="weather_alert", cfg=cfg)
+        else:
+            escalated = [
+                label for wid, (priority, label)
+                in sorted(current.items(), key=lambda kv: kv[1])
+                if wid not in self._warnings
+                or priority < self._warnings[wid][0]
+            ]
+            cleared = [self._warnings[wid][1] for wid in self._warnings
+                       if wid not in current]
+            if escalated:
+                notify.send("🌧 New/upgraded BoM warning — "
+                            + "; ".join(escalated[:6])
+                            + (f" (+{len(escalated) - 6} more)"
+                               if len(escalated) > 6 else ""),
+                            kind="weather_alert", cfg=cfg)
+            if cleared:
+                notify.send(f"✅ BoM warning cleared ({len(cleared)}).",
+                            kind="weather_alert", cfg=cfg)
+        self._warnings = current
+        self._first_weather_check = False
 
 
 supervisor = Supervisor()

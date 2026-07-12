@@ -88,6 +88,61 @@ CREATE TABLE IF NOT EXISTS gauge_impacts (
 );
 CREATE INDEX IF NOT EXISTS idx_gauge_impacts_key ON gauge_impacts (station_key);
 
+-- BoM warnings (api.weather.bom.gov.au /warnings), upserted on the BoM id.
+-- A warning no longer in the feed (or past expiry) is marked inactive, kept.
+CREATE TABLE IF NOT EXISTS weather_warnings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    warning_id TEXT UNIQUE,      -- BoM id, e.g. IDV36620
+    type TEXT,                   -- flood_warning, severe_weather_warning, ...
+    title TEXT,
+    short_title TEXT,
+    group_type TEXT,             -- minor / moderate / major / severe
+    phase TEXT,                  -- new / update / final / cancel
+    state TEXT,
+    issue_time TEXT,
+    expiry_time TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    active INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_weather_warn_active ON weather_warnings (active, type);
+
+-- Monitored rainfall locations, resolved to a BoM geohash (derived from flood
+-- gauge towns/catchments, cached here so we only geocode once).
+CREATE TABLE IF NOT EXISTS weather_locations (
+    location_key TEXT PRIMARY KEY,   -- lowercased town/catchment name
+    name TEXT,
+    geohash TEXT,
+    latitude REAL,
+    longitude REAL,
+    catchment TEXT
+);
+
+-- Per-location rainfall readings (rain since 9am), de-duped on (location, ts).
+CREATE TABLE IF NOT EXISTS rainfall_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_key TEXT NOT NULL,
+    name TEXT,
+    latitude REAL,
+    longitude REAL,
+    rain_since_9am_mm REAL,
+    forecast_max_mm REAL,        -- today's forecast rain upper bound (leading indicator)
+    forecast_chance INTEGER,
+    timestamp TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rainfall_unique
+    ON rainfall_observations (location_key, timestamp);
+
+-- One row per weather collection cycle: KPI counts + continuity heartbeat.
+CREATE TABLE IF NOT EXISTS weather_heartbeat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    vic_warnings INTEGER,
+    locations_polled INTEGER,
+    new_warnings INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_weather_hb_time ON weather_heartbeat (timestamp);
+
 CREATE TABLE IF NOT EXISTS power_timeseries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,

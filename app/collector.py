@@ -14,6 +14,7 @@ from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
 from app.modules.power.scraper import PowerScraper
+from app.modules.weather import scraper as weather_scraper
 
 log = logging.getLogger(__name__)
 
@@ -62,12 +63,14 @@ class CollectorManager:
         self._power = None
         self._power_scraper = None
         self._fire = None
+        self._weather = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
         self._flood_desired = None
         self._power_desired = None
         self._fire_desired = None
+        self._weather_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -126,6 +129,33 @@ class CollectorManager:
         self.stop_fire()
         return self.start_fire()
 
+    # --- weather -------------------------------------------------------------
+    def start_weather(self):
+        """Start always-on BoM weather (warnings + rainfall) collection."""
+        with self._lock:
+            self._weather_desired = True
+            if self._weather and self._weather.is_alive():
+                return False, "Weather collection is already running."
+            cfg = load_config()
+            interval = max(1, cfg["weather"]["interval_minutes"]) * 60
+            self._weather = _Collector(
+                "weather-collector", interval, weather_scraper.fetch_weather_data)
+            self._weather.start()
+            return True, "Weather collection started."
+
+    def stop_weather(self):
+        with self._lock:
+            self._weather_desired = False
+            if self._weather:
+                self._weather.stop()
+                self._weather = None
+            return True, "Weather collection stopped."
+
+    def restart_weather(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_weather()
+        return self.start_weather()
+
     # --- power ---------------------------------------------------------------
     def start_power(self):
         with self._lock:
@@ -179,6 +209,11 @@ class CollectorManager:
             return self._fire_desired
         return cfg["fire"].get("autostart", True)
 
+    def weather_wanted(self, cfg):
+        if self._weather_desired is not None:
+            return self._weather_desired
+        return cfg["weather"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -197,6 +232,12 @@ class CollectorManager:
                 log.info("Autostart fire: %s", msg)
             except Exception:
                 log.exception("Autostart fire failed")
+        if cfg["weather"].get("autostart", True):
+            try:
+                ok, msg = self.start_weather()
+                log.info("Autostart weather: %s", msg)
+            except Exception:
+                log.exception("Autostart weather failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -222,6 +263,10 @@ class CollectorManager:
             "fire": {
                 "running": fire_alive,
                 **(self._fire.status if self._fire else {}),
+            },
+            "weather": {
+                "running": self._weather is not None and self._weather.is_alive(),
+                **(self._weather.status if self._weather else {}),
             },
         }
 
