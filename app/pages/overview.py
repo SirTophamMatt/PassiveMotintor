@@ -6,8 +6,10 @@ from app import auth, ui
 from app.collector import manager
 from app.config import load_config
 from app.modules.emcop import launcher
+from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
+from app.pages import fire as fire_page
 from app.pages import flood as flood_page
 from app.pages import power as power_page
 
@@ -54,6 +56,10 @@ def layout():
         html.Div(dcc.Graph(id="overview-power-map", style={"height": "560px"}),
                  className="graph-card"),
 
+        html.H3("Fire / Incidents"),
+        html.Div(dcc.Graph(id="overview-fire-map", style={"height": "560px"}),
+                 className="graph-card"),
+
         html.H3("Flooding Stations"),
         html.Div(id="overview-flood-graphs", className="graph-grid"),
     ])
@@ -95,8 +101,17 @@ def register_callbacks(app):
             "Stations Flooding", str(flooding),
             "#d62728" if flooding else "#2ca02c"))
 
+        fire_counts = fire_data.latest_counts()
+        kpis.append(ui.kpi_card(
+            "Active Fires", str(fire_counts["active_fires"]),
+            "#ff5722" if fire_counts["active_fires"] else "#2ca02c"))
+        emergencies = fire_counts["emergency"] + fire_counts["watch_act"]
+        kpis.append(ui.kpi_card(
+            "Emergency / Watch & Act", str(emergencies),
+            "#d62728" if emergencies else "#2ca02c"))
+
         status = manager.status()
-        flood_s, power_s = status["flood"], status["power"]
+        flood_s, power_s, fire_s = status["flood"], status["power"], status["fire"]
 
         def line(label, s, extra=""):
             parts = [html.Strong(label + ": "), ui.status_pill(s["running"])]
@@ -110,6 +125,7 @@ def register_callbacks(app):
 
         collectors = [
             line("Flood", flood_s),
+            line("Fire", fire_s),
             line("Power", power_s),
         ]
         return kpis, collectors
@@ -117,6 +133,7 @@ def register_callbacks(app):
     @app.callback(
         Output("overview-power-trends", "children"),
         Output("overview-power-map", "figure"),
+        Output("overview-fire-map", "figure"),
         Output("overview-flood-graphs", "children"),
         Input("overview-interval", "n_intervals"),
         Input("theme-store", "data"))
@@ -142,6 +159,9 @@ def register_callbacks(app):
         outages = power_data.active_outages(include_planned=True)
         map_fig = power_page._map_figure(outages, dark)
 
+        # Fire: active incidents & warnings map
+        fire_map = fire_page._map_figure(fire_data.active_incidents(), dark)
+
         # Flood: a graph per currently-flooding station, linked to its
         # detail page (gauge stick, LFG impacts, briefing PDF).
         from app.pages import station as station_page
@@ -160,7 +180,7 @@ def register_callbacks(app):
         else:
             flood_graphs = [html.Div("No stations currently at or above flood "
                                      "level.", className="muted")]
-        return trends, map_fig, flood_graphs
+        return trends, map_fig, fire_map, flood_graphs
 
     @app.callback(
         Output("emcop-launch-status", "children"),
