@@ -264,13 +264,24 @@ def _trend_figure(df, dark):
     if df.empty:
         fig = px.line(title="Active events over time (no history yet)")
         return ui.apply_theme(fig, dark)
-    series = {"active_fires": "Active fires", "emergency_warnings": "Emergency",
-              "watch_act": "Watch & Act", "advice": "Advice",
-              "total_active": "All active"}
+    # Split the old mixed "All active" line into Incidents vs Warnings totals.
+    df = df.copy()
+    df["warnings_total"] = df[["emergency_warnings", "watch_act",
+                               "advice"]].fillna(0).sum(axis=1)
+    df["incidents_total"] = (df["total_active"].fillna(0)
+                             - df["warnings_total"]).clip(lower=0)
+    series = {"incidents_total": "Incidents", "active_fires": "Fires",
+              "warnings_total": "Warnings", "emergency_warnings": "Emergency",
+              "watch_act": "Watch & Act", "advice": "Advice"}
+    colours = {"Incidents": "#5b8def", "Fires": "#ff5722", "Warnings": "#7048e8",
+               "Emergency": "#d62728", "Watch & Act": "#ff7f0e", "Advice": "#e6c700"}
     fig = px.line(df, x="timestamp", y=list(series),
-                  title="Active events over time",
+                  title="Active events over time — incidents vs warnings",
                   labels={"timestamp": "Time", "value": "Count", "variable": ""})
     fig.for_each_trace(lambda t: t.update(name=series.get(t.name, t.name)))
+    for tr in fig.data:
+        if tr.name in colours:
+            tr.update(line=dict(color=colours[tr.name]))
     fig.update_layout(height=320, legend=dict(orientation="h", y=1.12))
     return ui.apply_theme(fig, dark)
 

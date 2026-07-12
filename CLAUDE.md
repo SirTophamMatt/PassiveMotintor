@@ -184,9 +184,16 @@ If a session drops, the scraper re-logs-in on the next cycle.
   not yet populated.
 
 ## Overview briefing PDF (updated 2026-07-12)
-`reporting.build_overview_pdf` now also includes fire + weather: KPI rows for Active Fires /
-Emergency & Watch&Act / BoM Warnings / Flood Warnings, and text tables of **Active BoM Warnings**
-and **Active Fire Incidents & Warnings** (tables, so they render even where kaleido can't).
+`reporting.build_overview_pdf` now also includes fire + weather + rainfall: KPI rows for Active
+Fires / Emergency & Watch&Act / BoM Warnings / Flood Warnings / AWS Rain Stations + Wettest since
+9am; text tables of **Active BoM Warnings**, **Active Fire Warnings** (coloured level, separate
+from) **Active Fire Incidents** (Met excluded), and **AWS Rainfall — wettest stations** (tables, so
+they render even where kaleido can't).
+
+## Fire trend chart (updated 2026-07-12)
+`fire.py:_trend_figure` splits the old mixed "All active" line into **Incidents** (= total_active −
+warnings) vs **Warnings** (= emergency+watch_act+advice) totals, plus Fires and the three
+warning-level lines, colour-matched to the map kinds.
 
 ## Analytics (built 2026-07-12)
 - **Privacy-preserving, self-hosted, no third-party trackers.** `app/analytics.py` +

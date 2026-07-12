@@ -86,6 +86,9 @@ def build_overview_pdf():
 
     fire_counts = fire_data.latest_counts()
     wcounts = weather_data.warning_counts()
+    rain_n, rain_name, rain_mm = weather_data.aws_summary()
+    wettest = (f"{rain_name} ({rain_mm:.0f} mm)"
+               if rain_name and pd.notna(rain_mm) else "—")
     kpi_rows = [
         ["Customers Off", fmt(off), "Alert Level", alert],
         ["Power Dependant Off", fmt(totals.get("power_dependant_off")),
@@ -97,6 +100,7 @@ def build_overview_pdf():
          str(fire_counts["emergency"] + fire_counts["watch_act"])],
         ["BoM Warnings (VIC)", str(wcounts["total"]),
          "Flood Warnings", str(wcounts["flood"])],
+        ["AWS Rain Stations", str(rain_n), "Wettest since 9am", wettest],
     ]
     kpi_table = Table(kpi_rows, colWidths=[45 * mm, 40 * mm, 45 * mm, 40 * mm])
     kpi_table.setStyle(TableStyle([
@@ -215,6 +219,21 @@ def build_overview_pdf():
                 for _, r in idf.iterrows()]
         story.append(_simple_table(["Category", "Location", "Status"],
                                    rows, [42 * mm, 100 * mm, 38 * mm]))
+
+    # --- AWS rainfall (wettest stations) -------------------------------------
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph("AWS Rainfall — wettest stations (since 9am)",
+                           styles["Heading2"]))
+    rdf = weather_data.latest_aws_rainfall()
+    if rdf.empty:
+        story.append(Paragraph("No AWS rainfall recorded yet.", styles["Italic"]))
+    else:
+        rows = [[r["name"] or "—",
+                 f"{r['rain_since_9am_mm']:.1f}"
+                 if pd.notna(r["rain_since_9am_mm"]) else "—",
+                 str(r["obs_time"])] for _, r in rdf.head(12).iterrows()]
+        story.append(_simple_table(["Station", "Rain since 9am (mm)", "Observed"],
+                                   rows, [78 * mm, 42 * mm, 40 * mm]))
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,
