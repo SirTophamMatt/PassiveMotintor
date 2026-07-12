@@ -138,13 +138,14 @@ CREATE TABLE IF NOT EXISTS fire_incidents (
     url TEXT,
     latitude REAL,
     longitude REAL,
+    geometry TEXT,               -- raw GeoJSON geometry (for polygon rendering)
     created TEXT,
     updated TEXT,
     first_seen TEXT,
     last_seen TEXT,
     resolved INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_fire_incidents_active ON fire_incidents (resolved, category1);
+CREATE INDEX IF NOT EXISTS idx_fire_incidents_active ON fire_incidents (resolved, feed_type);
 
 -- One aggregate row per collection cycle: KPI history for trend graphs and the
 -- continuity heartbeat (proves the collector ran even with no active events).
@@ -223,11 +224,24 @@ def init_db():
         # Migration: drop the old (time_day-based) flood dedup index so the new
         # timestamp-based one in SCHEMA takes over. Safe to run repeatedly.
         conn.execute("DROP INDEX IF EXISTS idx_flood_obs_unique")
+        _ensure_column(conn, "fire_incidents", "geometry", "TEXT")
         _migrate_events_to_tags(conn)
         conn.commit()
     finally:
         conn.close()
     log.info("Database ready at %s", DB_FILE)
+
+
+def _ensure_column(conn, table, column, decl):
+    """Add a column to an existing table if it's missing (idempotent). Lets a
+    new column reach databases created before it was added to the schema."""
+    try:
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+    except sqlite3.OperationalError:
+        return  # table not present yet; CREATE in SCHEMA already covers it
+    if cols and column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        log.info("Added column %s.%s", table, column)
 
 
 def _migrate_events_to_tags(conn):

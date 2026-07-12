@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 
 from app.config import load_config
+from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
 
@@ -141,6 +142,147 @@ def build_overview_pdf():
     buffer.seek(0)
 
     filename = f"passive_monitor_overview_{datetime.now():%Y%m%d_%H%M}.pdf"
+    return filename, buffer.getvalue()
+
+
+def build_fire_pdf():
+    """Return (filename, bytes) for a Fire / Incidents situation report: headline
+    counts, the active community warnings (worst first), and active incidents
+    (fires first). The state map is included when kaleido can render it, but its
+    absence never blocks the report — the tables are the substance."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (Image, Paragraph, SimpleDocTemplate,
+                                        Spacer, Table, TableStyle)
+    except ImportError as e:
+        raise ReportingUnavailable(
+            "The 'reportlab' package is required for PDF reports "
+            "(pip install reportlab).") from e
+
+    styles = getSampleStyleSheet()
+    cell = ParagraphStyle("fire", parent=styles["Normal"], fontSize=9, leading=11.5)
+    story = []
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    story.append(Paragraph("Passive Monitor — Fire / Incidents Situation Report",
+                           styles["Title"]))
+    story.append(Paragraph(f"Generated {now}", styles["Normal"]))
+    story.append(Spacer(1, 6 * mm))
+
+    # --- Headline counts ------------------------------------------------------
+    c = fire_data.latest_counts()
+    kpi_rows = [
+        ["Active Fires", str(c["active_fires"]), "Emergency Warnings", str(c["emergency"])],
+        ["Watch & Act", str(c["watch_act"]), "Advice", str(c["advice"])],
+        ["Total Active Events", str(c["total"]), "", ""],
+    ]
+    kpi = Table(kpi_rows, colWidths=[45 * mm, 40 * mm, 45 * mm, 40 * mm])
+    kpi.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef2f7")),
+        ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#eef2f7")),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(kpi)
+    story.append(Spacer(1, 5 * mm))
+
+    df = fire_data.active_incidents()
+    warnings = df[df["feed_type"] == "warning"].copy() if not df.empty else df
+    incidents = df[df["feed_type"] != "warning"].copy() if not df.empty else df
+
+    def _table(rows, widths):
+        t = Table(rows, colWidths=widths, repeatRows=1)
+        t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    # --- Community warnings (worst first) -------------------------------------
+    story.append(Paragraph("Community warnings", styles["Heading2"]))
+    if warnings is None or warnings.empty:
+        story.append(Paragraph("No active community warnings.", styles["Italic"]))
+    else:
+        warnings["_prio"] = warnings["warning_level"].map(
+            lambda lv: fire_data.classify(lv)[0])
+        warnings = warnings.sort_values(["_prio", "location"])
+        header = [Paragraph(f"<b>{h}</b>", cell) for h in
+                  ("Level", "Location", "Event", "Action")]
+        rows = [header]
+        row_styles = []
+        for i, (_, r) in enumerate(warnings.iterrows(), start=1):
+            colour = fire_data.classify(r["warning_level"])[1]
+            rows.append([
+                Paragraph(str(r["warning_level"] or "—"), cell),
+                Paragraph(str(r["location"] or "—"), cell),
+                Paragraph(str(r["event"] or "—"), cell),
+                Paragraph(str(r["action"] or "—"), cell),
+            ])
+            row_styles.append(
+                ("TEXTCOLOR", (0, i), (0, i), colors.HexColor(colour)))
+            row_styles.append(("FONTNAME", (0, i), (0, i), "Helvetica-Bold"))
+        t = _table(rows, [30 * mm, 62 * mm, 45 * mm, 45 * mm])
+        t.setStyle(TableStyle(row_styles))
+        story.append(t)
+    story.append(Spacer(1, 5 * mm))
+
+    # --- Active incidents (fires first) ---------------------------------------
+    story.append(Paragraph("Active incidents", styles["Heading2"]))
+    if incidents is None or incidents.empty:
+        story.append(Paragraph("No active incidents.", styles["Italic"]))
+    else:
+        incidents["_fire"] = (incidents["category1"].fillna("").str.lower()
+                              != "fire")  # False (fires) sort first
+        incidents = incidents.sort_values(["_fire", "category1", "location"]).head(50)
+        header = [Paragraph(f"<b>{h}</b>", cell) for h in
+                  ("Category", "Location", "Status", "Size")]
+        rows = [header]
+        for _, r in incidents.iterrows():
+            rows.append([
+                Paragraph(str(r["category1"] or "—"), cell),
+                Paragraph(str(r["location"] or "—"), cell),
+                Paragraph(str(r["status"] or "—"), cell),
+                Paragraph(str(r["size"] or "—"), cell),
+            ])
+        story.append(_table(rows, [40 * mm, 70 * mm, 42 * mm, 30 * mm]))
+    story.append(Spacer(1, 5 * mm))
+
+    # --- State map (best-effort; omitted if kaleido can't render) --------------
+    if not df.empty and df[["latitude", "longitude"]].dropna().shape[0]:
+        try:
+            from app.pages import fire as fire_page
+            png = _fig_png(fire_page._map_figure(df, dark=False))
+            story.append(Paragraph("Active incidents & warnings map", styles["Heading3"]))
+            story.append(Image(io.BytesIO(png), width=180 * mm, height=110 * mm))
+        except ReportingUnavailable as e:
+            log.info("Fire sitrep map skipped (%s)", e)
+
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph(
+        "Source: VicEmergency public feed. Situational awareness only — always "
+        "act on official warnings at emergency.vic.gov.au.",
+        ParagraphStyle("src", parent=styles["Normal"], fontSize=7.5,
+                       textColor=colors.HexColor("#5f6368"))))
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=15 * mm, bottomMargin=15 * mm,
+                            leftMargin=15 * mm, rightMargin=15 * mm,
+                            title="Passive Monitor Fire Situation Report")
+    doc.build(story)
+    buffer.seek(0)
+    filename = f"fire_situation_report_{datetime.now():%Y%m%d_%H%M}.pdf"
     return filename, buffer.getvalue()
 
 
