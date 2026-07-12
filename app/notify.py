@@ -76,6 +76,9 @@ def send(message, kind="watchdog", cfg=None, force=False):
     but still requires a webhook URL."""
     cfg = cfg or load_config()
     ncfg = cfg.get("notify", {})
+    # Master pause suppresses everything except forced sends (admin test button).
+    if not force and ncfg.get("paused"):
+        return False
     if not force and not ncfg.get(KIND_TOGGLES.get(kind, "on_watchdog"), True):
         return False
     url = (ncfg.get("webhook_url") or "").strip()

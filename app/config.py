@@ -101,6 +101,9 @@ DEFAULTS = {
         "on_fire_alert": True,
         "on_weather_alert": True,
         "on_watchdog": True,
+        # Master pause: when true, suppress ALL notifications (the admin test
+        # button still works — it uses force=True). Toggled from the Admin page.
+        "paused": False,
     },
     "web": {
         # Admin password hash set from the Admin page. The UM_ADMIN_PASSWORD

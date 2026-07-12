@@ -222,6 +222,11 @@ def _panel():
                 html.Br(),
                 html.Button("Send test notification", id="admin-notify-test",
                             className="btn", style={"marginTop": "10px"}),
+                dcc.Checklist(
+                    id="admin-notify-pause",
+                    options=[{"label": " Pause all notifications", "value": "paused"}],
+                    value=["paused"] if cfg["notify"].get("paused") else [],
+                    style={"marginTop": "8px"}),
                 html.Div(id="admin-notify-status", className="muted",
                          style={"marginTop": "6px"}),
                 html.Button("Set / change admin password",
@@ -540,6 +545,20 @@ def register_callbacks(app):
                          force=True)
         return ("✅ Test sent — check your channel."
                 if ok else "❌ Send failed — see unified_monitor.log for detail.")
+
+    @app.callback(
+        Output("admin-notify-status", "children", allow_duplicate=True),
+        Input("admin-notify-pause", "value"),
+        prevent_initial_call=True)
+    def toggle_notify_pause(value):
+        if not auth.is_admin():
+            raise PreventUpdate
+        paused = "paused" in (value or [])
+        cfg = load_config()
+        cfg["notify"]["paused"] = paused
+        save_config(cfg)
+        return ("🔕 All notifications paused (the test button still works)."
+                if paused else "🔔 Notifications active.")
 
     # --- admin password --------------------------------------------------- #
     @app.callback(
