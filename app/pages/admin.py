@@ -63,6 +63,7 @@ def _panel():
     power_auto = cfg["power"].get("autostart", False)
     fire_auto = cfg["fire"].get("autostart", True)
     weather_auto = cfg["weather"].get("autostart", True)
+    rainfall_auto = cfg["rainfall"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -110,6 +111,22 @@ def _panel():
                          "public, no credentials.", className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-weather-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Rainfall collection (AWS network)"),
+                html.Button("Start", id="admin-rainfall-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-rainfall-stop", className="btn"),
+                html.Button("Fetch now", id="admin-rainfall-fetch", className="btn",
+                            style={"marginLeft": "4px"}),
+                dcc.Checklist(
+                    id="admin-rainfall-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if rainfall_auto else [], style={"marginTop": "8px"}),
+                html.Div("BoM ~101 AWS stations, one state-page request/cycle. "
+                         "Public, no credentials.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-rainfall-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -187,8 +204,10 @@ def _panel():
                     end_date_placeholder_text="End")),
                 dcc.Checklist(id="admin-export-modules",
                               options=[{"label": " Flood", "value": "flood"},
-                                       {"label": " Power", "value": "power"}],
-                              value=["flood", "power"], style={"marginTop": "8px"}),
+                                       {"label": " Power", "value": "power"},
+                                       {"label": " Rainfall", "value": "rainfall"}],
+                              value=["flood", "power", "rainfall"],
+                              style={"marginTop": "8px"}),
                 html.Button("⤓ Download XLSX", id="admin-export-btn",
                             className="btn btn-primary", style={"marginTop": "8px"}),
                 html.Div(id="admin-export-status", className="muted",
@@ -339,6 +358,29 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-rainfall-status", "children"),
+        Input("admin-rainfall-start", "n_clicks"),
+        Input("admin-rainfall-stop", "n_clicks"),
+        Input("admin-rainfall-fetch", "n_clicks"),
+        State("admin-rainfall-autostart", "value"),
+        prevent_initial_call=True)
+    def rainfall_control(_s, _t, _f, autostart):
+        if not _s and not _t and not _f:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        cfg = load_config()
+        cfg["rainfall"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-rainfall-fetch":
+            _, msg = manager.fetch_rainfall_now()
+        elif ctx.triggered_id == "admin-rainfall-start":
+            _, msg = manager.start_rainfall()
+        else:
+            _, msg = manager.stop_rainfall()
+        return msg
+
+    @app.callback(
         Output("admin-power-status", "children"),
         Input("admin-power-start", "n_clicks"),
         Input("admin-power-stop", "n_clicks"),
@@ -392,7 +434,8 @@ def register_callbacks(app):
                                           className="muted"))
         return html.Div([html.H4("Collector status"),
                          line("Flood", s["flood"]), line("Fire", s["fire"]),
-                         line("Weather", s["weather"]), line("Power", s["power"]),
+                         line("Weather", s["weather"]),
+                         line("Rainfall", s["rainfall"]), line("Power", s["power"]),
                          html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #
@@ -475,7 +518,8 @@ def register_callbacks(app):
             filename, data = export.build_export(
                 start, end, label=label,
                 include_flood="flood" in modules,
-                include_power="power" in modules)
+                include_power="power" in modules,
+                include_rainfall="rainfall" in modules)
         except Exception as e:
             return no_update, f"⚠ Export failed: {e}"
         return dcc.send_bytes(data, filename), f"✅ Exported {filename}."

@@ -174,6 +174,89 @@ def rainfall_summary():
     return len(df), top["name"], top["rain_since_9am_mm"]
 
 
+def latest_aws_rainfall():
+    """Latest rain-since-9am per AWS station, with coords from the registry."""
+    df = database.read_df(
+        "SELECT r.wmo, r.name, r.rain_since_9am_mm, r.obs_time, "
+        "       s.latitude, s.longitude "
+        "FROM rainfall_aws r "
+        "JOIN (SELECT wmo, MAX(obs_time) AS mt FROM rainfall_aws GROUP BY wmo) m "
+        "  ON r.wmo = m.wmo AND r.obs_time = m.mt "
+        "LEFT JOIN aws_stations s ON s.wmo = r.wmo")
+    if not df.empty:
+        df["rain_since_9am_mm"] = pd.to_numeric(df["rain_since_9am_mm"], errors="coerce")
+        df = df.sort_values("rain_since_9am_mm", ascending=False, na_position="last")
+    return df
+
+
+def aws_rainfall_history(wmo, start=None, end=None):
+    """Rain-since-9am time series for one AWS station (optionally within a
+    timestamp range), oldest first — for charts."""
+    query = ("SELECT obs_time, rain_since_9am_mm FROM rainfall_aws WHERE wmo = ?")
+    params = [str(wmo)]
+    if start and end:
+        query += " AND timestamp BETWEEN ? AND ?"
+        params += [start, end]
+    df = database.read_df(query + " ORDER BY obs_time", params)
+    if not df.empty:
+        df["obs_time"] = pd.to_datetime(df["obs_time"], format="ISO8601", errors="coerce")
+        df["rain_since_9am_mm"] = pd.to_numeric(df["rain_since_9am_mm"], errors="coerce")
+    return df
+
+
+def _window_total(values):
+    """Total rain accumulated across a series of rain-since-9am readings, using
+    positive increments so daily 9am resets are handled (a drop = reset, and the
+    post-reset value is fresh rain). Baseline (pre-window same-day rain) excluded."""
+    total = 0.0
+    prev = None
+    for v in values:
+        if pd.isna(v):
+            continue
+        v = float(v)
+        if prev is None:
+            prev = v
+            continue
+        total += (v - prev) if v >= prev else v  # v < prev => 9am reset
+        prev = v
+    return round(total, 1)
+
+
+def aws_event_total(start=None, end=None):
+    """Per-station cumulative rainfall over a window (for a tagged event),
+    reset-proof. Returns wmo, name, total_mm, wettest first."""
+    query = "SELECT wmo, name, obs_time, rain_since_9am_mm FROM rainfall_aws"
+    params = []
+    if start and end:
+        query += " WHERE timestamp BETWEEN ? AND ?"
+        params += [start, end]
+    df = database.read_df(query + " ORDER BY wmo, obs_time", params)
+    if df.empty:
+        return df
+    df["rain_since_9am_mm"] = pd.to_numeric(df["rain_since_9am_mm"], errors="coerce")
+    out = (df.groupby(["wmo", "name"])["rain_since_9am_mm"]
+             .apply(lambda s: _window_total(s.tolist()))
+             .reset_index(name="total_mm"))
+    return out.sort_values("total_mm", ascending=False)
+
+
+def load_aws_range(start, end):
+    """Raw AWS rainfall readings within a timestamp range, for tagged export."""
+    return database.read_df(
+        "SELECT wmo, name, rain_since_9am_mm, obs_time, timestamp "
+        "FROM rainfall_aws WHERE timestamp BETWEEN ? AND ? "
+        "ORDER BY name, obs_time", [start, end])
+
+
+def aws_summary():
+    """(station_count, wettest_name, wettest_since9am_mm) from latest readings."""
+    df = latest_aws_rainfall()
+    if df.empty:
+        return 0, None, None
+    top = df.iloc[0]
+    return len(df), top["name"], top["rain_since_9am_mm"]
+
+
 def heartbeat_summary():
     """(cycle_count, last_timestamp) for the weather collector heartbeat."""
     df = database.read_df(

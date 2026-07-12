@@ -79,7 +79,43 @@ def layout():
         dash_table.DataTable(
             id="weather-rain-table", page_size=15,
             filter_action="native", sort_action="native"),
+        html.H3("AWS Rainfall Network", style={"marginTop": "18px"}),
+        html.Div("Every Victorian Automatic Weather Station (~101), rain since "
+                 "9am. Recorded and tagged like flood/power for after-the-fact "
+                 "analysis; event totals survive the daily 9am reset.",
+                 className="muted"),
+        html.Div(id="weather-aws-summary", className="muted",
+                 style={"margin": "6px 0"}),
+        html.Div(dcc.Graph(id="weather-aws-map", style={"height": "560px"}),
+                 className="graph-card"),
+        dash_table.DataTable(
+            id="weather-aws-table", page_size=20,
+            filter_action="native", sort_action="native"),
     ])
+
+
+AWS_COLUMNS = [("name", "Station"), ("rain_since_9am_mm", "Rain since 9am (mm)"),
+               ("obs_time", "Observed")]
+
+
+def _aws_map(df, dark):
+    if df.empty or df[["latitude", "longitude"]].dropna().empty:
+        fig = px.scatter_mapbox(
+            pd.DataFrame({"latitude": [], "longitude": []}),
+            lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
+            mapbox_style="open-street-map", title="AWS rainfall (locating stations…)")
+        return ui.apply_theme(fig, dark)
+    plot = df.dropna(subset=["latitude", "longitude"]).copy()
+    plot["_size"] = plot["rain_since_9am_mm"].fillna(0).clip(lower=0) + 2
+    fig = px.scatter_mapbox(
+        plot, lat="latitude", lon="longitude", color="rain_since_9am_mm",
+        size="_size", size_max=26, color_continuous_scale="Blues",
+        hover_name="name",
+        hover_data={"rain_since_9am_mm": True, "obs_time": True,
+                    "latitude": False, "longitude": False, "_size": False},
+        zoom=5.2, center=MELB_CENTER, mapbox_style="open-street-map",
+        title="AWS rain since 9am (mm)")
+    return ui.apply_theme(fig, dark)
 
 
 def _rain_map(df, dark):
@@ -204,6 +240,34 @@ def register_callbacks(app):
             return (summary, fig, [], [], *style_out)
         tdf = df[[c for c, _ in RAIN_COLUMNS]].copy()
         columns = [{"name": name, "id": col} for col, name in RAIN_COLUMNS]
+        return (summary, fig, tdf.to_dict("records"), columns, *style_out)
+
+    @app.callback(
+        Output("weather-aws-summary", "children"),
+        Output("weather-aws-map", "figure"),
+        Output("weather-aws-table", "data"),
+        Output("weather-aws-table", "columns"),
+        Output("weather-aws-table", "style_table"),
+        Output("weather-aws-table", "style_cell"),
+        Output("weather-aws-table", "style_header"),
+        Output("weather-aws-table", "style_data"),
+        Input("weather-interval", "n_intervals"),
+        Input("theme-store", "data"))
+    def refresh_aws(_, dark):
+        dark = bool(dark)
+        styles = ui.table_styles(dark)
+        style_out = (styles["style_table"], styles["style_cell"],
+                     styles.get("style_header", {}), styles.get("style_data", {}))
+        df = weather_data.latest_aws_rainfall()
+        n, wettest, wmm = weather_data.aws_summary()
+        summary = f"{n} AWS station(s) reporting."
+        if wettest and pd.notna(wmm):
+            summary += f"  Wettest since 9am: {wettest} ({wmm:.1f} mm)."
+        fig = _aws_map(df, dark)
+        if df.empty:
+            return (summary, fig, [], [], *style_out)
+        tdf = df[[c for c, _ in AWS_COLUMNS]].copy()
+        columns = [{"name": name, "id": col} for col, name in AWS_COLUMNS]
         return (summary, fig, tdf.to_dict("records"), columns, *style_out)
 
     @app.callback(

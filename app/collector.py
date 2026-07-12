@@ -14,6 +14,7 @@ from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
 from app.modules.power.scraper import PowerScraper
+from app.modules.weather import aws as aws_rainfall
 from app.modules.weather import scraper as weather_scraper
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class CollectorManager:
         self._power_scraper = None
         self._fire = None
         self._weather = None
+        self._rainfall = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
@@ -71,6 +73,7 @@ class CollectorManager:
         self._power_desired = None
         self._fire_desired = None
         self._weather_desired = None
+        self._rainfall_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -156,6 +159,42 @@ class CollectorManager:
         self.stop_weather()
         return self.start_weather()
 
+    # --- rainfall (BoM AWS network) ------------------------------------------
+    def start_rainfall(self):
+        """Start always-on AWS rainfall-network collection."""
+        with self._lock:
+            self._rainfall_desired = True
+            if self._rainfall and self._rainfall.is_alive():
+                return False, "Rainfall collection is already running."
+            cfg = load_config()
+            interval = max(1, cfg["rainfall"]["interval_minutes"]) * 60
+            self._rainfall = _Collector(
+                "rainfall-collector", interval, aws_rainfall.fetch_aws_rainfall)
+            self._rainfall.start()
+            return True, "Rainfall collection started."
+
+    def stop_rainfall(self):
+        with self._lock:
+            self._rainfall_desired = False
+            if self._rainfall:
+                self._rainfall.stop()
+                self._rainfall = None
+            return True, "Rainfall collection stopped."
+
+    def restart_rainfall(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_rainfall()
+        return self.start_rainfall()
+
+    def fetch_rainfall_now(self):
+        """Manual one-off AWS rainfall fetch (Admin button). Runs inline."""
+        try:
+            n = aws_rainfall.fetch_aws_rainfall()
+            return True, f"Fetched rainfall — {n} new reading(s)."
+        except Exception as e:
+            log.exception("Manual rainfall fetch failed")
+            return False, f"Rainfall fetch failed: {e}"
+
     # --- power ---------------------------------------------------------------
     def start_power(self):
         with self._lock:
@@ -214,6 +253,11 @@ class CollectorManager:
             return self._weather_desired
         return cfg["weather"].get("autostart", True)
 
+    def rainfall_wanted(self, cfg):
+        if self._rainfall_desired is not None:
+            return self._rainfall_desired
+        return cfg["rainfall"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -238,6 +282,12 @@ class CollectorManager:
                 log.info("Autostart weather: %s", msg)
             except Exception:
                 log.exception("Autostart weather failed")
+        if cfg["rainfall"].get("autostart", True):
+            try:
+                ok, msg = self.start_rainfall()
+                log.info("Autostart rainfall: %s", msg)
+            except Exception:
+                log.exception("Autostart rainfall failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -267,6 +317,10 @@ class CollectorManager:
             "weather": {
                 "running": self._weather is not None and self._weather.is_alive(),
                 **(self._weather.status if self._weather else {}),
+            },
+            "rainfall": {
+                "running": self._rainfall is not None and self._rainfall.is_alive(),
+                **(self._rainfall.status if self._rainfall else {}),
             },
         }
 

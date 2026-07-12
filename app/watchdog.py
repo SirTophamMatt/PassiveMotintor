@@ -41,7 +41,8 @@ class Supervisor(threading.Thread):
     def __init__(self):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
-        self._restarts = {"flood": [], "power": [], "fire": [], "weather": []}
+        self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
+                          "rainfall": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -50,11 +51,11 @@ class Supervisor(threading.Thread):
         self._warnings = {}                # warning_id -> (priority, label)
         self._first_weather_check = True
         self._last_errors = {"flood": None, "power": None, "fire": None,
-                             "weather": None}
+                             "weather": None, "rainfall": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
-                      "last_action": None}
+                      "rainfall_restarts": 0, "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -141,9 +142,16 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_weather()
                 self._record_restart("weather", reason, msg)
 
+        if manager.rainfall_wanted(cfg):
+            reason = self._stall_reason(status["rainfall"],
+                                        max(1, cfg["rainfall"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("rainfall"):
+                ok, msg = manager.restart_rainfall()
+                self._record_restart("rainfall", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
-        for which in ("flood", "power", "fire", "weather"):
+        for which in ("flood", "power", "fire", "weather", "rainfall"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")

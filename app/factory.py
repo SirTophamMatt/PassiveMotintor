@@ -145,6 +145,7 @@ def _register_health(app):
             "power_running": status["power"]["running"],
             "fire_running": status["fire"]["running"],
             "weather_running": status["weather"]["running"],
+            "rainfall_running": status["rainfall"]["running"],
             "flood_last_heartbeat": last_hb,
             "fire_last_heartbeat": fire_last_hb,
             "weather_last_heartbeat": weather_last_hb,

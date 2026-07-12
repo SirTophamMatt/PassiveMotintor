@@ -213,9 +213,32 @@ and **Active Fire Incidents & Warnings** (tables, so they render even where kale
   station history graph — only when there's actual rain in the window (dry periods stay clean).
 - Not done: rainfall on the station **PDF** (vector `_trend_drawing`), per-catchment rollups.
 
+## AWS rainfall network (Phase 2b+, built 2026-07-12)
+- **Source:** all ~101 VIC Automatic Weather Stations in **one request** to BoM's state obs page
+  (`vic/observations/vicall.shtml`). `app/modules/weather/aws.py`. Cells selected by `headers`-id
+  suffix (`-rainsince9am`, `-datetime`) so it's reorder-proof; WMO id from each station's link.
+  Coords aren't on the page — back-filled a few/cycle from per-station JSON into `aws_stations`.
+- **Storage:** every reading in `rainfall_aws`, **de-duped on (wmo, obs_time)** — so polling more
+  often than BoM updates (~30 min) never adds rows. Volume ≈ 4,850 rows/day, ~1.77M/yr (~250 MB/yr,
+  cadence-independent). Retention: keep everything.
+- **9am reset → event totals:** the raw rain-since-9am counter is stored; totals for any window are
+  `data.aws_event_total` = sum of **positive increments** (a drop = the 9am reset, post-reset value
+  is fresh rain). Reset-proof across any number of 9am boundaries. `_window_total` unit-verified.
+- **Dedicated `rainfall` collector** (15-min, `rainfall.autostart`; own start/stop/restart in
+  `collector.py`, watchdog supervision, `/health` `rainfall_running`) + an Admin **"Fetch now"**
+  button (`manager.fetch_rainfall_now`).
+- **Weather page** "AWS Rainfall Network" section: map coloured by rain-since-9am + table.
+- **Tagged like flood/power:** `rainfall_aws.timestamp` slices by `event_tags`; export
+  (`app/export.py`, Admin Rainfall checkbox) adds **Rainfall Event Totals** (reset-proof) + **AWS
+  Rainfall Readings** sheets.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·
 event timeline/compare · BoM forecast overlay · data retention/archive · deploy pipeline
 (GitHub Action + Watchtower) · in-browser file upload on Import page · auto-tagging of events ·
-viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus.
+viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus ·
+**per-catchment rainfall rollup** (aggregate rainfall_observations by weather_locations.catchment
+for a "rain by catchment" summary + a per-catchment total on gauge pages) · rainfall on the
+station briefing PDF · unified map · cross-layer correlation engine (outages inside flooded
+catchments, road cuts near rising gauges).

@@ -62,6 +62,12 @@ DEFAULTS = {
         # towns). Each polls 2 endpoints, so this bounds load on BoM.
         "max_rainfall_locations": 40,
     },
+    "rainfall": {
+        # BoM AWS rainfall network (~101 VIC stations) via the state obs page,
+        # one request per cycle. Dedup on BoM's obs time bounds storage.
+        "interval_minutes": 15,
+        "autostart": True,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,

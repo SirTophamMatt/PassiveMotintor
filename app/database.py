@@ -149,6 +149,30 @@ CREATE TABLE IF NOT EXISTS rainfall_observations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rainfall_unique
     ON rainfall_observations (location_key, timestamp);
 
+-- BoM AWS station registry (wmo -> name + coords), seeded from per-station JSON.
+CREATE TABLE IF NOT EXISTS aws_stations (
+    wmo TEXT PRIMARY KEY,
+    name TEXT,
+    latitude REAL,
+    longitude REAL
+);
+
+-- Every AWS rain-since-9am reading, kept for after-the-fact interrogation and
+-- tagging (like flood/power). De-duped on the BoM observation time so polling
+-- more often than BoM updates adds nothing. Event totals are derived from the
+-- positive increments (a drop = the 9am reset), so totals survive resets.
+CREATE TABLE IF NOT EXISTS rainfall_aws (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wmo TEXT NOT NULL,
+    name TEXT,
+    rain_since_9am_mm REAL,
+    obs_time TEXT NOT NULL,
+    timestamp TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rainfall_aws_unique
+    ON rainfall_aws (wmo, obs_time);
+CREATE INDEX IF NOT EXISTS idx_rainfall_aws_time ON rainfall_aws (timestamp);
+
 -- One row per weather collection cycle: KPI counts + continuity heartbeat.
 CREATE TABLE IF NOT EXISTS weather_heartbeat (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
