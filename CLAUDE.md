@@ -139,17 +139,22 @@ If a session drops, the scraper re-logs-in on the next cycle.
   (`active_incidents`/`latest_counts` filter `feed_type != 'burn-area'`); surfaced only via
   `data.burn_areas()` and the Fire page **"Show burn areas (historical)"** toggle (default off).
 
-## Fire module — remaining refinements (ops feedback 2026-07-12)
-1. **Separate warning types from incident types.** Advice, Community Information,
-   Watch and Act, Emergency, Evacuation are *warning* levels (`feedType == "warning"`,
-   level in `category1`) and should be grouped/filtered apart from *incident* categories
-   (Fire, Hazmat, Tree Down, ...). Reflect this split in the map legend, filters and KPIs.
-2. **Per-kind map layer toggles** — extend the single burn-areas toggle to a checkbox per kind
-   (each warning level, fire, other incident) to show/hide that layer.
-3. **VicEmergency iconography** — prefer the **Australian Warning System (AWS)** standard
-   symbols (published by AFAC / state emergency services, intended for public reuse) mapped to
-   Advice/Watch&Act/Emergency, rather than lifting VicEmergency's own branded sprite assets
-   (copyright). Use as marker symbols on the map + legend.
+## Fire module — polish pass (built 2026-07-12)
+- **Warning-polygon render fix.** VicEmergency wraps a warning's area in a `GeometryCollection`
+  (Point + Polygon); Mapbox GL can't fill a GeometryCollection, so `fire.py:_polygons` flattens
+  each geometry to its Polygon/MultiPolygon parts before building the fill layer. Warning areas
+  now render.
+- **Warning vs incident separation.** `_kind` resolves every `feed_type == "warning"` row to one
+  of the three AWS levels (via `_WARNING_ALIASES`: Evacuation→Emergency, Community
+  Information→Advice); incidents are Fire or Other. Map `category_orders` + KPIs keep warnings
+  and incidents grouped apart.
+- **Per-kind map layer toggles.** The Filters panel's "Map layers" checklist toggles each kind
+  (Emergency / Watch & Act / Advice / Fire / Other incidents) plus historical burn areas on the
+  map; the table always lists the full category-filtered set. Default = all but burn areas.
+- **AWS-styled legend.** `_aws_legend()` renders a licence-clean key using AWS colours + the
+  warning-triangle motif (Plotly's own legend is hidden). NOTE: true VicEmergency sprite icons
+  on the map markers need a **Mapbox access token** (open-street-map tiles only support circle
+  markers) — deferred; the AWS colour/shape key is the token-free stand-in.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
