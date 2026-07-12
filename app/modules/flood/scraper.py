@@ -49,6 +49,17 @@ OBS_COLUMNS = [
 # of its minor flood level (i.e. flooding or approaching).
 NEAR_FLOOD_FRACTION = 0.9
 
+# --- Outlier guard --------------------------------------------------------
+# BoM occasionally publishes a garbage reading (e.g. a 2 m river gauge briefly
+# reporting ~1000 m), which auto-scales a station's graph into uselessness. We
+# drop a reading that jumps more than MAX_HEIGHT_JUMP_M from the station's last
+# known good height. The check is RELATIVE, so datum-referenced reservoir gauges
+# (which sit steadily at hundreds of m) are never touched — only sudden spikes.
+# MAX_PLAUSIBLE_HEIGHT_M is an absolute backstop for a station with no prior
+# history: no Victorian gauge, staff or datum-referenced, reads above it.
+MAX_HEIGHT_JUMP_M = 50.0
+MAX_PLAUSIBLE_HEIGHT_M = 900.0
+
 _WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
 # (event, station) pairs already backfilled this process — avoids re-fetching
@@ -215,6 +226,45 @@ def _near_flood_targets(rows):
     return targets
 
 
+def _last_known_heights():
+    """Map station_name -> its most recent plausible stored height, used as the
+    baseline for the spike guard. Implausible stored values are excluded so a
+    bad row that slipped in earlier can't poison the baseline."""
+    df = database.read_df(
+        "SELECT station_name, height_m FROM flood_observations "
+        "WHERE id IN (SELECT MAX(id) FROM flood_observations "
+        "  WHERE height_m IS NOT NULL AND height_m <= ? "
+        "  GROUP BY station_name)",
+        [MAX_PLAUSIBLE_HEIGHT_M])
+    return {r["station_name"]: r["height_m"] for _, r in df.iterrows()}
+
+
+def _reject_spikes(rows):
+    """Drop readings that are implausible outliers relative to a station's last
+    known height (or above an absolute ceiling when there's no history).
+    Returns the kept rows; rejected ones are logged."""
+    baseline = _last_known_heights()
+    kept = []
+    for r in rows:
+        h = r.get("height_m")
+        if h is None:
+            kept.append(r)
+            continue
+        last = baseline.get(r.get("station_name"))
+        if h > MAX_PLAUSIBLE_HEIGHT_M and last is None:
+            log.warning("Rejected implausible height %.2f m for %s (no history, "
+                        "> %.0f m ceiling)", h, r.get("station_name"),
+                        MAX_PLAUSIBLE_HEIGHT_M)
+            continue
+        if last is not None and abs(h - last) > MAX_HEIGHT_JUMP_M:
+            log.warning("Rejected spike height %.2f m for %s (jumped %.1f m from "
+                        "last %.2f m)", h, r.get("station_name"),
+                        abs(h - last), last)
+            continue
+        kept.append(r)
+    return kept
+
+
 def fetch_flood_data(event_name="live"):
     """Scrape all BoM pages, store new readings, write a heartbeat, and
     backfill history for near-flood stations. Returns rows added.
@@ -230,6 +280,10 @@ def fetch_flood_data(event_name="live"):
 
     for r in rows:
         r["event"] = event_name
+
+    # Drop garbage spikes before anything downstream (storage, near-flood
+    # backfill, graphs) ever sees them.
+    rows = _reject_spikes(rows)
 
     obs_rows = [{c: r.get(c) for c in OBS_COLUMNS} for r in rows]
     inserted = database.insert_rows("flood_observations", obs_rows, ignore_duplicates=True)
