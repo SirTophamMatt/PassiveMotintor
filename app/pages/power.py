@@ -69,11 +69,16 @@ def _trend_figure(df, title, dark):
     fig.for_each_trace(lambda t: t.update(name=SERIES_LABELS.get(t.name, t.name)))
     if not df.empty and df["customers_off"].notna().any():
         peak_idx = df["customers_off"].idxmax()
+        peak_val = df.at[peak_idx, "customers_off"]
+        peak_time = df.at[peak_idx, "timestamp"]
+        label = f"Peak {peak_val:,.0f}"
+        if pd.notna(peak_time):
+            # 24-hour "hrs" style; date included so the Past Week peak is clear.
+            label += f" at {peak_time:%H%Mhrs, %d %b}"
         fig.add_scatter(
-            x=[df.at[peak_idx, "timestamp"]], y=[df.at[peak_idx, "customers_off"]],
+            x=[peak_time], y=[peak_val],
             mode="markers+text", marker=dict(size=11, symbol="diamond", color="orange"),
-            text=[f"Peak {df.at[peak_idx, 'customers_off']:,.0f}"],
-            textposition="top center", name="Peak")
+            text=[label], textposition="top center", name="Peak")
     fig.update_layout(height=320, legend=dict(orientation="h", y=1.12))
     return ui.apply_theme(fig, dark)
 
