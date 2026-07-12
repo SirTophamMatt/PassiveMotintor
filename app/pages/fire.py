@@ -20,13 +20,17 @@ MELB_CENTER = {"lat": -37.0, "lon": 145.0}
 # The three Australian Warning System (AWS) levels + the two incident kinds.
 # Colours follow the AWS palette (red / orange / yellow).
 WARNING_KINDS = ["Emergency Warning", "Watch and Act", "Advice"]
-INCIDENT_KINDS = ["Fire", "Other incident"]
+# "Met (weather)" = VicEmergency meteorological items — weather-related, tied to
+# BoM warnings rather than fire incidents, so kept as their own toggleable kind.
+INCIDENT_KINDS = ["Fire", "Other incident", "Met (weather)"]
+MET_KIND = "Met (weather)"
 KIND_COLOURS = {
     "Emergency Warning": "#d62728",
     "Watch and Act": "#ff7f0e",
     "Advice": "#e6c700",
     "Fire": "#ff5722",
     "Other incident": "#5b8def",
+    MET_KIND: "#0ca678",
 }
 BURN_COLOUR = "#8d6e63"  # historical burn-area footprints
 
@@ -45,13 +49,14 @@ LAYER_OPTIONS = (
     [{"label": f" {k}", "value": k} for k in WARNING_KINDS]
     + [{"label": " Fire", "value": "Fire"},
        {"label": " Other incidents", "value": "Other incident"},
+       {"label": " Met / weather", "value": MET_KIND},
        {"label": " Burn areas (historical)", "value": "burn"}])
 DEFAULT_LAYERS = WARNING_KINDS + INCIDENT_KINDS  # everything but burn areas
 
-TABLE_COLUMNS = [
+# The incidents table (warnings are shown separately as an iconed list).
+INCIDENT_COLUMNS = [
     ("category1", "Category"), ("location", "Location"), ("status", "Status"),
-    ("warning_level", "Warning"), ("severity", "Severity"), ("size", "Size"),
-    ("updated", "Updated"),
+    ("size", "Size"), ("updated", "Updated"),
 ]
 
 
@@ -62,9 +67,40 @@ def _kind(row):
     if row.get("feed_type") == "warning":
         lvl = str(row.get("warning_level") or "").strip().lower()
         return _WARNING_ALIASES.get(lvl, "Advice")
-    if str(row.get("category1") or "").strip().lower() == "fire":
+    cat1 = str(row.get("category1") or "").strip().lower()
+    cat2 = str(row.get("category2") or "").strip().lower()
+    if cat1 == "fire":
         return "Fire"
+    if cat1 == "met" or cat2 == "met":
+        return MET_KIND  # meteorological — weather, not a fire incident
     return "Other incident"
+
+
+def _warnings_list(wdf):
+    """Render active community warnings as iconed rows (AWS triangle in the
+    level colour), grouped apart from the incidents table."""
+    if wdf is None or wdf.empty:
+        return html.Div("No active community warnings.", className="muted")
+    rows = []
+    for _, r in wdf.iterrows():
+        kind = _kind(r)
+        colour = KIND_COLOURS.get(kind, "#e6c700")
+        updated = (r["updated"].strftime("%d %b %H%Mhrs")
+                   if pd.notna(r["updated"]) else "")
+        extra = f"  ·  {r['event']}" if r.get("event") else ""
+        rows.append(html.Div([
+            html.Span("▲", style={"color": colour, "fontSize": "18px",
+                                  "marginRight": "10px"}),
+            html.Span(kind, style={"fontWeight": "bold", "color": colour,
+                                   "marginRight": "8px"}),
+            html.Span(str(r["location"] or "—")),
+            html.Span(extra, className="muted"),
+            html.Span(updated, className="muted",
+                      style={"float": "right", "fontSize": "12px"}),
+        ], className="graph-card",
+            style={"borderLeft": f"4px solid {colour}", "padding": "8px 12px",
+                   "marginBottom": "6px"}))
+    return rows
 
 
 def _aws_legend():
@@ -86,6 +122,7 @@ def _aws_legend():
         html.Strong("Incidents: ", style={"margin": "0 6px 0 12px"}),
         item("●", KIND_COLOURS["Fire"], "Fire"),
         item("●", KIND_COLOURS["Other incident"], "Other"),
+        item("●", KIND_COLOURS[MET_KIND], "Met / weather"),
         item("■", BURN_COLOUR, "Burn area (historical)"),
     ], className="muted", style={"margin": "8px 0", "fontSize": "12px",
                                  "display": "flex", "flexWrap": "wrap",
@@ -129,6 +166,9 @@ def layout():
             dcc.Graph(id="fire-map", style={"height": "620px"}),
             _aws_legend(),
         ], className="graph-card"),
+        html.H3("Community Warnings"),
+        html.Div(id="fire-warnings-list"),
+        html.H3("Incidents", style={"marginTop": "16px"}),
         dash_table.DataTable(
             id="fire-table",
             page_size=15,
@@ -256,6 +296,7 @@ def register_callbacks(app):
         Output("fire-summary", "children"),
         Output("fire-kpis", "children"),
         Output("fire-map", "figure"),
+        Output("fire-warnings-list", "children"),
         Output("fire-table", "data"),
         Output("fire-table", "columns"),
         Output("fire-table", "style_table"),
@@ -287,13 +328,12 @@ def register_callbacks(app):
             ui.kpi_card("Total Active", str(counts["total"])),
         ]
 
-        df = fire_data.active_incidents(category=category)
-        # The map shows only the kinds ticked in "Map layers"; the table below
-        # always lists the full (category-filtered) set.
+        df = fire_data.active_incidents()
         if not df.empty:
-            kinds = df.copy()
-            kinds["Kind"] = kinds.apply(_kind, axis=1)
-            map_df = kinds[kinds["Kind"].isin(layers)]
+            df = df.copy()
+            df["Kind"] = df.apply(_kind, axis=1)
+            # Map shows only the kinds ticked in "Map layers".
+            map_df = df[df["Kind"].isin(layers)]
         else:
             map_df = df
         burn_df = fire_data.burn_areas() if "burn" in layers else None
@@ -306,12 +346,29 @@ def register_callbacks(app):
             summary += f"Monitor ran {cycles} cycle(s), last {last_hb}."
 
         if df.empty:
-            return (summary, kpis, map_fig, [], [], *style_out, trend_fig)
+            return (summary, kpis, map_fig, _warnings_list(df), [], [],
+                    *style_out, trend_fig)
 
-        table_df = df[[c for c, _ in TABLE_COLUMNS]].copy()
-        table_df["updated"] = table_df["updated"].dt.strftime("%d %b %H:%M")
-        columns = [{"name": name, "id": col} for col, name in TABLE_COLUMNS]
-        return (summary, kpis, map_fig, table_df.to_dict("records"), columns,
+        # Warnings -> iconed list; Met/weather items are kept out of the
+        # incidents table (map-only, toggleable); the rest are real incidents.
+        warnings_df = df[df["feed_type"] == "warning"]
+        incidents_df = df[(df["feed_type"] != "warning") & (df["Kind"] != MET_KIND)]
+        met_count = int((df["Kind"] == MET_KIND).sum())
+        if category:
+            incidents_df = incidents_df[incidents_df["category1"] == category]
+        if met_count:
+            summary += (f" {met_count} weather/Met item(s) on the map only "
+                        "(toggle under Map layers).")
+
+        warnings_list = _warnings_list(warnings_df)
+        columns = [{"name": name, "id": col} for col, name in INCIDENT_COLUMNS]
+        if incidents_df.empty:
+            table_data = []
+        else:
+            table_df = incidents_df[[c for c, _ in INCIDENT_COLUMNS]].copy()
+            table_df["updated"] = table_df["updated"].dt.strftime("%d %b %H%Mhrs")
+            table_data = table_df.to_dict("records")
+        return (summary, kpis, map_fig, warnings_list, table_data, columns,
                 *style_out, trend_fig)
 
     @app.callback(

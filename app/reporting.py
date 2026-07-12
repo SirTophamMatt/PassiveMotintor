@@ -146,8 +146,12 @@ def build_overview_pdf():
     # --- BoM warnings ---------------------------------------------------------
     def _simple_table(header, rows, widths):
         cell = styles["Normal"]
+
+        def mk(c):  # allow a cell to be a pre-built Paragraph (e.g. coloured)
+            return c if hasattr(c, "wrapOn") else Paragraph(str(c), cell)
+
         data = [[Paragraph(f"<b>{h}</b>", cell) for h in header]]
-        data += [[Paragraph(str(c), cell) for c in r] for r in rows]
+        data += [[mk(c) for c in r] for r in rows]
         t = Table(data, colWidths=widths, repeatRows=1)
         t.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
@@ -172,17 +176,43 @@ def build_overview_pdf():
         story.append(_simple_table(["Type", "Warning", "Issued"],
                                    rows, [38 * mm, 112 * mm, 30 * mm]))
 
-    # --- Fire incidents & warnings -------------------------------------------
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph("Active Fire Incidents & Warnings", styles["Heading2"]))
+    # --- Fire warnings (separate from incidents) ------------------------------
     fdf = fire_data.active_incidents()
-    if fdf.empty:
+    wdf = fdf[fdf["feed_type"] == "warning"] if not fdf.empty else fdf
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph("Active Fire Warnings", styles["Heading2"]))
+    if wdf is None or wdf.empty:
+        story.append(Paragraph("No active community warnings.", styles["Italic"]))
+    else:
+        wrows = []
+        for _, r in wdf.iterrows():
+            lvl = r["warning_level"] or "Advice"
+            colour = fire_data.classify(lvl)[1]
+            wrows.append([
+                Paragraph(f'<font color="{colour}"><b>{lvl}</b></font>',
+                          styles["Normal"]),
+                r["location"] or "—", r["event"] or "—"])
+        story.append(_simple_table(["Level", "Location", "Event"],
+                                   wrows, [34 * mm, 76 * mm, 70 * mm]))
+
+    # --- Fire incidents (real incidents; weather/Met excluded) ----------------
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph("Active Fire Incidents", styles["Heading2"]))
+
+    def _is_met(r):
+        return (str(r.get("category1") or "").strip().lower() == "met"
+                or str(r.get("category2") or "").strip().lower() == "met")
+
+    idf = fdf[fdf["feed_type"] != "warning"].copy() if not fdf.empty else fdf
+    if not idf.empty:
+        idf = idf[~idf.apply(_is_met, axis=1)]
+    if idf is None or idf.empty:
         story.append(Paragraph("No active incidents.", styles["Italic"]))
     else:
-        fdf = fdf.assign(_fire=(fdf["category1"].fillna("").str.lower() != "fire"))
-        fdf = fdf.sort_values(["_fire", "category1"]).head(20)
-        rows = [[r["category1"] or "—", r["location"] or "—",
-                 r["status"] or "—"] for _, r in fdf.iterrows()]
+        idf = idf.assign(_fire=(idf["category1"].fillna("").str.lower() != "fire"))
+        idf = idf.sort_values(["_fire", "category1"]).head(20)
+        rows = [[r["category1"] or "—", r["location"] or "—", r["status"] or "—"]
+                for _, r in idf.iterrows()]
         story.append(_simple_table(["Category", "Location", "Status"],
                                    rows, [42 * mm, 100 * mm, 38 * mm]))
 
@@ -250,6 +280,10 @@ def build_fire_pdf():
     df = fire_data.active_incidents()
     warnings = df[df["feed_type"] == "warning"].copy() if not df.empty else df
     incidents = df[df["feed_type"] != "warning"].copy() if not df.empty else df
+    if not incidents.empty:  # weather/Met items belong with warnings, not here
+        met = (incidents["category1"].fillna("").str.lower().eq("met")
+               | incidents["category2"].fillna("").str.lower().eq("met"))
+        incidents = incidents[~met]
 
     def _table(rows, widths):
         t = Table(rows, colWidths=widths, repeatRows=1)
