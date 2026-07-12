@@ -61,6 +61,7 @@ def _panel():
     cfg = load_config()
     flood_auto = cfg["flood"].get("autostart", True)
     power_auto = cfg["power"].get("autostart", False)
+    fire_auto = cfg["fire"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -80,6 +81,20 @@ def _panel():
                     options=[{"label": " Auto-start on server boot", "value": "on"}],
                     value=["on"] if flood_auto else [], style={"marginTop": "8px"}),
                 html.Div(id="admin-flood-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Fire collection"),
+                html.Button("Start", id="admin-fire-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-fire-stop", className="btn"),
+                dcc.Checklist(
+                    id="admin-fire-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if fire_auto else [], style={"marginTop": "8px"}),
+                html.Div("VicEmergency incident/warning feed — public, no "
+                         "credentials.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-fire-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -269,6 +284,26 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-fire-status", "children"),
+        Input("admin-fire-start", "n_clicks"),
+        Input("admin-fire-stop", "n_clicks"),
+        State("admin-fire-autostart", "value"),
+        prevent_initial_call=True)
+    def fire_control(_s, _t, autostart):
+        if not _s and not _t:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        cfg = load_config()
+        cfg["fire"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-fire-start":
+            _, msg = manager.start_fire()
+        else:
+            _, msg = manager.stop_fire()
+        return msg
+
+    @app.callback(
         Output("admin-power-status", "children"),
         Input("admin-power-start", "n_clicks"),
         Input("admin-power-stop", "n_clicks"),
@@ -314,14 +349,14 @@ def register_callbacks(app):
         if wd.get("last_check"):
             watchdog_bits.append(html.Span(
                 f" — checked {wd['last_check']} ({wd['checks']} passes, "
-                f"{wd['flood_restarts']} flood / {wd['power_restarts']} power "
-                "restarts)"))
+                f"{wd['flood_restarts']} flood / {wd.get('fire_restarts', 0)} fire "
+                f"/ {wd['power_restarts']} power restarts)"))
         if wd.get("last_action"):
             watchdog_bits.append(html.Div(f"Last action: {wd['last_action']}",
                                           className="muted"))
         return html.Div([html.H4("Collector status"),
-                         line("Flood", s["flood"]), line("Power", s["power"]),
-                         html.Div(watchdog_bits)])
+                         line("Flood", s["flood"]), line("Fire", s["fire"]),
+                         line("Power", s["power"]), html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #
     @app.callback(
