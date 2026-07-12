@@ -24,8 +24,10 @@ def classify(warning_level=None, category1=None):
 
 
 def active_incidents(category=None, warnings_only=False):
-    """Currently-active incidents/warnings, most recently updated first."""
-    query = "SELECT * FROM fire_incidents WHERE resolved = 0"
+    """Currently-active incidents/warnings, most recently updated first.
+    Excludes historical burn areas (see burn_areas())."""
+    query = ("SELECT * FROM fire_incidents "
+             "WHERE resolved = 0 AND feed_type != 'burn-area'")
     params = []
     if warnings_only:
         query += " AND feed_type = 'warning'"
@@ -43,14 +45,25 @@ def categories():
     """Distinct category1 values among active rows (for the page filter)."""
     df = database.read_df(
         "SELECT DISTINCT category1 FROM fire_incidents "
-        "WHERE resolved = 0 AND category1 IS NOT NULL ORDER BY category1")
+        "WHERE resolved = 0 AND feed_type != 'burn-area' "
+        "AND category1 IS NOT NULL ORDER BY category1")
     return df["category1"].tolist()
+
+
+def burn_areas():
+    """Historical DELWP burn-area footprints (with polygon geometry) for the
+    map's toggleable 'burn scars' layer."""
+    return database.read_df(
+        "SELECT source_id, location, geometry, created, updated "
+        "FROM fire_incidents WHERE feed_type = 'burn-area' AND resolved = 0 "
+        "AND geometry IS NOT NULL")
 
 
 def latest_counts():
     """Headline counts of active events for KPI cards."""
     df = database.read_df(
-        "SELECT category1, warning_level FROM fire_incidents WHERE resolved = 0")
+        "SELECT category1, warning_level FROM fire_incidents "
+        "WHERE resolved = 0 AND feed_type != 'burn-area'")
     if df.empty:
         return {"total": 0, "active_fires": 0, "emergency": 0,
                 "watch_act": 0, "advice": 0}

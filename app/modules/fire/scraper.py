@@ -36,7 +36,7 @@ _LEVELS = ("emergency warning", "watch and act", "advice")
 _FIELDS = [
     "feed_type", "category1", "category2", "event", "warning_level", "severity",
     "status", "size", "resources", "location", "source_org", "action",
-    "headline", "url", "latitude", "longitude", "created", "updated",
+    "headline", "url", "latitude", "longitude", "geometry", "created", "updated",
 ]
 
 
@@ -128,7 +128,8 @@ def _extract(feature):
     cap = p.get("cap") or {}
     feed_type = p.get("feedType")
     category1 = _flat(p.get("category1"))
-    lat, lon = _centroid(feature.get("geometry"))
+    geom = feature.get("geometry")
+    lat, lon = _centroid(geom)
     return {
         "source_id": str(p.get("id")) if p.get("id") is not None else None,
         "feed_type": feed_type,
@@ -149,6 +150,10 @@ def _extract(feature):
         "url": _flat(p.get("url")),
         "latitude": lat,
         "longitude": lon,
+        # Store the raw geometry only when it's an area worth drawing (points
+        # are already covered by the centroid marker), to keep rows lean.
+        "geometry": (json.dumps(geom) if geom
+                     and geom.get("type") != "Point" else None),
         "created": _parse_dt(p.get("created")),
         "updated": _parse_dt(p.get("updated")),
     }
@@ -196,11 +201,10 @@ def fetch_fire_data():
 
     rows = []
     for feature in features:
-        props = feature.get("properties", {}) or {}
-        if props.get("feedType") == "burn-area":
-            continue  # static planned-burn boundaries, not live events
         row = _extract(feature)
         if row["source_id"]:
+            # Burn areas (historical DELWP burn footprints) are kept for the
+            # map's toggleable "burn scars" layer but excluded from live counts.
             rows.append(row)
 
     inserted = updated = 0
@@ -220,7 +224,8 @@ def fetch_fire_data():
             f"WHERE resolved=0 AND source_id NOT IN ({placeholders})",
             [now] + seen)
 
-    active = [r for r in rows if not _is_resolved(r["status"])]
+    active = [r for r in rows if r["feed_type"] != "burn-area"
+              and not _is_resolved(r["status"])]
     levels = _count_levels(active)
     database.insert_rows("fire_timeseries", [{
         "timestamp": now,
@@ -231,6 +236,6 @@ def fetch_fire_data():
         "watch_act": levels["watch and act"],
         "advice": levels["advice"],
     }])
-    log.info("Fire fetch: %d live features (%d new, %d updated), %d active",
+    log.info("Fire fetch: %d features (%d new, %d updated), %d active events",
              len(rows), inserted, updated, len(active))
     return inserted
