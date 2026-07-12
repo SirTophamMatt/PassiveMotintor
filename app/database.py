@@ -101,11 +101,27 @@ CREATE TABLE IF NOT EXISTS weather_warnings (
     state TEXT,
     issue_time TEXT,
     expiry_time TEXT,
+    message TEXT,                 -- latest full warning body (HTML; may embed images)
     first_seen TEXT,
     last_seen TEXT,
     active INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_weather_warn_active ON weather_warnings (active, type);
+
+-- One row per issued version of a warning (BoM reissues keep the same id but
+-- bump issue_time), so a warning's development can be replayed. De-duped on
+-- (warning_id, issue_time).
+CREATE TABLE IF NOT EXISTS weather_warning_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    warning_id TEXT NOT NULL,
+    issue_time TEXT,
+    phase TEXT,
+    title TEXT,
+    message TEXT,
+    captured_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_weather_warn_updates
+    ON weather_warning_updates (warning_id, issue_time);
 
 -- Monitored rainfall locations, resolved to a BoM geohash (derived from flood
 -- gauge towns/catchments, cached here so we only geocode once).
@@ -142,6 +158,18 @@ CREATE TABLE IF NOT EXISTS weather_heartbeat (
     new_warnings INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_weather_hb_time ON weather_heartbeat (timestamp);
+
+-- Lightweight, privacy-preserving page analytics. visitor_hash is a daily
+-- salted hash of IP+User-Agent (no raw IP/PII stored); it lets us count unique
+-- visitors per day without identifying anyone.
+CREATE TABLE IF NOT EXISTS page_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    path TEXT,
+    visitor_hash TEXT,
+    is_admin INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_time ON page_views (timestamp);
 
 CREATE TABLE IF NOT EXISTS power_timeseries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -280,6 +308,7 @@ def init_db():
         # timestamp-based one in SCHEMA takes over. Safe to run repeatedly.
         conn.execute("DROP INDEX IF EXISTS idx_flood_obs_unique")
         _ensure_column(conn, "fire_incidents", "geometry", "TEXT")
+        _ensure_column(conn, "weather_warnings", "message", "TEXT")
         _migrate_events_to_tags(conn)
         conn.commit()
     finally:

@@ -13,10 +13,13 @@ import io
 import logging
 from datetime import datetime
 
+import pandas as pd
+
 from app.config import load_config
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
+from app.modules.weather import data as weather_data
 
 log = logging.getLogger(__name__)
 
@@ -81,12 +84,19 @@ def build_overview_pdf():
     else:
         alert = "Normal"
 
+    fire_counts = fire_data.latest_counts()
+    wcounts = weather_data.warning_counts()
     kpi_rows = [
         ["Customers Off", fmt(off), "Alert Level", alert],
         ["Power Dependant Off", fmt(totals.get("power_dependant_off")),
          "Stations Flooding", str(flooding)],
         ["Planned", fmt(totals.get("planned")),
          "Unplanned", fmt(totals.get("unplanned"))],
+        ["Active Fires", str(fire_counts["active_fires"]),
+         "Emergency / Watch & Act",
+         str(fire_counts["emergency"] + fire_counts["watch_act"])],
+        ["BoM Warnings (VIC)", str(wcounts["total"]),
+         "Flood Warnings", str(wcounts["flood"])],
     ]
     kpi_table = Table(kpi_rows, colWidths=[45 * mm, 40 * mm, 45 * mm, 40 * mm])
     kpi_table.setStyle(TableStyle([
@@ -132,6 +142,49 @@ def build_overview_pdf():
     else:
         story.append(Paragraph("No stations currently at or above flood level.",
                                styles["Italic"]))
+
+    # --- BoM warnings ---------------------------------------------------------
+    def _simple_table(header, rows, widths):
+        cell = styles["Normal"]
+        data = [[Paragraph(f"<b>{h}</b>", cell) for h in header]]
+        data += [[Paragraph(str(c), cell) for c in r] for r in rows]
+        t = Table(data, colWidths=widths, repeatRows=1)
+        t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph("Active BoM Warnings (VIC)", styles["Heading2"]))
+    wdf = weather_data.active_warnings()
+    if wdf.empty:
+        story.append(Paragraph("No active BoM warnings.", styles["Italic"]))
+    else:
+        rows = [[r["type_label"], r["title"],
+                 r["issue_time"].strftime("%d %b %H:%M")
+                 if pd.notna(r["issue_time"]) else "—"]
+                for _, r in wdf.head(15).iterrows()]
+        story.append(_simple_table(["Type", "Warning", "Issued"],
+                                   rows, [38 * mm, 112 * mm, 30 * mm]))
+
+    # --- Fire incidents & warnings -------------------------------------------
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph("Active Fire Incidents & Warnings", styles["Heading2"]))
+    fdf = fire_data.active_incidents()
+    if fdf.empty:
+        story.append(Paragraph("No active incidents.", styles["Italic"]))
+    else:
+        fdf = fdf.assign(_fire=(fdf["category1"].fillna("").str.lower() != "fire"))
+        fdf = fdf.sort_values(["_fire", "category1"]).head(20)
+        rows = [[r["category1"] or "—", r["location"] or "—",
+                 r["status"] or "—"] for _, r in fdf.iterrows()]
+        story.append(_simple_table(["Category", "Location", "Status"],
+                                   rows, [42 * mm, 100 * mm, 38 * mm]))
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4,

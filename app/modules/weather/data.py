@@ -65,6 +65,36 @@ def warning_counts():
     }
 
 
+def warning_detail(warning_id):
+    """Latest stored row for one warning (dict), or None."""
+    df = database.read_df(
+        "SELECT * FROM weather_warnings WHERE warning_id = ?", [warning_id])
+    if df.empty:
+        return None
+    return df.iloc[0].to_dict()
+
+
+def warning_history(warning_id):
+    """All recorded versions of a warning, newest issue first."""
+    df = database.read_df(
+        "SELECT issue_time, phase, title, message FROM weather_warning_updates "
+        "WHERE warning_id = ? ORDER BY issue_time DESC", [warning_id])
+    if not df.empty:
+        df["issue_time"] = pd.to_datetime(df["issue_time"], format="ISO8601",
+                                          errors="coerce")
+    return df
+
+
+def warning_version_message(warning_id, issue_time):
+    """The full message for one recorded version of a warning, or None."""
+    df = database.read_df(
+        "SELECT message FROM weather_warning_updates "
+        "WHERE warning_id = ? AND issue_time = ?", [warning_id, issue_time])
+    if df.empty:
+        return None
+    return df.iloc[0]["message"]
+
+
 def heartbeat_summary():
     """(cycle_count, last_timestamp) for the weather collector heartbeat."""
     df = database.read_df(

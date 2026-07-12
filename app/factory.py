@@ -12,8 +12,8 @@ DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
 from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
-from app.pages import (admin, fire, flood, importer_page, overview, power,
-                       settings, station, weather)
+from app.pages import (admin, analytics as analytics_page, fire, flood,
+                       importer_page, overview, power, settings, station, weather)
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ PUBLIC_PAGES = [
 ]
 ADMIN_PAGES = [
     ("/admin", "Admin", admin),
+    ("/analytics", "Analytics", analytics_page),
     ("/settings", "Settings", settings),
     ("/import", "Import Data", importer_page),
 ]
@@ -34,7 +35,7 @@ ALL_PAGES = PUBLIC_PAGES + ADMIN_PAGES
 
 # Pages that require an admin session to view. The Admin page is not listed
 # because it renders its own login form when unauthenticated.
-RESTRICTED = {"/settings", "/import"}
+RESTRICTED = {"/analytics", "/settings", "/import"}
 
 
 def _titlebar():
@@ -198,9 +199,14 @@ def create_app(autostart=False):
 
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def route(pathname):
+        from app import analytics
+        analytics.record_view(pathname, is_admin=auth.is_admin())
         # Dynamic station detail pages: /flood/station/<station_key>
         if pathname and pathname.startswith("/flood/station/"):
             return station.layout(station.key_from_path(pathname))
+        # Warning detail/history pages: /weather/warning/<id>
+        if pathname and pathname.startswith(weather.WARNING_PATH):
+            return weather.warning_detail_layout(weather.warning_id_from_path(pathname))
         for path, _, module in ALL_PAGES:
             if pathname == path:
                 if path in RESTRICTED and not auth.is_admin():

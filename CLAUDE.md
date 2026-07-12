@@ -170,9 +170,32 @@ If a session drops, the scraper re-logs-in on the next cycle.
   on BoM), watchdog supervision + `weather_alert` notifications (new/upgraded warnings, cleared),
   `/health` `weather_running`/`weather_last_heartbeat`/`weather_last_error`, Overview "BoM
   Warnings" KPI + collector line, Admin Start/Stop + autostart.
+- **BoM level hidden from UI:** `warning_group_type` (major/minor) is stored + used internally
+  (sort order, alert upgrade detection) but NOT displayed — it would be confused with the flood
+  gauge's Minor/Moderate/Major classification.
+- **Warning detail + history:** each cycle also fetches `/warnings/{id}` (full HTML `message`;
+  severe-weather bodies embed base64 images). Latest text is stored on `weather_warnings.message`;
+  every reissue (same id, new `issue_time`) is appended to `weather_warning_updates` (unique on
+  warning_id+issue_time) so development can be replayed. Detail page `/weather/warning/<id>`
+  (`weather.warning_detail_layout`, routed in factory) renders the message in a **sandboxed
+  iframe** (images show inline) with a **version selector**; the warnings table links to it.
 - **Schema ready for 2b:** `weather_locations` (town/catchment -> geohash cache) and
   `rainfall_observations` (rain_since_9am + forecast per location, de-duped) tables exist but are
   not yet populated.
+
+## Overview briefing PDF (updated 2026-07-12)
+`reporting.build_overview_pdf` now also includes fire + weather: KPI rows for Active Fires /
+Emergency & Watch&Act / BoM Warnings / Flood Warnings, and text tables of **Active BoM Warnings**
+and **Active Fire Incidents & Warnings** (tables, so they render even where kaleido can't).
+
+## Analytics (built 2026-07-12)
+- **Privacy-preserving, self-hosted, no third-party trackers.** `app/analytics.py` +
+  `page_views` table. Views are logged from the URL-change `route` callback (Dash is an SPA, so no
+  per-page GET) via `analytics.record_view`. A visitor is only a **daily salted hash of
+  IP+User-Agent** (`UM_SECRET_KEY` salt) — no raw IP/PII, rotates daily, so unique-visitor counts
+  work without identifying anyone. `/_dash*`, `/assets`, `/health` ignored.
+- **Admin page `/analytics`** (`app/pages/analytics.py`, in RESTRICTED): views/visitors KPIs
+  (24h/7d/30d), a daily views+visitors trend, and a top-pages bar (public views only).
 
 ## Weather module — rainfall (Phase 2b, NOT started)
 - Derive monitored locations from flood-gauge towns/catchments -> resolve to BoM geohash via

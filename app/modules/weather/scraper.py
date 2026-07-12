@@ -83,8 +83,30 @@ def _upsert_warning(row, now):
     return True
 
 
+def _store_detail(warning_id, now):
+    """Fetch a warning's full body and record it: update the latest message on
+    weather_warnings and append a version row (unique per issue_time) so the
+    warning's development can be replayed. The message HTML may embed base64
+    images (e.g. severe-weather graphics)."""
+    payload = _get(f"/warnings/{warning_id}")
+    if not payload or "data" not in payload:
+        return
+    d = payload["data"]
+    message = d.get("message")
+    issue = _parse_dt(d.get("issue_time"))
+    if message is not None:
+        database.execute("UPDATE weather_warnings SET message=? WHERE warning_id=?",
+                         [message, warning_id])
+    if issue:  # only version rows with a real issue time (dedup key)
+        database.insert_rows("weather_warning_updates", [{
+            "warning_id": warning_id, "issue_time": issue, "phase": d.get("phase"),
+            "title": d.get("title"), "message": message, "captured_at": now,
+        }], ignore_duplicates=True)
+
+
 def fetch_warnings(now):
-    """Fetch current VIC warnings, upsert them, retire the ones no longer live.
+    """Fetch current VIC warnings, upsert them, pull each one's full detail
+    (text + version history), and retire the ones no longer live.
     Returns (active_count, new_count)."""
     payload = _get("/warnings")
     if not payload or "data" not in payload:
@@ -95,6 +117,7 @@ def fetch_warnings(now):
     for row in rows:
         if _upsert_warning(row, now):
             new += 1
+        _store_detail(row["warning_id"], now)
     seen = [r["warning_id"] for r in rows]
     if seen:
         placeholders = ", ".join("?" for _ in seen)

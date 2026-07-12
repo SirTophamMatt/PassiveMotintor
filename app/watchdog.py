@@ -283,9 +283,10 @@ class Supervisor(threading.Thread):
         df = weather_data.active_warnings()
         current = {}
         for _, row in df.iterrows():
+            # group_type still drives priority (sort + upgrade detection) but is
+            # not shown, to avoid confusion with flood-gauge Minor/Moderate/Major.
             priority, _ = weather_data.classify(row.get("group_type"))
-            label = (f"{weather_data._pretty_type(row.get('type'))}"
-                     f" ({row.get('group_type') or 'warning'}): "
+            label = (f"{weather_data._pretty_type(row.get('type'))}: "
                      f"{row.get('title') or ''}")
             current[row["warning_id"]] = (priority, label[:160])
 

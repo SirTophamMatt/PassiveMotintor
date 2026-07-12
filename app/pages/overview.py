@@ -114,7 +114,7 @@ def register_callbacks(app):
         wcounts = weather_data.warning_counts()
         kpis.append(ui.kpi_card(
             "BoM Warnings", str(wcounts["total"]),
-            "#d62728" if wcounts["major"] else ("#ff7f0e" if wcounts["total"] else "#2ca02c")))
+            "#ff7f0e" if wcounts["total"] else "#2ca02c"))
 
         status = manager.status()
         flood_s, power_s = status["flood"], status["power"]
