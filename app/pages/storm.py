@@ -18,13 +18,13 @@ from app import ui
 from app.collector import manager
 from app.config import load_config
 from app.modules.storm import data as storm_data
-from app.modules.storm.scraper import STORM_FRAMES_DIR
+from app.modules.storm.scraper import STORM_FRAMES_DIR, radar_ids
 
 FRAME_ROUTE = "/storm-frames"
 _FRAME_NAME = re.compile(r"^annotated_[A-Za-z0-9]+_\d{12}\.png$")
 
 CELL_COLUMNS = [
-    ("cell_id", "Cell"), ("classification", "Class"),
+    ("cell_id", "Cell"), ("radar_id", "Radar"), ("classification", "Class"),
     ("intensity_score", "Score"), ("area_km2", "Area (km²)"),
     ("max_level", "Peak level"), ("speed_kmh", "Speed (km/h)"),
     ("bearing", "Moving"), ("frame_ts", "Last seen"),
@@ -36,18 +36,23 @@ ALERT_COLUMNS = [
 
 
 def layout():
-    cfg = load_config()
-    radar_id = cfg["storm"].get("radar_id", "IDR023")
+    radars = radar_ids(load_config())
     return html.Div([
         html.H2("Storm Tracker"),
         html.Div([
             html.Div([
                 html.H4("Collector"),
                 html.Div(id="storm-collector-status"),
-                html.Div(f"BoM radar {radar_id} — echo frames every ~5 min. "
-                         "Collection is managed on the Admin page.",
+                html.Div(f"BoM radar(s) {', '.join(radars)} — echo frames "
+                         "every ~5 min. Collection is managed on the Admin page.",
                          className="muted",
                          style={"marginTop": "8px", "fontSize": "12px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Radar loop"),
+                dcc.Dropdown(id="storm-radar-select", clearable=False,
+                             options=[{"label": r, "value": r} for r in radars],
+                             value=radars[0], className="dropdown"),
             ], className="panel"),
         ], className="panel-row"),
         dcc.Interval(id="storm-interval", interval=30_000, n_intervals=0),
@@ -97,8 +102,9 @@ def register_callbacks(app):
     @app.callback(
         Output("storm-collector-status", "children"),
         Output("storm-frames-store", "data"),
-        Input("storm-interval", "n_intervals"))
-    def collector_status(_):
+        Input("storm-interval", "n_intervals"),
+        Input("storm-radar-select", "value"))
+    def collector_status(_, radar_id):
         s = manager.status()["storm"]
         parts = [html.Strong("Status: "), ui.status_pill(s["running"])]
         if s.get("last_run"):
@@ -107,9 +113,9 @@ def register_callbacks(app):
         if s.get("last_error"):
             parts.append(html.Div(f"⚠ {s['last_error']}", className="error-text",
                                   style={"marginTop": "4px"}))
-        cfg = load_config()
-        radar_id = cfg["storm"].get("radar_id", "IDR023")
-        frames = [{"src": f"{FRAME_ROUTE}/{f['file']}", "label": f["label"]}
+        radar_id = radar_id or radar_ids()[0]
+        frames = [{"src": f"{FRAME_ROUTE}/{f['file']}",
+                   "label": f"{radar_id}  {f['label']}"}
                   for f in storm_data.annotated_frames(radar_id)]
         return html.Div(parts), frames
 

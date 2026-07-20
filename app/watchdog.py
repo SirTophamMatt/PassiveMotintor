@@ -355,7 +355,8 @@ class Supervisor(threading.Thread):
             if pd.notna(row.get("speed_kmh")) and pd.notna(row.get("bearing_deg")):
                 movement = (f", {bearing_to_cardinal(row.get('bearing_deg'))} "
                             f"{row['speed_kmh']:.0f} km/h")
-            label = (f"{cls.upper()} cell {row['cell_id']} "
+            label = (f"{cls.upper()} cell {row['cell_id']} on "
+                     f"{row.get('radar_id') or 'radar'} "
                      f"(score {row['intensity_score']:.0f}, "
                      f"~{row['area_km2']:.0f} km²{movement})")
             current[row["cell_id"]] = (priority, label)

@@ -144,7 +144,7 @@ def _prune_annotated(radar_id):
         log.warning("Annotated frame prune failed: %s", e)
 
 
-def _record_alerts(tracked, frame_ts_local):
+def _record_alerts(tracked, frame_ts_local, radar_id=None):
     """One storm_alerts row per state CHANGE only: a cell reaching moderate/
     strong for the first time, or escalating. A persisting strong cell adds
     nothing (the old project logged it every frame)."""
@@ -166,23 +166,28 @@ def _record_alerts(tracked, frame_ts_local):
             "cell_id": cell["cell_id"],
             "alert_type": "new_cell" if prev is None else "escalation",
             "classification": cell["classification"],
-            "message": (f"{cell['cell_id']} {cell['classification'].upper()} — "
-                        f"score {cell['intensity_score']:.0f}, "
+            "message": (f"{cell['cell_id']} {cell['classification'].upper()}"
+                        + (f" on {radar_id}" if radar_id else "")
+                        + f" — score {cell['intensity_score']:.0f}, "
                         f"~{cell['area_km2']:.0f} km²{movement}"),
         })
     database.insert_rows("storm_alerts", rows)
     return len(rows)
 
 
-def fetch_storm_data():
-    """One collection cycle. Returns the number of new frames processed."""
-    cfg = load_config()
-    radar_id = cfg["storm"].get("radar_id", "IDR023")
+def radar_ids(cfg=None):
+    """The configured radar list. Accepts the legacy single ``radar_id``
+    string so an old config.json keeps working."""
+    cfg = cfg or load_config()
+    ids = cfg["storm"].get("radar_ids") or cfg["storm"].get("radar_id") or "IDR023"
+    return [ids] if isinstance(ids, str) else list(ids)
+
+
+def _process_radar(radar_id, now_local):
+    """Fetch + process all new frames for one radar. Returns
+    (frames_processed, last frame's tracked cells)."""
     scale = km_per_px(radar_id)
     tracker = _trackers.setdefault(radar_id, CellTracker())
-    os.makedirs(STORM_FRAMES_DIR, exist_ok=True)
-
-    now_local = datetime.now().isoformat(sep=" ", timespec="seconds")
     frames = _new_frames(radar_id)
 
     last_tracked = []
@@ -212,7 +217,7 @@ def fetch_storm_data():
             "speed_kmh": c["speed_kmh"], "bearing_deg": c["bearing_deg"],
             "status": c["status"],
         } for c in tracked])
-        _record_alerts(tracked, frame_ts_local)
+        _record_alerts(tracked, frame_ts_local, radar_id)
 
         annotated = processing.draw_annotated(
             _overlay(_base_image(radar_id), bgr, alpha), tracked, scale)
@@ -222,24 +227,42 @@ def fetch_storm_data():
 
     if frames:
         _prune_annotated(radar_id)
+    log.info("Storm fetch (%s): %d new frame(s), %d active cell(s)",
+             radar_id, len(frames), len(last_tracked))
+    return len(frames), last_tracked
 
-    # Forget best-severity state for cells the tracker has dropped, so a
+
+def fetch_storm_data():
+    """One collection cycle over every configured radar. Returns the total
+    number of new frames processed."""
+    cfg = load_config()
+    os.makedirs(STORM_FRAMES_DIR, exist_ok=True)
+    now_local = datetime.now().isoformat(sep=" ", timespec="seconds")
+
+    total_frames = 0
+    cells = []
+    for radar_id in radar_ids(cfg):
+        n, last_tracked = _process_radar(radar_id, now_local)
+        total_frames += n
+        cells.extend(last_tracked)
+
+    # Forget best-severity state for cells every tracker has dropped, so a
     # storm that dies and later reforms nearby alerts again.
-    live = _trackers[radar_id].active_cell_ids()
+    live = set()
+    for tracker in _trackers.values():
+        live |= tracker.active_cell_ids()
     for cell_id in [c for c in _cell_severity if c not in live]:
         del _cell_severity[cell_id]
 
-    strong = sum(1 for c in last_tracked if c["classification"] == "strong")
-    moderate = sum(1 for c in last_tracked if c["classification"] == "moderate")
+    strong = sum(1 for c in cells if c["classification"] == "strong")
+    moderate = sum(1 for c in cells if c["classification"] == "moderate")
     database.insert_rows("storm_timeseries", [{
         "timestamp": now_local,
-        "frames_processed": len(frames),
-        "active_cells": len(last_tracked) if frames else None,
-        "strong_cells": strong if frames else None,
-        "moderate_cells": moderate if frames else None,
-        "max_intensity": (max((c["intensity_score"] for c in last_tracked),
-                              default=0.0) if frames else None),
+        "frames_processed": total_frames,
+        "active_cells": len(cells) if total_frames else None,
+        "strong_cells": strong if total_frames else None,
+        "moderate_cells": moderate if total_frames else None,
+        "max_intensity": (max((c["intensity_score"] for c in cells),
+                              default=0.0) if total_frames else None),
     }])
-    log.info("Storm fetch (%s): %d new frame(s), %d active cell(s)",
-             radar_id, len(frames), len(last_tracked))
-    return len(frames)
+    return total_frames

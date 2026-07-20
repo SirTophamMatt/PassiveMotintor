@@ -69,10 +69,12 @@ DEFAULTS = {
         "autostart": True,
     },
     "storm": {
-        # BoM radar storm-cell tracker. radar_id is a BoM product id whose
+        # BoM radar storm-cell tracker. Each entry is a BoM product id whose
         # last digit encodes zoom (…1=512 km, 2=256, 3=128, 4=64); frames are
         # published ~every 5 min, so 5-min polling catches each new frame.
-        "radar_id": "IDR023",
+        # Every listed radar is tracked each cycle (cells/frames are stored
+        # per radar). IDR023 = Melbourne 128 km, IDR313 = Albany WA 128 km.
+        "radar_ids": ["IDR023", "IDR313"],
         "interval_minutes": 5,
         "autostart": True,
     },

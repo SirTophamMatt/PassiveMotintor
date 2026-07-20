@@ -16,6 +16,7 @@ from app import tags as tag_store
 from app import ui
 from app.collector import manager
 from app.config import load_config, save_config
+from app.modules.storm.scraper import radar_ids as storm_radar_ids
 from app.watchdog import supervisor
 
 
@@ -138,8 +139,9 @@ def _panel():
                     id="admin-storm-autostart",
                     options=[{"label": " Auto-start on server boot", "value": "on"}],
                     value=["on"] if storm_auto else [], style={"marginTop": "8px"}),
-                html.Div(f"Radar {cfg['storm'].get('radar_id', 'IDR023')} echo "
-                         "frames, ~5 min cadence. Public, no credentials.",
+                html.Div("Radar(s) "
+                         + ", ".join(storm_radar_ids(cfg))
+                         + " echo frames, ~5 min cadence. Public, no credentials.",
                          className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-storm-status", className="muted",
