@@ -49,6 +49,12 @@ MIN_BLOB_AREA_PX = 90    # min real echo pixels for a cell (post-merge)
 # Echo fragments separated by up to ~2x this many pixels are amalgamated into
 # one cell (morphological close). 6 px = 6 km bridging at a 128 km radar.
 CLUSTER_GAP_PX = 6
+# Merge/split HYSTERESIS: a region tracked as ONE cell in the previous frame
+# stays one cell until its fragments separate beyond ~2x this gap. Without
+# this, echoes hovering around CLUSTER_GAP_PX flip between one-storm and
+# many-storms every frame, and each flip jumps the centroid and wrecks the
+# speed/bearing estimate.
+CLUSTER_SPLIT_GAP_PX = 14
 
 PREDICT_MINUTES = 30     # impact-area / prediction projection window
 MIN_MOTION_KMH = 5       # below this a cell is treated as stationary
@@ -111,11 +117,76 @@ def _fit_ellipse(contour):
     return (float(cx), float(cy)), (max(float(w), 6.0), max(float(h), 6.0)), float(ang)
 
 
-def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
-    """Find echo cells in one frame, merging fragments within CLUSTER_GAP_PX.
-    Each detection carries centroid (echo-weighted), REAL echo area (km²),
-    palette levels, score/classification, the merged contour and a fitted
-    ellipse (for the impact area)."""
+def _close(mask, gap_px):
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * gap_px + 1, 2 * gap_px + 1))
+    return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+
+def _measure(contour, detect_mask, masks, km_per_px):
+    """Detection dict for one chosen contour, or None if it holds too little
+    real echo. The centroid is REFLECTIVITY-WEIGHTED (heavier palette levels
+    pull harder), so it follows the storm core rather than the outline shape —
+    a merge/split at the fringe barely moves it."""
+    contour_mask = np.zeros(detect_mask.shape, dtype=np.uint8)
+    cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
+    echo = cv2.bitwise_and(detect_mask, contour_mask)
+    echo_px = int(np.count_nonzero(echo))
+    if echo_px < MIN_BLOB_AREA_PX:  # area = REAL echo, not the merged hull
+        return None
+
+    level_counts = {}
+    weight = np.zeros(detect_mask.shape, dtype=np.float32)
+    for level, mask in masks.items():
+        band = cv2.bitwise_and(mask, contour_mask)
+        n = int(np.count_nonzero(band))
+        if n:
+            level_counts[level] = n
+            weight[band > 0] = level
+    total = sum(level_counts.values())
+    if not total:
+        return None
+
+    ys, xs = np.nonzero(weight)
+    w = weight[ys, xs]
+    cx = float((xs * w).sum() / w.sum())
+    cy = float((ys * w).sum() / w.sum())
+
+    max_level = max(level_counts)
+    mean_level = sum(lvl * n for lvl, n in level_counts.items()) / total
+    area_km2 = echo_px * km_per_px * km_per_px
+    x, y, bw, bh = cv2.boundingRect(contour)
+    intensity = (mean_level * 4.0) + (max_level * 2.5) + min(area_km2 / 15.0, 20.0)
+
+    return {
+        "centroid_x": cx,
+        "centroid_y": cy,
+        "area_px": echo_px,
+        "area_km2": float(area_km2),
+        "bbox": (int(x), int(y), int(bw), int(bh)),
+        "max_level": int(max_level),
+        "mean_level": float(mean_level),
+        "intensity_score": float(intensity),
+        "classification": classify_cell(max_level, mean_level),
+        "contour": contour,
+        "ellipse": _fit_ellipse(contour),
+    }
+
+
+def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float,
+                 prev_labels: np.ndarray | None = None) -> list:
+    """Find echo cells in one frame, merging fragments within CLUSTER_GAP_PX,
+    with merge/split HYSTERESIS against the previous frame:
+
+    - clusters form at the tight CLUSTER_GAP_PX,
+    - but a coarse region (CLUSTER_SPLIT_GAP_PX) whose footprint was exactly
+      ONE tracked cell last frame is KEPT as one cell — it only splits once
+      its fragments separate beyond the coarse gap. Two previously-separate
+      cells are never coarse-merged (their region has two labels).
+
+    ``prev_labels`` is the previous frame's cell-footprint label image from
+    the scraper (0 = background, N = tracked cell #N); None disables the
+    hysteresis (first frame / tests)."""
     masks = level_masks(bgr, alpha)
 
     detect_mask = np.zeros(bgr.shape[:2], dtype=np.uint8)
@@ -123,60 +194,46 @@ def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
         if level >= DETECT_MIN_LEVEL:
             detect_mask = cv2.bitwise_or(detect_mask, mask)
 
-    # Drop speckle first, THEN amalgamate: a close with a generous elliptical
-    # kernel bridges gaps up to ~2x CLUSTER_GAP_PX so one storm complex reads
-    # as one contour instead of a swarm of fragments.
     small = np.ones((3, 3), np.uint8)
     detect_mask = cv2.morphologyEx(detect_mask, cv2.MORPH_OPEN, small)
-    bridge = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (2 * CLUSTER_GAP_PX + 1, 2 * CLUSTER_GAP_PX + 1))
-    merged = cv2.morphologyEx(detect_mask, cv2.MORPH_CLOSE, bridge)
 
-    contours, _ = cv2.findContours(merged, cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_SIMPLE)
+    fine = _close(detect_mask, CLUSTER_GAP_PX)
+    coarse = _close(detect_mask, CLUSTER_SPLIT_GAP_PX)
+
+    coarse_contours, _ = cv2.findContours(coarse, cv2.RETR_EXTERNAL,
+                                          cv2.CHAIN_APPROX_SIMPLE)
+    chosen = []
+    for cc in coarse_contours:
+        region = np.zeros(coarse.shape, dtype=np.uint8)
+        cv2.drawContours(region, [cc], -1, 255, thickness=-1)
+        keep_whole = False
+        if prev_labels is not None:
+            under = np.unique(prev_labels[region > 0])
+            keep_whole = len(under[under > 0]) == 1
+        if keep_whole:
+            chosen.append(cc)
+        else:
+            sub = cv2.bitwise_and(fine, region)
+            sub_contours, _ = cv2.findContours(sub, cv2.RETR_EXTERNAL,
+                                               cv2.CHAIN_APPROX_SIMPLE)
+            chosen.extend(sub_contours)
+
     detections = []
-    for contour in contours:
-        contour_mask = np.zeros(merged.shape, dtype=np.uint8)
-        cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
-        echo = cv2.bitwise_and(detect_mask, contour_mask)
-        echo_px = int(np.count_nonzero(echo))
-        if echo_px < MIN_BLOB_AREA_PX:  # area = REAL echo, not the merged hull
-            continue
-
-        m = cv2.moments(echo, binaryImage=True)
-        if m["m00"] == 0:
-            continue
-        cx, cy = m["m10"] / m["m00"], m["m01"] / m["m00"]
-
-        level_counts = {}
-        for level, mask in masks.items():
-            n = int(np.count_nonzero(cv2.bitwise_and(mask, contour_mask)))
-            if n:
-                level_counts[level] = n
-        total = sum(level_counts.values())
-        if not total:
-            continue
-        max_level = max(level_counts)
-        mean_level = sum(lvl * n for lvl, n in level_counts.items()) / total
-        area_km2 = echo_px * km_per_px * km_per_px
-
-        x, y, w, h = cv2.boundingRect(contour)
-        intensity = (mean_level * 4.0) + (max_level * 2.5) + min(area_km2 / 15.0, 20.0)
-
-        detections.append({
-            "centroid_x": float(cx),
-            "centroid_y": float(cy),
-            "area_px": echo_px,
-            "area_km2": float(area_km2),
-            "bbox": (int(x), int(y), int(w), int(h)),
-            "max_level": int(max_level),
-            "mean_level": float(mean_level),
-            "intensity_score": float(intensity),
-            "classification": classify_cell(max_level, mean_level),
-            "contour": contour,
-            "ellipse": _fit_ellipse(contour),
-        })
+    for contour in chosen:
+        d = _measure(contour, detect_mask, masks, km_per_px)
+        if d is not None:
+            detections.append(d)
     return detections
+
+
+def footprint_labels(tracked_cells: list, shape=(512, 512)) -> np.ndarray:
+    """Label image of this frame's tracked-cell footprints (cell #N filled
+    with N), fed back into the next detect_cells call as ``prev_labels``."""
+    labels = np.zeros(shape, dtype=np.int32)
+    for i, cell in enumerate(tracked_cells, start=1):
+        if cell.get("contour") is not None:
+            cv2.drawContours(labels, [cell["contour"]], -1, i, thickness=-1)
+    return labels
 
 
 # --------------------------------------------------------------------------

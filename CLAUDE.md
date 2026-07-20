@@ -285,6 +285,15 @@ warning-level lines, colour-matched to the map kinds.
   only; moderate/strong get the full product — fitted ellipse swept along the motion vector,
   hulled into a translucent **impact-area polygon** (BoM-tracker ellipse × NWS warning-polygon
   hybrid), dashed projected ellipse at +30 min, one compact label.
+- **Merge/split hysteresis (added 2026-07-21):** echoes hovering around the cluster gap used
+  to flap between one-storm and many-storms every frame, wrecking speed/bearing. Now dual
+  thresholds with memory: new clusters form at `CLUSTER_GAP_PX` (6), but a coarse region
+  (`CLUSTER_SPLIT_GAP_PX` 14) whose footprint was exactly ONE tracked cell last frame stays
+  one cell until its parts truly separate; previously-separate cells are never force-merged.
+  The previous frame's footprint label image round-trips scraper→detect_cells
+  (`footprint_labels`/`_prev_labels`). Plus: centroids are reflectivity-WEIGHTED (track the
+  core, not the outline), frame displacements implying >`MAX_SPEED_KMH` (160) are rejected
+  from the motion estimate, and big merged complexes get an area-scaled match radius.
 - **Georeferencing + GeoJSON export:** `RADAR_SITES` (scraper) maps IDRxx prefix → site
   lat/lon (Melbourne, Albany built in; extend via config `storm.radar_sites`);
   `px_to_latlon` is an equirectangular approx around the site. `storm_cells` gains

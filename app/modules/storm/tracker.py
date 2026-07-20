@@ -44,12 +44,22 @@ def bearing_to_cardinal(bearing):
 
 
 class CellTracker:
-    MISS_LIMIT = 3  # frames a cell may go undetected before it is dropped
+    MISS_LIMIT = 3       # frames a cell may go undetected before it is dropped
+    MAX_SPEED_KMH = 160  # displacement above this is a mismatch artefact, not
+                         # storm motion — the sample is rejected so it can't
+                         # pollute the smoothed speed/bearing
 
     def __init__(self, max_match_distance_px=45, history_length=5):
         self.max_match_distance_px = max_match_distance_px
         self.history_length = history_length
-        self.cells = {}  # cell_id -> {x, y, last_ts, misses, history: deque}
+        self.cells = {}  # cell_id -> {x, y, area_px, last_ts, misses, history}
+
+    def _match_range(self, cell, det):
+        """Allowed match distance for a pair: large cells (merged complexes)
+        get more slack, since a partial merge/split legitimately moves the
+        centroid further than a compact cell could travel in one frame."""
+        area = max(cell.get("area_px") or 0, det.get("area_px") or 0)
+        return max(self.max_match_distance_px, 0.6 * math.sqrt(area))
 
     def update(self, detections, frame_ts, km_per_px):
         """Match ``detections`` (from processing.detect_cells) against known
@@ -63,7 +73,7 @@ class CellTracker:
             for i, d in enumerate(detections):
                 dist = _distance(cell["x"], cell["y"],
                                  d["centroid_x"], d["centroid_y"])
-                if dist <= self.max_match_distance_px:
+                if dist <= self._match_range(cell, d):
                     pairs.append((dist, cell_id, i))
         pairs.sort(key=lambda p: p[0])
 
@@ -91,12 +101,19 @@ class CellTracker:
                                1.0) / 3600.0
                 dist_km = _distance(cell["x"], cell["y"], d["centroid_x"],
                                     d["centroid_y"]) * km_per_px
-                history.append({
-                    "x": d["centroid_x"], "y": d["centroid_y"],
-                    "speed": dist_km / dt_hours,
-                    "bearing": _bearing(cell["x"], cell["y"],
-                                        d["centroid_x"], d["centroid_y"]),
-                })
+                raw_speed = dist_km / dt_hours
+                if raw_speed > self.MAX_SPEED_KMH:
+                    # Implausible jump (merge/split or mismatch): keep the
+                    # position but contribute nothing to the motion estimate.
+                    history.append({"x": d["centroid_x"], "y": d["centroid_y"],
+                                    "speed": None, "bearing": None})
+                else:
+                    history.append({
+                        "x": d["centroid_x"], "y": d["centroid_y"],
+                        "speed": raw_speed,
+                        "bearing": _bearing(cell["x"], cell["y"],
+                                            d["centroid_x"], d["centroid_y"]),
+                    })
                 speeds = [h["speed"] for h in history if h["speed"] is not None]
                 bearings = [h["bearing"] for h in history
                             if h["bearing"] is not None]
@@ -109,6 +126,7 @@ class CellTracker:
 
             self.cells[cell_id] = {
                 "x": d["centroid_x"], "y": d["centroid_y"],
+                "area_px": d.get("area_px"),
                 "last_ts": frame_ts, "misses": 0, "history": history,
             }
             tracked.append({

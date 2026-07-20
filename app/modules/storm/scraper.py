@@ -56,6 +56,8 @@ STORM_FRAMES_DIR = os.path.join(BASE_DIR, "storm_frames")
 _trackers = {}
 _base_cache = {}
 _cell_severity = {}
+_prev_labels = {}   # radar_id -> previous frame's cell-footprint label image
+                    # (drives merge/split hysteresis in detect_cells)
 
 _SEVERITY = {"strong": 1, "moderate": 2}
 
@@ -261,8 +263,11 @@ def _process_radar(radar_id, now_local):
             log.warning("Undecodable radar frame at %s", frame_ts_local)
             continue
 
-        detections = processing.detect_cells(bgr, alpha, scale)
+        detections = processing.detect_cells(bgr, alpha, scale,
+                                             _prev_labels.get(radar_id))
         tracked = tracker.update(detections, frame_dt, scale)
+        _prev_labels[radar_id] = processing.footprint_labels(
+            tracked, shape=bgr.shape[:2])
         last_tracked = tracked
 
         database.insert_rows("storm_frames", [{
