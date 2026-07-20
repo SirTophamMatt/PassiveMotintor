@@ -301,8 +301,14 @@ warning-level lines, colour-matched to the map kinds.
   lon/lat ring, properties incl. speed/bearing/valid_from; `_ensure_column` migrates old
   DBs). `/storm` "Impact areas (GeoJSON)" button downloads the active FeatureCollection —
   loads straight into geojson.io / QGIS / EM-COP.
+- **Storm Briefing PDF** (`reporting.build_storm_pdf`, button on /storm): headline counts, a
+  "How to read this briefing" legend (colour-coded STRONG/MODERATE/WEAK classes tied to BoM
+  palette levels + a glossary of Score/Area/Movement/Position/Impact area), the tracked-cells
+  table (severity-first, georeferenced position + fitted motion), active impact areas
+  (with lon/lat bounds; full polygons via the GeoJSON button), the latest annotated frame per
+  radar (reads the on-disk PNGs, so NO kaleido needed), and the change-only alert log.
 - Not done: palette tuning against a live *severe* storm, storm cells on the fire/unified
-  map (lat/lons now exist), storm cells in export/PDF, impact-area history playback.
+  map (lat/lons now exist), storm cells in the XLSX export, impact-area history playback.
 
 ## Shell live widgets: sidebar incident log + news ticker (built 2026-07-21)
 - `app/ticker.py`, rendered in the SHELL (`factory._shell_layout`, all pages), one 20 s

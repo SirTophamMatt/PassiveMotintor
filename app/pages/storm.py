@@ -43,9 +43,15 @@ def layout():
             html.Button("⤓ Impact areas (GeoJSON)", id="storm-geojson-btn",
                         className="btn btn-primary",
                         style={"float": "right", "marginTop": "6px"}),
+            html.Button("⤓ Storm Briefing PDF", id="storm-pdf-btn",
+                        className="btn btn-primary",
+                        style={"float": "right", "marginTop": "6px",
+                               "marginRight": "8px"}),
             html.Div(id="storm-geojson-status", className="muted",
                      style={"clear": "both"}),
+            html.Div(id="storm-pdf-status", className="muted"),
             dcc.Download(id="storm-geojson-download"),
+            dcc.Download(id="storm-pdf-download"),
         ]),
         html.Div([
             html.Div([
@@ -230,3 +236,20 @@ def register_callbacks(app):
         filename = f"storm_impact_areas_{_dt.now():%Y%m%d_%H%M}.geojson"
         return (dcc.send_string(_json.dumps(fc, indent=2), filename),
                 f"✅ Exported {n} impact area(s).")
+
+    @app.callback(
+        Output("storm-pdf-download", "data"),
+        Output("storm-pdf-status", "children"),
+        Input("storm-pdf-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def make_pdf(_):
+        from dash import no_update
+
+        from app import reporting
+        try:
+            filename, pdf_bytes = reporting.build_storm_pdf()
+        except reporting.ReportingUnavailable as e:
+            return no_update, f"⚠ {e}"
+        except Exception as e:
+            return no_update, f"⚠ Could not build briefing: {e}"
+        return dcc.send_bytes(pdf_bytes, filename), "✅ Storm briefing generated."

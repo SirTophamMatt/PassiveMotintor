@@ -392,6 +392,269 @@ def build_fire_pdf():
     return filename, buffer.getvalue()
 
 
+def build_storm_pdf():
+    """Return (filename, bytes) for a Storm Cell Briefing: headline counts,
+    the latest annotated radar frame per configured radar (already PNGs on
+    disk, so no kaleido dependency), the tracked-cells table (severity first,
+    with georeferenced positions and fitted motion), active impact areas and
+    the recent alert log."""
+    import os
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (Image, KeepTogether, Paragraph,
+                                        SimpleDocTemplate, Spacer, Table,
+                                        TableStyle)
+    except ImportError as e:
+        raise ReportingUnavailable(
+            "The 'reportlab' package is required for PDF reports "
+            "(pip install reportlab).") from e
+
+    from app.modules.storm import data as storm_data
+    from app.modules.storm.scraper import STORM_FRAMES_DIR, radar_ids
+    from app.modules.storm.tracker import bearing_to_cardinal
+
+    styles = getSampleStyleSheet()
+    cell = ParagraphStyle("storm", parent=styles["Normal"], fontSize=9,
+                          leading=11.5)
+    story = []
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    radars = radar_ids()
+
+    story.append(Paragraph("Passive Monitor — Storm Cell Briefing",
+                           styles["Title"]))
+    story.append(Paragraph(
+        f"Generated {now} · BoM radar(s) {', '.join(radars)} · "
+        "radar-indicated cells (experimental tracker)", styles["Normal"]))
+    story.append(Spacer(1, 6 * mm))
+
+    def _table(rows, widths):
+        t = Table(rows, colWidths=widths, repeatRows=1)
+        t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    # --- Headline counts ------------------------------------------------------
+    c = storm_data.latest_counts()
+    fc = storm_data.impact_featurecollection()
+    kpi_rows = [
+        ["Active Cells", str(c["total"]), "Strong", str(c["strong"])],
+        ["Moderate", str(c["moderate"]), "Max Intensity", str(c["max_intensity"])],
+        ["Impact Areas", str(len(fc["features"])), "", ""],
+    ]
+    kpi = Table(kpi_rows, colWidths=[45 * mm, 40 * mm, 45 * mm, 40 * mm])
+    kpi.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef2f7")),
+        ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#eef2f7")),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(kpi)
+    story.append(Spacer(1, 5 * mm))
+
+    # --- How to read this briefing (legend) -----------------------------------
+    story.append(Paragraph("How to read this briefing", styles["Heading2"]))
+    note = ParagraphStyle("legendnote", parent=styles["Normal"], fontSize=8.5,
+                          leading=11, textColor=colors.HexColor("#333333"))
+    white = ParagraphStyle("legwhite", parent=cell, fontSize=8.5,
+                           textColor=colors.white)
+    legdesc = ParagraphStyle("legdesc", parent=cell, fontSize=8.5, leading=11)
+    class_rows = [[
+        Paragraph("<b>Class</b>", cell),
+        Paragraph("<b>Radar reflectivity</b>", cell),
+        Paragraph("<b>What it means</b>", cell),
+    ], [
+        Paragraph("<b>STRONG</b>", white),
+        Paragraph("Red or heavier core (BoM level 12+, or level 10-11 over a "
+                  "large area)", legdesc),
+        Paragraph("Intense cell — potential for heavy rain, hail, gusty winds. "
+                  "Watch closely.", legdesc),
+    ], [
+        Paragraph("<b>MODERATE</b>", white),
+        Paragraph("Yellow to orange (BoM level 8-11)", legdesc),
+        Paragraph("Developing / active shower or storm cell worth tracking.",
+                  legdesc),
+    ], [
+        Paragraph("<b>WEAK</b>", white),
+        Paragraph("Green / blue light echo (BoM level 3-7)", legdesc),
+        Paragraph("Light rain or showers; shown as outlines only, no impact "
+                  "area.", legdesc),
+    ]]
+    class_tbl = Table(class_rows, colWidths=[24 * mm, 66 * mm, 78 * mm])
+    class_tbl.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+        ("BACKGROUND", (0, 1), (0, 1), colors.HexColor("#d62728")),
+        ("BACKGROUND", (0, 2), (0, 2), colors.HexColor("#ff7f0e")),
+        ("BACKGROUND", (0, 3), (0, 3), colors.HexColor("#5b8def")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(class_tbl)
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph(
+        "<b>Score</b> — a relative intensity index (roughly 20-100) combining "
+        "how heavy the echo is (its BoM reflectivity levels) with its size; "
+        "higher = more significant. It is a tracker heuristic, not a BoM "
+        "product. <b>Area km²</b> — the cell's echo footprint. <b>Movement</b> "
+        "— direction and speed of the cell, fitted over its recent track "
+        "(compass heading the storm is moving <i>towards</i>); shown as "
+        "“quasi-stationary” below 5 km/h. <b>Position</b> — latitude "
+        "/ longitude of the cell core. <b>Impact area</b> — the cell's current "
+        "ellipse swept 30 minutes along its motion vector: the area it is "
+        "expected to affect if it holds course and intensity.", note))
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph(
+        "Radar-indicated and automatically tracked — a decision-support aid, "
+        "not an official warning. Always cross-check BoM warnings.",
+        ParagraphStyle("legcaveat", parent=note, fontSize=8,
+                       textColor=colors.HexColor("#8a4b08"))))
+    story.append(Spacer(1, 5 * mm))
+
+    # --- Tracked cells (severity first) ---------------------------------------
+    story.append(Paragraph("Tracked cells (last "
+                           f"{storm_data.ACTIVE_WINDOW_MINUTES} min)",
+                           styles["Heading2"]))
+    cells_df = storm_data.active_cells()
+    if cells_df.empty:
+        story.append(Paragraph("No radar cells currently tracked.",
+                               styles["Italic"]))
+    else:
+        cells_df["_prio"] = cells_df["classification"].map(
+            lambda cls: storm_data.classify(cls)[0])
+        cells_df = cells_df.sort_values(["_prio", "intensity_score"],
+                                        ascending=[True, False])
+        header = [Paragraph(f"<b>{h}</b>", cell) for h in
+                  ("Cell", "Radar", "Class", "Score", "Area km²",
+                   "Movement", "Position", "Last seen")]
+        rows = [header]
+        row_styles = []
+        for i, (_, r) in enumerate(cells_df.iterrows(), start=1):
+            cls = str(r.get("classification") or "—")
+            colour = storm_data.classify(cls)[1]
+            if pd.notna(r.get("speed_kmh")) and pd.notna(r.get("bearing_deg")):
+                movement = (f"{bearing_to_cardinal(r['bearing_deg'])} "
+                            f"{r['speed_kmh']:.0f} km/h")
+            elif pd.notna(r.get("speed_kmh")):
+                movement = "quasi-stationary"
+            else:
+                movement = "—"
+            position = (f"{r['latitude']:.3f}, {r['longitude']:.3f}"
+                        if pd.notna(r.get("latitude")) else "—")
+            rows.append([
+                Paragraph(str(r["cell_id"]), cell),
+                Paragraph(str(r.get("radar_id") or "—"), cell),
+                Paragraph(cls.upper(), cell),
+                Paragraph(f"{r['intensity_score']:.0f}", cell),
+                Paragraph(f"{r['area_km2']:.0f}", cell),
+                Paragraph(movement, cell),
+                Paragraph(position, cell),
+                Paragraph(str(r.get("frame_ts") or "—")[11:16], cell),
+            ])
+            row_styles.append(("TEXTCOLOR", (2, i), (2, i),
+                               colors.HexColor(colour)))
+            row_styles.append(("FONTNAME", (2, i), (2, i), "Helvetica-Bold"))
+        t = _table(rows, [25 * mm, 16 * mm, 25 * mm, 14 * mm, 18 * mm,
+                          27 * mm, 30 * mm, 17 * mm])
+        t.setStyle(TableStyle(row_styles))
+        story.append(t)
+    story.append(Spacer(1, 5 * mm))
+
+    # --- Impact areas ---------------------------------------------------------
+    if fc["features"]:
+        story.append(Paragraph("Impact areas (next "
+                               f"{fc['features'][0]['properties'].get('projection_minutes', 30)}"
+                               " min, ellipse swept along motion)",
+                               styles["Heading2"]))
+        header = [Paragraph(f"<b>{h}</b>", cell) for h in
+                  ("Cell", "Class", "Valid from", "Vertices (lon/lat ring)")]
+        rows = [header]
+        for f in fc["features"]:
+            p = f["properties"]
+            ring = f["geometry"]["coordinates"][0]
+            lats = [pt[1] for pt in ring]
+            lons = [pt[0] for pt in ring]
+            extent = (f"{len(ring)} pts, bounds "
+                      f"{min(lats):.2f}..{max(lats):.2f} S, "
+                      f"{min(lons):.2f}..{max(lons):.2f} E")
+            rows.append([
+                Paragraph(str(p.get("cell_id")), cell),
+                Paragraph(str(p.get("classification", "")).upper(), cell),
+                Paragraph(str(p.get("valid_from") or "—")[11:16], cell),
+                Paragraph(extent, cell),
+            ])
+        story.append(_table(rows, [28 * mm, 24 * mm, 24 * mm, 96 * mm]))
+        story.append(Paragraph(
+            "Full polygons are exportable as GeoJSON from the Storm Tracker "
+            "page (Impact areas button).", styles["Italic"]))
+        story.append(Spacer(1, 5 * mm))
+
+    # --- Latest annotated frame per radar -------------------------------------
+    for radar_id in radars:
+        frames = storm_data.annotated_frames(radar_id)
+        if not frames:
+            continue
+        latest = frames[-1]
+        path = os.path.join(STORM_FRAMES_DIR, latest["file"])
+        if not os.path.exists(path):
+            continue
+        story.append(KeepTogether([
+            Paragraph(f"Radar {radar_id} — {latest['label']}",
+                      styles["Heading3"]),
+            Image(path, width=130 * mm, height=130 * mm),
+            Spacer(1, 4 * mm),
+        ]))
+
+    # --- Recent alerts --------------------------------------------------------
+    alerts = storm_data.recent_alerts(limit=15)
+    story.append(Paragraph("Recent alerts (change-only log)", styles["Heading2"]))
+    if alerts.empty:
+        story.append(Paragraph("No storm alerts recorded.", styles["Italic"]))
+    else:
+        header = [Paragraph(f"<b>{h}</b>", cell) for h in
+                  ("Time", "Type", "Detail")]
+        rows = [header]
+        for _, r in alerts.iterrows():
+            rows.append([
+                Paragraph(str(r["timestamp"])[5:16], cell),
+                Paragraph(str(r["alert_type"] or "—"), cell),
+                Paragraph(str(r["message"] or "—"), cell),
+            ])
+        story.append(_table(rows, [28 * mm, 26 * mm, 118 * mm]))
+
+    story.append(Spacer(1, 4 * mm))
+    story.append(Paragraph(
+        "Source: Bureau of Meteorology radar imagery; cells detected and "
+        "tracked by Passive Monitor's experimental storm tracker. Situational "
+        "awareness only — always act on official BoM warnings.",
+        ParagraphStyle("src", parent=styles["Normal"], fontSize=7.5,
+                       textColor=colors.HexColor("#5f6368"))))
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=15 * mm, bottomMargin=15 * mm,
+                            leftMargin=15 * mm, rightMargin=15 * mm,
+                            title="Passive Monitor Storm Cell Briefing")
+    doc.build(story)
+    buffer.seek(0)
+    filename = f"storm_briefing_{datetime.now():%Y%m%d_%H%M}.pdf"
+    return filename, buffer.getvalue()
+
+
 _BAND_COLOURS = {"major": "#d62728", "moderate": "#ff7f0e",
                  "minor": "#e6c700", "below": "#9aa0a6"}
 
