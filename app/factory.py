@@ -64,6 +64,8 @@ def _shell_layout():
     children = [
         dcc.Location(id="url"),
         dcc.Store(id="theme-store", data=True, storage_type="local"),
+        # One shell-wide tick drives the sidebar incident log + news ticker.
+        dcc.Interval(id="live-tick", interval=20_000, n_intervals=0),
     ]
     if DESKTOP:
         children.append(_titlebar())
@@ -71,11 +73,16 @@ def _shell_layout():
         html.Div([
             html.Div("⚡ Passive Monitor", className="brand"),
             html.Nav(id="main-nav", className="nav"),
+            html.Div([
+                html.Div("VicEmergency feed", className="side-log-title"),
+                html.Div(id="sidebar-live-log"),
+            ], className="side-log"),
             html.Button("☀ / ☾", id="theme-toggle", className="btn theme-btn",
                         title="Toggle light/dark mode"),
         ], className="sidebar"),
         html.Div(id="page-content", className="content"),
     ], className="body-row"))
+    children.append(html.Div(id="news-ticker", className="ticker ticker-hidden"))
     root_class = "app dark has-titlebar" if DESKTOP else "app dark"
     return html.Div(children, id="app-root", className=root_class)
 
@@ -239,6 +246,9 @@ def create_app(autostart=False):
     for _, _, module in ALL_PAGES:
         module.register_callbacks(app)
     station.register_callbacks(app)
+
+    from app import ticker
+    ticker.register_callbacks(app)
 
     if autostart:
         from app.collector import manager

@@ -295,6 +295,21 @@ warning-level lines, colour-matched to the map kinds.
 - Not done: palette tuning against a live *severe* storm, storm cells on the fire/unified
   map (lat/lons now exist), storm cells in export/PDF, impact-area history playback.
 
+## Shell live widgets: sidebar incident log + news ticker (built 2026-07-21)
+- `app/ticker.py`, rendered in the SHELL (`factory._shell_layout`, all pages), one 20 s
+  `live-tick` interval drives both. STATELESS: everything derives from stored feed
+  timestamps, so restarts neither re-fire old items nor drop active ones.
+- **Sidebar log** (below the nav): last 14 VicEmergency *incidents* (not warnings/burn
+  areas) newest-first — kind-coloured dot, HH:MM first_seen, category, location.
+- **News ticker** (fixed bottom bar, CSS marquee, `.content` gets bottom padding):
+  timestamped NEW triggers — new BoM warnings, new VicEmergency community warnings, and
+  flood gauges CROSSING into flood (crossing reading's own obs time is the stamp; a gauge
+  that has never been below minor doesn't count as a crossing). Items expire after
+  `TICKER_WINDOW_MINUTES` (5). **Pinned open + red** (`ticker-emergency`) while a
+  VicEmergency Emergency Warning (incl. Evacuate) or a BoM warning whose text carries the
+  Standard Emergency Warning Signal (SEWS) is active — those items show the whole time
+  they're active. Hidden entirely when empty. Scroll speed scales with item count.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·

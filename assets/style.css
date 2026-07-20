@@ -232,3 +232,81 @@ label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
 .dash-table-container .dash-cell a { color: var(--accent); text-decoration: none; }
 .dash-table-container .dash-cell a:hover { text-decoration: underline; }
 .dash-table-container .dash-cell p { margin: 0; }
+
+/* ---- sidebar VicEmergency incident log ---- */
+.side-log {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin-top: 14px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+}
+.side-log-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 6px;
+}
+.side-log-row {
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 3px 2px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.side-log-dot { margin-right: 5px; font-size: 9px; }
+.side-log-time { color: var(--muted); font-family: Consolas, monospace; }
+.side-log-empty { font-size: 11px; color: var(--muted); }
+
+/* ---- bottom news ticker ---- */
+.content { padding-bottom: 60px; }  /* keep page bottom clear of the ticker */
+.ticker {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    background: var(--bg-sidebar);
+    border-top: 2px solid var(--accent);
+    color: var(--text);
+    font-size: 14px;
+    z-index: 900;
+}
+.ticker-hidden { display: none; }
+.ticker-emergency {
+    background: #a11212;
+    border-top-color: #ff5a5a;
+    color: #ffffff;
+}
+.ticker-emergency .ticker-time { color: #ffd9d9; }
+.ticker-label {
+    flex-shrink: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.25);
+}
+.ticker-track {
+    white-space: nowrap;
+    display: inline-block;
+    padding-left: 100vw;
+    animation: ticker-scroll linear infinite;
+}
+.ticker-time { color: var(--muted); font-family: Consolas, monospace; }
+.ticker-sep { opacity: 0.5; }
+@keyframes ticker-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
