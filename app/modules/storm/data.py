@@ -1,4 +1,5 @@
 """Storm tracker data queries and cell classification styling."""
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -71,6 +72,25 @@ def cell_history(hours=6, top_n=12):
     df["frame_ts"] = pd.to_datetime(df["frame_ts"], format="ISO8601",
                                     errors="coerce")
     return df
+
+
+def impact_featurecollection():
+    """GeoJSON FeatureCollection of the current impact-area polygons (latest
+    observation of each active moderate/strong cell). Loads straight into
+    any GIS / EM-COP / geojson.io."""
+    df = active_cells()
+    features = []
+    if not df.empty and "impact_geojson" in df.columns:
+        for raw in df["impact_geojson"].dropna():
+            try:
+                features.append(json.loads(raw))
+            except ValueError:
+                continue
+    return {
+        "type": "FeatureCollection",
+        "generated": datetime.now().isoformat(sep=" ", timespec="seconds"),
+        "features": features,
+    }
 
 
 def heartbeat_summary():

@@ -13,7 +13,9 @@ No Selenium: the frame naming is deterministic, so a handful of cheap GETs
 Chrome page scrape entirely. The static map underlay (background / topography
 / locations layers) is fetched once per radar and cached in memory.
 """
+import json
 import logging
+import math
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +40,14 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 PROBE_WINDOW_MINUTES = 16   # how far back each cycle looks for new frames
 KEEP_ANNOTATED_FRAMES = 24  # loop length kept on disk (~2 hours of frames)
 
+# Approximate WGS84 radar site coordinates by product prefix (IDRxx). Used to
+# georeference cell centroids and impact polygons; extend via config
+# storm.radar_sites = {"IDR68": [lat, lon]} for radars not listed here.
+RADAR_SITES = {
+    "IDR02": (-37.855, 144.755),   # Melbourne (Laverton)
+    "IDR31": (-34.942, 117.816),   # Albany WA
+}
+
 STORM_FRAMES_DIR = os.path.join(BASE_DIR, "storm_frames")
 
 # In-process state (like the flood module's backfill cache): one tracker per
@@ -48,6 +58,58 @@ _base_cache = {}
 _cell_severity = {}
 
 _SEVERITY = {"strong": 1, "moderate": 2}
+
+
+def radar_site(radar_id, cfg=None):
+    """(lat, lon) of the radar, or None if unknown. Config override wins."""
+    cfg = cfg or load_config()
+    sites = {**RADAR_SITES,
+             **{k: tuple(v) for k, v in
+                (cfg["storm"].get("radar_sites") or {}).items()}}
+    return sites.get(str(radar_id)[:5])
+
+
+def px_to_latlon(x, y, site, scale):
+    """Image pixel -> (lat, lon) via an equirectangular approximation around
+    the radar site (frames are 512 px with the radar at the centre). Plenty
+    accurate at radar range (<0.5 km error at 128 km)."""
+    lat0, lon0 = site
+    dx_km = (x - 256.0) * scale
+    dy_km = (y - 256.0) * scale
+    lat = lat0 - dy_km / 110.574
+    lon = lon0 + dx_km / (111.320 * math.cos(math.radians(lat0)))
+    return round(lat, 5), round(lon, 5)
+
+
+def _impact_feature(cell, radar_id, site, scale, frame_ts_local):
+    """GeoJSON Feature (Polygon, lon/lat) for a cell's impact area over the
+    next PREDICT_MINUTES, or None for weak/unlocated cells. This is the
+    exportable shape: ellipse fit swept along the motion vector."""
+    if site is None or cell["classification"] not in ("strong", "moderate"):
+        return None
+    hull = processing.impact_polygon(cell, scale)
+    if hull is None:
+        return None
+    ring = [[lon, lat] for lat, lon in
+            (px_to_latlon(px, py, site, scale) for px, py in hull)]
+    ring.append(ring[0])  # close the ring
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [ring]},
+        "properties": {
+            "cell_id": cell["cell_id"],
+            "radar_id": radar_id,
+            "classification": cell["classification"],
+            "intensity_score": round(cell["intensity_score"], 1),
+            "area_km2": round(cell["area_km2"], 1),
+            "speed_kmh": (round(cell["speed_kmh"], 1)
+                          if cell.get("speed_kmh") is not None else None),
+            "bearing_deg": (round(cell["bearing_deg"])
+                            if cell.get("bearing_deg") is not None else None),
+            "valid_from": frame_ts_local,
+            "projection_minutes": processing.PREDICT_MINUTES,
+        },
+    }
 
 
 def km_per_px(radar_id):
@@ -187,6 +249,7 @@ def _process_radar(radar_id, now_local):
     """Fetch + process all new frames for one radar. Returns
     (frames_processed, last frame's tracked cells)."""
     scale = km_per_px(radar_id)
+    site = radar_site(radar_id)
     tracker = _trackers.setdefault(radar_id, CellTracker())
     frames = _new_frames(radar_id)
 
@@ -206,17 +269,25 @@ def _process_radar(radar_id, now_local):
             "radar_id": radar_id, "frame_ts": frame_ts_local,
             "fetched_at": now_local, "cells_detected": len(tracked),
         }], ignore_duplicates=True)
-        database.insert_rows("storm_cells", [{
-            "cell_id": c["cell_id"], "radar_id": radar_id,
-            "frame_ts": frame_ts_local,
-            "centroid_x": c["centroid_x"], "centroid_y": c["centroid_y"],
-            "area_km2": c["area_km2"], "max_level": c["max_level"],
-            "mean_level": c["mean_level"],
-            "intensity_score": c["intensity_score"],
-            "classification": c["classification"],
-            "speed_kmh": c["speed_kmh"], "bearing_deg": c["bearing_deg"],
-            "status": c["status"],
-        } for c in tracked])
+        rows = []
+        for c in tracked:
+            latlon = (px_to_latlon(c["centroid_x"], c["centroid_y"], site, scale)
+                      if site else (None, None))
+            feature = _impact_feature(c, radar_id, site, scale, frame_ts_local)
+            rows.append({
+                "cell_id": c["cell_id"], "radar_id": radar_id,
+                "frame_ts": frame_ts_local,
+                "centroid_x": c["centroid_x"], "centroid_y": c["centroid_y"],
+                "latitude": latlon[0], "longitude": latlon[1],
+                "area_km2": c["area_km2"], "max_level": c["max_level"],
+                "mean_level": c["mean_level"],
+                "intensity_score": c["intensity_score"],
+                "classification": c["classification"],
+                "speed_kmh": c["speed_kmh"], "bearing_deg": c["bearing_deg"],
+                "status": c["status"],
+                "impact_geojson": json.dumps(feature) if feature else None,
+            })
+        database.insert_rows("storm_cells", rows)
         _record_alerts(tracked, frame_ts_local, radar_id)
 
         annotated = processing.draw_annotated(

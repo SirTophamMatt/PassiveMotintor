@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS storm_cells (
     frame_ts TEXT NOT NULL,
     centroid_x REAL,
     centroid_y REAL,
+    latitude REAL,               -- georeferenced via the radar site + km/px
+    longitude REAL,
     area_km2 REAL,
     max_level INTEGER,
     mean_level REAL,
@@ -297,7 +299,8 @@ CREATE TABLE IF NOT EXISTS storm_cells (
     classification TEXT,         -- strong / moderate / weak
     speed_kmh REAL,
     bearing_deg REAL,
-    status TEXT
+    status TEXT,
+    impact_geojson TEXT          -- GeoJSON Feature: impact-area polygon (lon/lat)
 );
 CREATE INDEX IF NOT EXISTS idx_storm_cells_ts ON storm_cells (frame_ts);
 CREATE INDEX IF NOT EXISTS idx_storm_cells_cell ON storm_cells (cell_id);
@@ -392,6 +395,9 @@ def init_db():
         conn.execute("DROP INDEX IF EXISTS idx_flood_obs_unique")
         _ensure_column(conn, "fire_incidents", "geometry", "TEXT")
         _ensure_column(conn, "weather_warnings", "message", "TEXT")
+        _ensure_column(conn, "storm_cells", "latitude", "REAL")
+        _ensure_column(conn, "storm_cells", "longitude", "REAL")
+        _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
         _migrate_events_to_tags(conn)
         conn.commit()
     finally:

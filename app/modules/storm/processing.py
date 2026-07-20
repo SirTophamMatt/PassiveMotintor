@@ -1,12 +1,16 @@
 """Radar echo detection on BoM transparent frame layers.
 
 Ported from the standalone "storm Tracker" project and simplified: frames are
-now the *echo-only transparency* layer (``IDRxxx.T.<ts>.png``) rather than a
-scrape of the composited page image, so there is no terrain / ocean / legend
-to heuristically exclude — every opaque pixel that matches the BoM rain-rate
-palette IS radar echo. Detection matches pixels to the standard 15-level
-palette, groups them into contours ("cells"), and scores each cell from the
-levels it contains.
+the *echo-only transparency* layer (``IDRxxx.T.<ts>.png``), so every opaque
+pixel that matches the BoM rain-rate palette IS radar echo. Detection matches
+pixels to the standard 15-level palette, AMALGAMATES nearby fragments into
+one cell (a ragged rain band reads as a handful of cells, not dozens — see
+``CLUSTER_GAP_PX``), and scores each cell from the levels it contains.
+
+Each moderate/strong cell also gets an **impact area**: an ellipse fitted to
+the cell (BoM storm-tracker style) swept along its motion vector for the
+prediction window and hulled into one polygon (US warning-polygon style).
+The same polygon is georeferenced and exported as GeoJSON by the scraper.
 """
 import logging
 import math
@@ -41,8 +45,13 @@ DETECT_MIN_LEVEL = 3
 MODERATE_MIN_LEVEL = 8   # yellow and up
 STRONG_MIN_LEVEL = 12    # red and up
 
-MIN_BLOB_AREA_PX = 90    # ignore tiny speckle contours
-MIN_FILL_RATIO = 0.12    # reject sparse boxes formed by thin echo bridges
+MIN_BLOB_AREA_PX = 90    # min real echo pixels for a cell (post-merge)
+# Echo fragments separated by up to ~2x this many pixels are amalgamated into
+# one cell (morphological close). 6 px = 6 km bridging at a 128 km radar.
+CLUSTER_GAP_PX = 6
+
+PREDICT_MINUTES = 30     # impact-area / prediction projection window
+MIN_MOTION_KMH = 5       # below this a cell is treated as stationary
 
 CLASS_STYLE = {  # classification -> (sort priority, BGR draw colour)
     "strong": (1, (40, 40, 220)),
@@ -91,10 +100,22 @@ def classify_cell(max_level: int, mean_level: float) -> str:
     return "weak"
 
 
+def _fit_ellipse(contour):
+    """(center(x,y), axes(major,minor), angle°) around a contour. fitEllipse
+    needs >= 5 points; fall back to the minimum-area rectangle."""
+    if len(contour) >= 5:
+        (cx, cy), (w, h), ang = cv2.fitEllipse(contour)
+    else:
+        (cx, cy), (w, h), ang = cv2.minAreaRect(contour)
+    # Never let a degenerate axis collapse the ellipse to a line.
+    return (float(cx), float(cy)), (max(float(w), 6.0), max(float(h), 6.0)), float(ang)
+
+
 def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
-    """Find echo cells in one frame. Each detection dict carries centroid,
-    area (px and km²), the palette levels present, an intensity score, a
-    classification, and its contour (for drawing)."""
+    """Find echo cells in one frame, merging fragments within CLUSTER_GAP_PX.
+    Each detection carries centroid (echo-weighted), REAL echo area (km²),
+    palette levels, score/classification, the merged contour and a fitted
+    ellipse (for the impact area)."""
     masks = level_masks(bgr, alpha)
 
     detect_mask = np.zeros(bgr.shape[:2], dtype=np.uint8)
@@ -102,29 +123,30 @@ def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
         if level >= DETECT_MIN_LEVEL:
             detect_mask = cv2.bitwise_or(detect_mask, mask)
 
-    # Close small gaps so one storm reads as one contour, then drop speckle.
-    kernel = np.ones((3, 3), np.uint8)
-    detect_mask = cv2.morphologyEx(detect_mask, cv2.MORPH_CLOSE, kernel)
-    detect_mask = cv2.morphologyEx(detect_mask, cv2.MORPH_OPEN, kernel)
+    # Drop speckle first, THEN amalgamate: a close with a generous elliptical
+    # kernel bridges gaps up to ~2x CLUSTER_GAP_PX so one storm complex reads
+    # as one contour instead of a swarm of fragments.
+    small = np.ones((3, 3), np.uint8)
+    detect_mask = cv2.morphologyEx(detect_mask, cv2.MORPH_OPEN, small)
+    bridge = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * CLUSTER_GAP_PX + 1, 2 * CLUSTER_GAP_PX + 1))
+    merged = cv2.morphologyEx(detect_mask, cv2.MORPH_CLOSE, bridge)
 
-    contours, _ = cv2.findContours(detect_mask, cv2.RETR_EXTERNAL,
+    contours, _ = cv2.findContours(merged, cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
     detections = []
     for contour in contours:
-        area_px = cv2.contourArea(contour)
-        if area_px < MIN_BLOB_AREA_PX:
-            continue
-        x, y, w, h = cv2.boundingRect(contour)
-        if w * h <= 0 or (area_px / (w * h)) < MIN_FILL_RATIO:
-            continue
-        moments = cv2.moments(contour)
-        if moments["m00"] == 0:
-            continue
-        cx = moments["m10"] / moments["m00"]
-        cy = moments["m01"] / moments["m00"]
-
-        contour_mask = np.zeros(detect_mask.shape, dtype=np.uint8)
+        contour_mask = np.zeros(merged.shape, dtype=np.uint8)
         cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
+        echo = cv2.bitwise_and(detect_mask, contour_mask)
+        echo_px = int(np.count_nonzero(echo))
+        if echo_px < MIN_BLOB_AREA_PX:  # area = REAL echo, not the merged hull
+            continue
+
+        m = cv2.moments(echo, binaryImage=True)
+        if m["m00"] == 0:
+            continue
+        cx, cy = m["m10"] / m["m00"], m["m01"] / m["m00"]
 
         level_counts = {}
         for level, mask in masks.items():
@@ -136,17 +158,15 @@ def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
             continue
         max_level = max(level_counts)
         mean_level = sum(lvl * n for lvl, n in level_counts.items()) / total
-        area_km2 = area_px * km_per_px * km_per_px
+        area_km2 = echo_px * km_per_px * km_per_px
 
-        # Heuristic 0-100ish score: how heavy the echo is, biased by peak
-        # intensity, with a capped size contribution so a huge light band
-        # doesn't outrank a compact violent cell.
+        x, y, w, h = cv2.boundingRect(contour)
         intensity = (mean_level * 4.0) + (max_level * 2.5) + min(area_km2 / 15.0, 20.0)
 
         detections.append({
             "centroid_x": float(cx),
             "centroid_y": float(cy),
-            "area_px": int(area_px),
+            "area_px": echo_px,
             "area_km2": float(area_km2),
             "bbox": (int(x), int(y), int(w), int(h)),
             "max_level": int(max_level),
@@ -154,19 +174,49 @@ def detect_cells(bgr: np.ndarray, alpha: np.ndarray, km_per_px: float) -> list:
             "intensity_score": float(intensity),
             "classification": classify_cell(max_level, mean_level),
             "contour": contour,
+            "ellipse": _fit_ellipse(contour),
         })
     return detections
 
 
-def _shift_contour(contour, dx: int, dy: int):
-    shifted = contour.copy()
-    shifted[:, 0, 0] += dx
-    shifted[:, 0, 1] += dy
-    return shifted
+# --------------------------------------------------------------------------
+# Impact area: fitted ellipse swept along the motion vector, hulled into one
+# polygon. This is what gets drawn AND exported (georeferenced) as GeoJSON.
+# --------------------------------------------------------------------------
+
+def _ellipse_points(ellipse, delta=12):
+    (cx, cy), (w, h), ang = ellipse
+    return cv2.ellipse2Poly((int(cx), int(cy)), (int(w / 2), int(h / 2)),
+                            int(ang), 0, 360, delta)
+
+
+def _motion_px(cell, km_per_px, minutes):
+    """Displacement (dx, dy) in px over `minutes`, or None if quasi-stationary."""
+    speed, bearing = cell.get("speed_kmh"), cell.get("bearing_deg")
+    if speed is None or bearing is None or speed < MIN_MOTION_KMH:
+        return None
+    dist_px = (speed / 60.0) * minutes / km_per_px
+    rad = math.radians(bearing)
+    return math.sin(rad) * dist_px, -math.cos(rad) * dist_px
+
+
+def impact_polygon(cell, km_per_px, minutes=PREDICT_MINUTES):
+    """The cell's impact area over the next `minutes`: convex hull of its
+    fitted ellipse now + the same ellipse displaced along the motion vector.
+    Returns an (N, 2) int array of image points (closed implicitly)."""
+    ellipse = cell.get("ellipse")
+    if ellipse is None:
+        return None
+    pts = _ellipse_points(ellipse).astype(np.float32)
+    motion = _motion_px(cell, km_per_px, minutes)
+    if motion is not None:
+        pts = np.vstack([pts, pts + np.array(motion, dtype=np.float32)])
+    hull = cv2.convexHull(pts.astype(np.int32))
+    return hull.reshape(-1, 2)
 
 
 def _draw_dashed(image, points, colour, thickness=2, dash=10, gap=6):
-    """Dashed closed polyline (the +30 min predicted cell outline)."""
+    """Dashed closed polyline."""
     if len(points) < 2:
         return
     pts = list(points) + [points[0]]
@@ -192,7 +242,8 @@ def _draw_dashed(image, points, colour, thickness=2, dash=10, gap=6):
 
 def _label(image, text, x, y, scale=0.42):
     (tw, th), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, 1)
-    y = max(th + 4, y)
+    x = int(min(max(2, x), image.shape[1] - tw - 4))
+    y = int(max(th + 4, min(y, image.shape[0] - base - 2)))
     cv2.rectangle(image, (x - 2, y - th - 3), (x + tw + 3, y + base + 2),
                   (0, 0, 0), -1)
     cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale,
@@ -200,59 +251,76 @@ def _label(image, text, x, y, scale=0.42):
 
 
 def draw_annotated(base: np.ndarray, tracked_cells: list, km_per_px: float,
-                   predict_minutes: int = 30) -> np.ndarray:
-    """Draw tracked cells onto a composited radar image: contour + box in the
-    classification colour, track tail, motion arrow with speed/bearing, and a
-    dashed predicted outline ``predict_minutes`` ahead."""
-    out = base.copy()
-    for cell in tracked_cells:
-        colour = CLASS_STYLE.get(cell.get("classification", "weak"),
-                                 CLASS_STYLE["weak"])[1]
-        contour = cell.get("contour")
-        if contour is not None:
-            cv2.drawContours(out, [contour], -1, colour, 2)
-        x, y, w, h = cell.get("bbox", (0, 0, 0, 0))
-        if w and h:
-            cv2.rectangle(out, (x, y), (x + w, y + h), colour, 1)
-        cx, cy = int(cell["centroid_x"]), int(cell["centroid_y"])
-        cv2.circle(out, (cx, cy), 3, (255, 255, 255), -1)
-        _label(out,
-               f"{cell['classification'].upper()} {int(cell['intensity_score'])} "
-               f"{cell['area_km2']:.0f}km2",
-               x, y - 5)
+                   predict_minutes: int = PREDICT_MINUTES) -> np.ndarray:
+    """Draw tracked cells onto a composited radar image.
 
-        # Track tail (thickens toward the newest point).
+    Deliberately uncluttered: WEAK cells are a thin outline only (no label,
+    box or arrow). Moderate/strong cells get the full product — translucent
+    impact-area polygon (ellipse swept along motion), dashed projected
+    ellipse, motion arrow, track tail and ONE compact label."""
+    out = base.copy()
+
+    # Weak cells first: quiet thin outlines under everything else.
+    for cell in tracked_cells:
+        if cell.get("classification") == "weak" and cell.get("contour") is not None:
+            cv2.drawContours(out, [cell["contour"]], -1,
+                             CLASS_STYLE["weak"][1], 1)
+
+    severe = [c for c in tracked_cells
+              if c.get("classification") in ("strong", "moderate")]
+
+    # Impact-area fills in one translucent pass (so overlaps don't stack dark).
+    overlay = out.copy()
+    filled = False
+    for cell in severe:
+        hull = impact_polygon(cell, km_per_px, predict_minutes)
+        if hull is not None:
+            cv2.fillPoly(overlay, [hull.astype(np.int32)],
+                         CLASS_STYLE[cell["classification"]][1])
+            filled = True
+    if filled:
+        out = cv2.addWeighted(overlay, 0.18, out, 0.82, 0)
+
+    for cell in severe:
+        colour = CLASS_STYLE[cell["classification"]][1]
+        cx, cy = int(cell["centroid_x"]), int(cell["centroid_y"])
+
+        hull = impact_polygon(cell, km_per_px, predict_minutes)
+        if hull is not None:
+            cv2.polylines(out, [hull.astype(np.int32)], True, colour, 2,
+                          cv2.LINE_AA)
+
+        if cell.get("contour") is not None:
+            cv2.drawContours(out, [cell["contour"]], -1, colour, 1)
+
+        # Projected ellipse at +predict_minutes, dashed (BoM-tracker motif).
+        motion = _motion_px(cell, km_per_px, predict_minutes)
+        if motion is not None and cell.get("ellipse") is not None:
+            (ex, ey), axes, ang = cell["ellipse"]
+            moved = ((ex + motion[0], ey + motion[1]), axes, ang)
+            _draw_dashed(out, [tuple(p) for p in _ellipse_points(moved)],
+                         colour, thickness=1)
+            arrow_end = (int(cx + motion[0]), int(cy + motion[1]))
+            cv2.arrowedLine(out, (cx, cy), arrow_end, (0, 0, 0), 3,
+                            tipLength=0.25)
+            cv2.arrowedLine(out, (cx, cy), arrow_end, colour, 1,
+                            tipLength=0.25)
+
+        # Track tail.
         points = cell.get("track_points") or []
         for i in range(1, len(points)):
-            cv2.line(out, points[i - 1], points[i], (0, 0, 0),
-                     max(2, i + 1), cv2.LINE_AA)
             cv2.line(out, points[i - 1], points[i], colour,
-                     max(1, i), cv2.LINE_AA)
+                     max(1, i - 1) or 1, cv2.LINE_AA)
+        cv2.circle(out, (cx, cy), 3, (255, 255, 255), -1)
 
-        speed = cell.get("speed_kmh")
-        bearing = cell.get("bearing_deg")
-        if speed is None or bearing is None or speed < 3:
-            continue
-        # Compass bearing (0=N, clockwise) -> image vector (y grows downward).
-        rad = math.radians(bearing)
-        px_per_min = (speed / 60.0) / km_per_px
-        arrow_px = max(15, min(int(px_per_min * predict_minutes), 60))
-        dx = int(math.sin(rad) * arrow_px)
-        dy = int(-math.cos(rad) * arrow_px)
-        cv2.arrowedLine(out, (cx, cy), (cx + dx, cy + dy), (0, 0, 0), 4,
-                        tipLength=0.3)
-        cv2.arrowedLine(out, (cx, cy), (cx + dx, cy + dy), colour, 2,
-                        tipLength=0.3)
-        _label(out, f"{cell['cell_id']} {speed:.0f}km/h {bearing:.0f}deg",
-               cx + 8, cy + 18)
-
-        if contour is not None:
-            pred_px = int(px_per_min * predict_minutes)
-            pdx = int(math.sin(rad) * pred_px)
-            pdy = int(-math.cos(rad) * pred_px)
-            predicted = _shift_contour(contour, pdx, pdy)
-            pred_points = [tuple(pt[0]) for pt in predicted]
-            _draw_dashed(out, pred_points, (0, 0, 0), thickness=3)
-            _draw_dashed(out, pred_points, colour, thickness=1)
-            _label(out, f"+{predict_minutes}min", cx + pdx, cy + pdy)
+        speed, bearing = cell.get("speed_kmh"), cell.get("bearing_deg")
+        if speed is not None and bearing is not None and speed >= MIN_MOTION_KMH:
+            from app.modules.storm.tracker import bearing_to_cardinal
+            move = f" {speed:.0f}km/h {bearing_to_cardinal(bearing)}"
+        else:
+            move = ""
+        _label(out,
+               f"{cell['classification'].upper()[:3]} "
+               f"{cell['intensity_score']:.0f}{move}",
+               cx + 10, cy - 8)
     return out

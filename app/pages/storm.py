@@ -27,7 +27,7 @@ CELL_COLUMNS = [
     ("cell_id", "Cell"), ("radar_id", "Radar"), ("classification", "Class"),
     ("intensity_score", "Score"), ("area_km2", "Area (km²)"),
     ("max_level", "Peak level"), ("speed_kmh", "Speed (km/h)"),
-    ("bearing", "Moving"), ("frame_ts", "Last seen"),
+    ("bearing", "Moving"), ("position", "Lat / Lon"), ("frame_ts", "Last seen"),
 ]
 ALERT_COLUMNS = [
     ("timestamp", "Time"), ("classification", "Class"),
@@ -38,7 +38,15 @@ ALERT_COLUMNS = [
 def layout():
     radars = radar_ids(load_config())
     return html.Div([
-        html.H2("Storm Tracker"),
+        html.Div([
+            html.H2("Storm Tracker", style={"display": "inline-block"}),
+            html.Button("⤓ Impact areas (GeoJSON)", id="storm-geojson-btn",
+                        className="btn btn-primary",
+                        style={"float": "right", "marginTop": "6px"}),
+            html.Div(id="storm-geojson-status", className="muted",
+                     style={"clear": "both"}),
+            dcc.Download(id="storm-geojson-download"),
+        ]),
         html.Div([
             html.Div([
                 html.H4("Collector"),
@@ -189,6 +197,12 @@ def register_callbacks(app):
             view["speed_kmh"] = view["speed_kmh"].round(0)
             view["bearing"] = view["bearing_deg"].map(
                 lambda b: bearing_to_cardinal(b) if pd.notna(b) else "—")
+            if "latitude" in view.columns:
+                view["position"] = view.apply(
+                    lambda r: (f"{r['latitude']:.3f}, {r['longitude']:.3f}"
+                               if pd.notna(r.get("latitude")) else "—"), axis=1)
+            else:
+                view["position"] = "—"
             table_data = view[[c for c, _ in CELL_COLUMNS]].to_dict("records")
         cell_columns = [{"name": name, "id": col} for col, name in CELL_COLUMNS]
 
@@ -200,3 +214,19 @@ def register_callbacks(app):
         trend = _trend_figure(storm_data.cell_history(), dark)
         return (summary, kpis, table_data, cell_columns, *style_out,
                 alert_data, alert_columns, trend)
+
+    @app.callback(
+        Output("storm-geojson-download", "data"),
+        Output("storm-geojson-status", "children"),
+        Input("storm-geojson-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def download_geojson(_):
+        import json as _json
+        from datetime import datetime as _dt
+        fc = storm_data.impact_featurecollection()
+        n = len(fc["features"])
+        if not n:
+            return None, "No moderate/strong cells with impact areas right now."
+        filename = f"storm_impact_areas_{_dt.now():%Y%m%d_%H%M}.geojson"
+        return (dcc.send_string(_json.dumps(fc, indent=2), filename),
+                f"✅ Exported {n} impact area(s).")

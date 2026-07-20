@@ -77,6 +77,10 @@ DEFAULTS = {
         "radar_ids": ["IDR023", "IDR313"],
         "interval_minutes": 5,
         "autostart": True,
+        # Site coords for radars beyond the built-ins (app/modules/storm/
+        # scraper.py RADAR_SITES), keyed by IDRxx prefix: {"IDR68": [lat, lon]}.
+        # Needed to georeference cells / impact polygons for that radar.
+        "radar_sites": {},
     },
     "power": {
         "interval_seconds": 60,

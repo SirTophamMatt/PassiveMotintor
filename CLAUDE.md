@@ -278,9 +278,22 @@ warning-level lines, colour-matched to the map kinds.
   moderate+ cells, strong cells clearing; weak never notifies), `/health`
   `storm_running`/`storm_last_heartbeat`/`storm_last_error`, Overview "Storm Cells (strong)"
   KPI + collector line, Admin start/stop/autostart panel. Deps: `opencv-python-headless`.
-- Not done: px→lat/lon georeference (radar site coords + km/px would put cells on the fire/
-  unified map and enable cross-layer correlation), multi-radar, palette tuning against a live
-  storm, storm cells in export/PDF.
+- **Amalgamation + impact areas (added 2026-07-21):** echo fragments within ~2×`CLUSTER_GAP_PX`
+  (6 px = 6 km at 128 km zoom) are morphologically CLOSEd into one cell before contouring —
+  a ragged band reads as a handful of cells, not dozens (live Albany: 13 → 5). Cell area is
+  the REAL echo pixel count, not the merged hull. Annotation decluttered: weak = thin outline
+  only; moderate/strong get the full product — fitted ellipse swept along the motion vector,
+  hulled into a translucent **impact-area polygon** (BoM-tracker ellipse × NWS warning-polygon
+  hybrid), dashed projected ellipse at +30 min, one compact label.
+- **Georeferencing + GeoJSON export:** `RADAR_SITES` (scraper) maps IDRxx prefix → site
+  lat/lon (Melbourne, Albany built in; extend via config `storm.radar_sites`);
+  `px_to_latlon` is an equirectangular approx around the site. `storm_cells` gains
+  latitude/longitude + `impact_geojson` (a full GeoJSON Feature per moderate/strong cell,
+  lon/lat ring, properties incl. speed/bearing/valid_from; `_ensure_column` migrates old
+  DBs). `/storm` "Impact areas (GeoJSON)" button downloads the active FeatureCollection —
+  loads straight into geojson.io / QGIS / EM-COP.
+- Not done: palette tuning against a live *severe* storm, storm cells on the fire/unified
+  map (lat/lons now exist), storm cells in export/PDF, impact-area history playback.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
