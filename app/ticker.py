@@ -35,6 +35,12 @@ LOG_ROWS = 14
 _EMERGENCY_LEVELS = {"emergency warning", "evacuate", "evacuation"}
 _SEWS_TEXT = "standard emergency warning signal"
 
+# IDs of incidents already shown in the sidebar log. Any id not in here on a
+# later refresh is genuinely NEW and gets the slot-in animation exactly once.
+# None until the first render, so the existing backlog on boot does NOT all
+# animate at once — it just seeds the set silently.
+_seen_incident_ids = None
+
 
 def _parse_ts(value):
     try:
@@ -52,17 +58,36 @@ def _hhmm(dt):
 # --------------------------------------------------------------------------
 
 def incident_log():
-    """Latest VicEmergency incidents (not warnings/burn areas), newest first."""
+    """Latest VicEmergency incidents (not warnings/burn areas), newest first.
+
+    Each row is keyed by its feed id so React keeps the same DOM element for it
+    across the 20 s refreshes; a row whose id we have not shown before also gets
+    the ``side-log-new`` class, which triggers the CSS slot-in animation once."""
+    global _seen_incident_ids
     df = database.read_df(
-        "SELECT category1, location, status, first_seen FROM fire_incidents "
-        "WHERE feed_type NOT IN ('warning', 'burn-area') "
+        "SELECT source_id, category1, location, status, first_seen "
+        "FROM fire_incidents WHERE feed_type NOT IN ('warning', 'burn-area') "
         "ORDER BY first_seen DESC, id DESC LIMIT ?", [LOG_ROWS])
     if df.empty:
         return [html.Div("No incidents yet.", className="side-log-empty")]
+
+    def ident(r):
+        sid = r.get("source_id")
+        return str(sid) if sid not in (None, "") else \
+            f"{r.get('first_seen')}|{r.get('location')}|{r.get('category1')}"
+
+    current = {ident(r): r for _, r in df.iterrows()}
+    if _seen_incident_ids is None:
+        new_ids = set()  # first render: seed silently, don't animate the backlog
+    else:
+        new_ids = set(current) - _seen_incident_ids
+    _seen_incident_ids = set(current)
+
     rows = []
-    for _, r in df.iterrows():
+    for key, r in current.items():
         _, colour = fire_data.classify(None, r.get("category1"))
         ts = _parse_ts(r.get("first_seen"))
+        cls = "side-log-row side-log-new" if key in new_ids else "side-log-row"
         rows.append(html.Div([
             html.Span("●", className="side-log-dot", style={"color": colour}),
             html.Span(_hhmm(ts), className="side-log-time"),
@@ -71,7 +96,7 @@ def incident_log():
                       className="side-log-text",
                       title=f"{r.get('category1')} — {r.get('location')} "
                             f"({r.get('status') or 'active'})"),
-        ], className="side-log-row"))
+        ], className=cls, key=key))
     return rows
 
 

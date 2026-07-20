@@ -315,7 +315,12 @@ warning-level lines, colour-matched to the map kinds.
   `live-tick` interval drives both. STATELESS: everything derives from stored feed
   timestamps, so restarts neither re-fire old items nor drop active ones.
 - **Sidebar log** (below the nav): last 14 VicEmergency *incidents* (not warnings/burn
-  areas) newest-first — kind-coloured dot, HH:MM first_seen, category, location.
+  areas) newest-first — kind-coloured dot, HH:MM first_seen, category, location. Each row is
+  React-keyed by its feed id; `incident_log` tracks shown ids in `_seen_incident_ids` and
+  tags only genuinely-new rows with `side-log-new`, which triggers the CSS `feed-slot-in`
+  animation (grows from height 0 at the top pushing the rest down, slides in from above with a
+  fading accent glow) exactly once. Boot backlog seeds the set silently (no mass-animate);
+  honours prefers-reduced-motion.
 - **News ticker** (fixed bottom bar, CSS marquee, `.content` gets bottom padding):
   timestamped NEW triggers — new BoM warnings, new VicEmergency community warnings, and
   flood gauges CROSSING into flood (crossing reading's own obs time is the stamp; a gauge

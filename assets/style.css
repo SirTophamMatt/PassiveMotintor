@@ -263,6 +263,39 @@ label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
 .side-log-time { color: var(--muted); font-family: Consolas, monospace; }
 .side-log-empty { font-size: 11px; color: var(--muted); }
 
+/* A newly-arrived incident slots in at the top: it grows from height 0 (which
+   pushes the rows below it smoothly down), slides down from just above, and
+   flashes a fading accent glow so it catches the eye. Only rows the server
+   tagged .side-log-new animate, so the list is calm between arrivals. */
+.side-log-new {
+    animation: feed-slot-in 0.6s ease-out;
+}
+@keyframes feed-slot-in {
+    0% {
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-10px);
+        padding-top: 0;
+        padding-bottom: 0;
+        background: rgba(78, 161, 255, 0.30);
+    }
+    55% {
+        max-height: 48px;
+        opacity: 1;
+        transform: translateY(0);
+        background: rgba(78, 161, 255, 0.22);
+    }
+    100% {
+        max-height: 48px;
+        opacity: 1;
+        transform: translateY(0);
+        background: transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .side-log-new { animation: none; }
+}
+
 /* ---- bottom news ticker ---- */
 .content { padding-bottom: 60px; }  /* keep page bottom clear of the ticker */
 .ticker {
