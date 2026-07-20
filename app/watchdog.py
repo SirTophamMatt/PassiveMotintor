@@ -42,7 +42,7 @@ class Supervisor(threading.Thread):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
         self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
-                          "rainfall": []}
+                          "rainfall": [], "storm": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -50,12 +50,15 @@ class Supervisor(threading.Thread):
         self._first_fire_check = True
         self._warnings = {}                # warning_id -> (priority, label)
         self._first_weather_check = True
+        self._storm_cells = {}             # cell_id -> (priority, label)
+        self._first_storm_check = True
         self._last_errors = {"flood": None, "power": None, "fire": None,
-                             "weather": None, "rainfall": None}
+                             "weather": None, "rainfall": None, "storm": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
-                      "rainfall_restarts": 0, "last_action": None}
+                      "rainfall_restarts": 0, "storm_restarts": 0,
+                      "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -149,9 +152,16 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_rainfall()
                 self._record_restart("rainfall", reason, msg)
 
+        if manager.storm_wanted(cfg):
+            reason = self._stall_reason(status["storm"],
+                                        max(1, cfg["storm"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("storm"):
+                ok, msg = manager.restart_storm()
+                self._record_restart("storm", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
-        for which in ("flood", "power", "fire", "weather", "rainfall"):
+        for which in ("flood", "power", "fire", "weather", "rainfall", "storm"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")
@@ -164,6 +174,7 @@ class Supervisor(threading.Thread):
         self._check_flood_alert(cfg)
         self._check_fire_alert(cfg)
         self._check_weather_alert(cfg)
+        self._check_storm_alert(cfg)
 
     def _check_power_alert(self, cfg):
         from app.modules.power import data as power_data
@@ -324,6 +335,60 @@ class Supervisor(threading.Thread):
                             kind="weather_alert", cfg=cfg)
         self._warnings = current
         self._first_weather_check = False
+
+    def _check_storm_alert(self, cfg):
+        """Radar storm cells: notify when a cell first reaches (or escalates
+        to) moderate/strong, and when strong cells clear — change-only, like
+        the other alert kinds. Weak cells never notify."""
+        import pandas as pd
+
+        from app.modules.storm import data as storm_data
+        from app.modules.storm.tracker import bearing_to_cardinal
+        df = storm_data.active_cells()
+        current = {}
+        for _, row in df.iterrows():
+            cls = str(row.get("classification") or "")
+            if cls not in ("strong", "moderate"):
+                continue
+            priority, _ = storm_data.classify(cls)
+            movement = ""
+            if pd.notna(row.get("speed_kmh")) and pd.notna(row.get("bearing_deg")):
+                movement = (f", {bearing_to_cardinal(row.get('bearing_deg'))} "
+                            f"{row['speed_kmh']:.0f} km/h")
+            label = (f"{cls.upper()} cell {row['cell_id']} "
+                     f"(score {row['intensity_score']:.0f}, "
+                     f"~{row['area_km2']:.0f} km²{movement})")
+            current[row["cell_id"]] = (priority, label)
+
+        if self._first_storm_check:
+            if any(p == 1 for p, _ in current.values()):
+                strong = [lbl for p, lbl in sorted(current.values()) if p == 1]
+                notify.send(f"Monitor started — {len(strong)} STRONG radar "
+                            f"cell(s) active: " + "; ".join(strong[:5]),
+                            kind="storm_alert", cfg=cfg)
+        else:
+            escalated = [
+                label for cid, (priority, label)
+                in sorted(current.items(), key=lambda kv: kv[1])
+                if cid not in self._storm_cells
+                or priority < self._storm_cells[cid][0]
+            ]
+            cleared_strong = [
+                self._storm_cells[cid][1] for cid, (p, _) in self._storm_cells.items()
+                if p == 1 and cid not in current
+            ]
+            if escalated:
+                notify.send("⛈ New/intensifying storm cell — "
+                            + "; ".join(escalated[:6])
+                            + (f" (+{len(escalated) - 6} more)"
+                               if len(escalated) > 6 else ""),
+                            kind="storm_alert", cfg=cfg)
+            if cleared_strong:
+                notify.send(f"✅ Strong storm cell(s) no longer tracked "
+                            f"({len(cleared_strong)}).",
+                            kind="storm_alert", cfg=cfg)
+        self._storm_cells = current
+        self._first_storm_check = False
 
 
 supervisor = Supervisor()

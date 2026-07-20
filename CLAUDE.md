@@ -239,6 +239,44 @@ warning-level lines, colour-matched to the map kinds.
   (`app/export.py`, Admin Rainfall checkbox) adds **Rainfall Event Totals** (reset-proof) + **AWS
   Rainfall Readings** sheets.
 
+## Storm tracker module (built 2026-07-21)
+- **Ported from the standalone `../../storm Tracker` project**, reworked: NO Selenium. BoM
+  publishes each radar frame as a transparent echo-only PNG at a deterministic URL
+  (`reg.bom.gov.au/radar/{radar_id}.T.{YYYYMMDDHHMM}.png`, ~5-min cadence); the scraper
+  probes the last 16 minute-stamps (skipping ones already in `storm_frames` — de-dup on the
+  frame's OWN BoM timestamp, fixing the old fetch-time duplicate-frame bug) and processes new
+  ones. Static map underlay (`/products/radar_transparencies/{radar_id}.{background,topography,
+  locations}.png`) fetched once per radar, cached in memory.
+- **CV pipeline** (`app/modules/storm/processing.py`): pixels matched to the standard 15-level
+  BoM rain-rate palette (±30/channel; rain-free frames arrive as grayscale+alpha so
+  `decode_frame` normalises every channel layout) — the old terrain/ocean/legend exclusion
+  heuristics are gone because the echo layer has nothing else on it. Contours ≥90 px with
+  fill-ratio ≥0.12 become cells; score = mean level ×4 + max level ×2.5 + capped area term;
+  strong = level ≥12 (red), moderate = ≥8 (yellow). Palette bands NOT yet verified against a
+  real storm (built on a rain-free day) — tune `PALETTE_TOLERANCE`/thresholds when one hits.
+- **Tracking** (`tracker.py`): globally-nearest matching (not first-come greedy), cells coast
+  3 missed frames before dropping (old code re-identified a cell after 1 miss), speed in real
+  km/h from frame timestamps × km/px (radar id's last digit encodes zoom: …1=512 km range,
+  2=256, 3=128, 4=64; frames 512 px), heading as compass bearing with circular-mean smoothing.
+- **Storage:** `storm_frames` (processed-frame de-dup), `storm_cells` (one row per cell per
+  frame), `storm_alerts` (change-only: first moderate/strong or escalation — never one row
+  per frame a cell persists), `storm_timeseries` (per-cycle KPIs + heartbeat). Annotated
+  composite frames (underlay + echoes + contours/tails/arrows/+30 min dashed prediction) go to
+  `{BASE_DIR}/storm_frames/annotated_{radar}_{stamp}.png`, last 24 kept, gitignored.
+- **Page `/storm`:** radar loop animated CLIENT-side (30 s server callback fills a
+  `dcc.Store` with the frame list; a clientside callback cycles the `<img>` src at 650 ms with
+  a hold on the newest frame — no server round-trip per animation tick). Frames served by a
+  Flask route (`/storm-frames/<file>`, filename-regex-guarded). Plus active-cells table
+  (speed/bearing as cardinal), alert log, per-cell intensity trend.
+- **Wiring:** always-on collector (`storm.interval_minutes`=5, `storm.radar_id`=IDR023,
+  autostart), watchdog supervision + change-only `storm_alert` webhooks (new/intensifying
+  moderate+ cells, strong cells clearing; weak never notifies), `/health`
+  `storm_running`/`storm_last_heartbeat`/`storm_last_error`, Overview "Storm Cells (strong)"
+  KPI + collector line, Admin start/stop/autostart panel. Deps: `opencv-python-headless`.
+- Not done: px→lat/lon georeference (radar site coords + km/px would put cells on the fire/
+  unified map and enable cross-layer correlation), multi-radar, palette tuning against a live
+  storm, storm cells in export/PDF.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·

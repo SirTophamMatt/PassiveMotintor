@@ -68,6 +68,14 @@ DEFAULTS = {
         "interval_minutes": 15,
         "autostart": True,
     },
+    "storm": {
+        # BoM radar storm-cell tracker. radar_id is a BoM product id whose
+        # last digit encodes zoom (…1=512 km, 2=256, 3=128, 4=64); frames are
+        # published ~every 5 min, so 5-min polling catches each new frame.
+        "radar_id": "IDR023",
+        "interval_minutes": 5,
+        "autostart": True,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,
@@ -100,6 +108,7 @@ DEFAULTS = {
         "on_flood_alert": True,
         "on_fire_alert": True,
         "on_weather_alert": True,
+        "on_storm_alert": True,
         "on_watchdog": True,
         # Master pause: when true, suppress ALL notifications (the admin test
         # button still works — it uses force=True). Toggled from the Admin page.

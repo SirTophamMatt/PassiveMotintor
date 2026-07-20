@@ -267,6 +267,65 @@ CREATE TABLE IF NOT EXISTS fire_timeseries (
 );
 CREATE INDEX IF NOT EXISTS idx_fire_ts_time ON fire_timeseries (timestamp);
 
+-- Radar frames processed by the storm tracker, de-duped on the frame's OWN
+-- BoM timestamp so re-polling never double-processes an unchanged image
+-- (the standalone project's fetch-time naming produced duplicate frames).
+CREATE TABLE IF NOT EXISTS storm_frames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    radar_id TEXT NOT NULL,
+    frame_ts TEXT NOT NULL,      -- radar observation time (local)
+    fetched_at TEXT,
+    cells_detected INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_storm_frames_unique
+    ON storm_frames (radar_id, frame_ts);
+
+-- One row per tracked cell per frame: position (image px), size (km²),
+-- palette levels seen, score/classification, and smoothed motion (real km/h
+-- + compass bearing from the frames' own timestamps and the radar km/px scale).
+CREATE TABLE IF NOT EXISTS storm_cells (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cell_id TEXT NOT NULL,
+    radar_id TEXT,
+    frame_ts TEXT NOT NULL,
+    centroid_x REAL,
+    centroid_y REAL,
+    area_km2 REAL,
+    max_level INTEGER,
+    mean_level REAL,
+    intensity_score REAL,
+    classification TEXT,         -- strong / moderate / weak
+    speed_kmh REAL,
+    bearing_deg REAL,
+    status TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_storm_cells_ts ON storm_cells (frame_ts);
+CREATE INDEX IF NOT EXISTS idx_storm_cells_cell ON storm_cells (cell_id);
+
+-- Change-only alert log: a cell reaching moderate/strong for the first time
+-- or escalating writes ONE row (never one per frame it persists).
+CREATE TABLE IF NOT EXISTS storm_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    cell_id TEXT,
+    alert_type TEXT,             -- new_cell / escalation
+    classification TEXT,
+    message TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_storm_alerts_time ON storm_alerts (timestamp);
+
+-- One row per storm collection cycle: KPI counts + continuity heartbeat.
+CREATE TABLE IF NOT EXISTS storm_timeseries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    frames_processed INTEGER,
+    active_cells INTEGER,
+    strong_cells INTEGER,
+    moderate_cells INTEGER,
+    max_intensity REAL
+);
+CREATE INDEX IF NOT EXISTS idx_storm_ts_time ON storm_timeseries (timestamp);
+
 -- Event tags: named date ranges applied over the always-on data stream. An
 -- event is no longer a collection-time label but a (name, start, end) window
 -- used to slice flood + power data for viewing and export. NULL end = ongoing.

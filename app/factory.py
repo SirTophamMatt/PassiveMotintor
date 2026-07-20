@@ -13,7 +13,8 @@ DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page, fire, flood,
-                       importer_page, overview, power, settings, station, weather)
+                       importer_page, overview, power, settings, station,
+                       storm as storm_page, weather)
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ PUBLIC_PAGES = [
     ("/flood", "Flood Monitor", flood),
     ("/fire", "Fire / Incidents", fire),
     ("/weather", "Weather Warnings", weather),
+    ("/storm", "Storm Tracker", storm_page),
     ("/power", "Power Outages", power),
 ]
 ADMIN_PAGES = [
@@ -135,9 +137,11 @@ def _register_health(app):
         status = manager.status()
         _, last_hb = flood_data.heartbeat_summary()
         from app.modules.fire import data as fire_data
+        from app.modules.storm import data as storm_data
         from app.modules.weather import data as weather_data
         _, fire_last_hb = fire_data.heartbeat_summary()
         _, weather_last_hb = weather_data.heartbeat_summary()
+        _, storm_last_hb = storm_data.heartbeat_summary()
         payload = {
             "status": "ok" if db_ok else "error",
             "db_ok": db_ok,
@@ -146,13 +150,16 @@ def _register_health(app):
             "fire_running": status["fire"]["running"],
             "weather_running": status["weather"]["running"],
             "rainfall_running": status["rainfall"]["running"],
+            "storm_running": status["storm"]["running"],
             "flood_last_heartbeat": last_hb,
             "fire_last_heartbeat": fire_last_hb,
             "weather_last_heartbeat": weather_last_hb,
+            "storm_last_heartbeat": storm_last_hb,
             "flood_last_error": status["flood"].get("last_error"),
             "power_last_error": status["power"].get("last_error"),
             "fire_last_error": status["fire"].get("last_error"),
             "weather_last_error": status["weather"].get("last_error"),
+            "storm_last_error": status["storm"].get("last_error"),
         }
         try:
             from app.watchdog import supervisor

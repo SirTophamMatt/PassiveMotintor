@@ -64,6 +64,7 @@ def _panel():
     fire_auto = cfg["fire"].get("autostart", True)
     weather_auto = cfg["weather"].get("autostart", True)
     rainfall_auto = cfg["rainfall"].get("autostart", True)
+    storm_auto = cfg["storm"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -127,6 +128,21 @@ def _panel():
                          "Public, no credentials.", className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-rainfall-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Storm tracking (BoM radar)"),
+                html.Button("Start", id="admin-storm-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-storm-stop", className="btn"),
+                dcc.Checklist(
+                    id="admin-storm-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if storm_auto else [], style={"marginTop": "8px"}),
+                html.Div(f"Radar {cfg['storm'].get('radar_id', 'IDR023')} echo "
+                         "frames, ~5 min cadence. Public, no credentials.",
+                         className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-storm-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -386,6 +402,26 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-storm-status", "children"),
+        Input("admin-storm-start", "n_clicks"),
+        Input("admin-storm-stop", "n_clicks"),
+        State("admin-storm-autostart", "value"),
+        prevent_initial_call=True)
+    def storm_control(_s, _t, autostart):
+        if not _s and not _t:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        cfg = load_config()
+        cfg["storm"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-storm-start":
+            _, msg = manager.start_storm()
+        else:
+            _, msg = manager.stop_storm()
+        return msg
+
+    @app.callback(
         Output("admin-power-status", "children"),
         Input("admin-power-start", "n_clicks"),
         Input("admin-power-stop", "n_clicks"),
@@ -440,7 +476,8 @@ def register_callbacks(app):
         return html.Div([html.H4("Collector status"),
                          line("Flood", s["flood"]), line("Fire", s["fire"]),
                          line("Weather", s["weather"]),
-                         line("Rainfall", s["rainfall"]), line("Power", s["power"]),
+                         line("Rainfall", s["rainfall"]), line("Storm", s["storm"]),
+                         line("Power", s["power"]),
                          html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #

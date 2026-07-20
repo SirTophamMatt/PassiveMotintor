@@ -14,6 +14,7 @@ from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
 from app.modules.power.scraper import PowerScraper
+from app.modules.storm import scraper as storm_scraper
 from app.modules.weather import aws as aws_rainfall
 from app.modules.weather import scraper as weather_scraper
 
@@ -66,6 +67,7 @@ class CollectorManager:
         self._fire = None
         self._weather = None
         self._rainfall = None
+        self._storm = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
@@ -74,6 +76,7 @@ class CollectorManager:
         self._fire_desired = None
         self._weather_desired = None
         self._rainfall_desired = None
+        self._storm_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -195,6 +198,33 @@ class CollectorManager:
             log.exception("Manual rainfall fetch failed")
             return False, f"Rainfall fetch failed: {e}"
 
+    # --- storm (BoM radar cell tracker) ---------------------------------------
+    def start_storm(self):
+        """Start always-on BoM radar storm-cell tracking."""
+        with self._lock:
+            self._storm_desired = True
+            if self._storm and self._storm.is_alive():
+                return False, "Storm tracking is already running."
+            cfg = load_config()
+            interval = max(1, cfg["storm"]["interval_minutes"]) * 60
+            self._storm = _Collector(
+                "storm-collector", interval, storm_scraper.fetch_storm_data)
+            self._storm.start()
+            return True, "Storm tracking started."
+
+    def stop_storm(self):
+        with self._lock:
+            self._storm_desired = False
+            if self._storm:
+                self._storm.stop()
+                self._storm = None
+            return True, "Storm tracking stopped."
+
+    def restart_storm(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_storm()
+        return self.start_storm()
+
     # --- power ---------------------------------------------------------------
     def start_power(self):
         with self._lock:
@@ -258,6 +288,11 @@ class CollectorManager:
             return self._rainfall_desired
         return cfg["rainfall"].get("autostart", True)
 
+    def storm_wanted(self, cfg):
+        if self._storm_desired is not None:
+            return self._storm_desired
+        return cfg["storm"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -288,6 +323,12 @@ class CollectorManager:
                 log.info("Autostart rainfall: %s", msg)
             except Exception:
                 log.exception("Autostart rainfall failed")
+        if cfg["storm"].get("autostart", True):
+            try:
+                ok, msg = self.start_storm()
+                log.info("Autostart storm: %s", msg)
+            except Exception:
+                log.exception("Autostart storm failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -321,6 +362,10 @@ class CollectorManager:
             "rainfall": {
                 "running": self._rainfall is not None and self._rainfall.is_alive(),
                 **(self._rainfall.status if self._rainfall else {}),
+            },
+            "storm": {
+                "running": self._storm is not None and self._storm.is_alive(),
+                **(self._storm.status if self._storm else {}),
             },
         }
 

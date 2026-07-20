@@ -15,5 +15,9 @@ waitress
 # assembles the PDF (pure Python, no system libraries).
 kaleido==0.2.1
 reportlab>=4.0
+# Storm tracker: OpenCV (headless — no GUI libs needed in Docker) for radar
+# echo detection + annotation; numpy comes with it but is used directly too.
+opencv-python-headless>=4.8,<5
+numpy>=1.24
 # werkzeug ships with dash/flask; pinned here as it backs the admin password hash.
 werkzeug>=2.0
