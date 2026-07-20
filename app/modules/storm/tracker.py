@@ -7,10 +7,13 @@ Ported from the standalone "storm Tracker" with the gaps fixed:
 - a cell missed in one frame is kept ("coasting") for MISS_LIMIT frames before
   being dropped, so a momentary detection dropout no longer re-identifies a
   storm under a new id;
-- speed uses the real time between the frames' own BoM timestamps and the
-  radar's km/px scale, giving km/h instead of "pixels per poll";
-- heading is a compass bearing (0 = N, clockwise), smoothed with a circular
-  mean over the recent history.
+- speed/heading come from a LEAST-SQUARES velocity fit over the whole recent
+  track (timestamped positions), not from per-frame hops. At radar cadence a
+  storm only moves a few px per frame, so a hop bearing is dominated by
+  centroid noise; a fit over ~30 min of positions divides that noise by the
+  baseline. Heading is a compass bearing (0 = N, clockwise) and is reported
+  only when the fitted speed clears MIN_REPORT_KMH — a quasi-stationary
+  cell's "direction" is pure noise.
 """
 import math
 import uuid
@@ -21,21 +24,6 @@ def _distance(x1, y1, x2, y2):
     return math.hypot(x2 - x1, y2 - y1)
 
 
-def _bearing(x1, y1, x2, y2):
-    """Compass bearing of movement in image space (y grows downward)."""
-    return (math.degrees(math.atan2(x2 - x1, -(y2 - y1)))) % 360
-
-
-def _circular_mean(angles):
-    if not angles:
-        return None
-    s = sum(math.sin(math.radians(a)) for a in angles)
-    c = sum(math.cos(math.radians(a)) for a in angles)
-    if s == 0 and c == 0:
-        return None
-    return math.degrees(math.atan2(s, c)) % 360
-
-
 def bearing_to_cardinal(bearing):
     if bearing is None:
         return ""
@@ -43,13 +31,37 @@ def bearing_to_cardinal(bearing):
     return points[int((bearing + 22.5) // 45) % 8]
 
 
+def _fit_velocity(history):
+    """Least-squares (vx, vy) in px/hour over the track history — one straight
+    line through every timestamped position. Needs >= 2 points spread in time."""
+    if len(history) < 2:
+        return None
+    t0 = history[0]["t"]
+    ts = [(h["t"] - t0) / 3600.0 for h in history]
+    xs = [h["x"] for h in history]
+    ys = [h["y"] for h in history]
+    n = len(ts)
+    tm, xm, ym = sum(ts) / n, sum(xs) / n, sum(ys) / n
+    denom = sum((t - tm) ** 2 for t in ts)
+    if denom == 0:
+        return None
+    vx = sum((t - tm) * (x - xm) for t, x in zip(ts, xs)) / denom
+    vy = sum((t - tm) * (y - ym) for t, y in zip(ts, ys)) / denom
+    return vx, vy
+
+
 class CellTracker:
     MISS_LIMIT = 3       # frames a cell may go undetected before it is dropped
-    MAX_SPEED_KMH = 160  # displacement above this is a mismatch artefact, not
-                         # storm motion — the sample is rejected so it can't
-                         # pollute the smoothed speed/bearing
+    MAX_SPEED_KMH = 160  # a jump implying more than this is a mismatch
+                         # artefact — the position sample is discarded so it
+                         # cannot bend the fitted track
+    MIN_REPORT_KMH = 5   # below this the fitted direction is noise: report
+                         # the speed but no bearing
 
-    def __init__(self, max_match_distance_px=45, history_length=5):
+    # 8 frames ≈ 40 min of positions: at typical cell speeds this cuts the
+    # fitted-bearing error to ~3-5° under realistic centroid noise (vs ~15°
+    # for per-hop bearings), at the cost of ~40 min lag on a genuine turn.
+    def __init__(self, max_match_distance_px=45, history_length=8):
         self.max_match_distance_px = max_match_distance_px
         self.history_length = history_length
         self.cells = {}  # cell_id -> {x, y, area_px, last_ts, misses, history}
@@ -61,11 +73,24 @@ class CellTracker:
         area = max(cell.get("area_px") or 0, det.get("area_px") or 0)
         return max(self.max_match_distance_px, 0.6 * math.sqrt(area))
 
+    def _motion(self, history, km_per_px):
+        """(speed_kmh, bearing_deg) from the fitted velocity; bearing is None
+        when the cell is effectively stationary."""
+        v = _fit_velocity(history)
+        if v is None:
+            return None, None
+        vx, vy = v
+        speed = math.hypot(vx, vy) * km_per_px
+        if speed < self.MIN_REPORT_KMH:
+            return speed, None
+        bearing = (math.degrees(math.atan2(vx, -vy))) % 360
+        return speed, bearing
+
     def update(self, detections, frame_ts, km_per_px):
         """Match ``detections`` (from processing.detect_cells) against known
         cells. ``frame_ts`` is the frame's own observation datetime. Returns
         the tracked-cell dicts for this frame (detections enriched with id,
-        smoothed speed/bearing and track points)."""
+        fitted speed/bearing and track points)."""
         # Globally-nearest matching: consider every (cell, detection) pair
         # within range, closest first, each side used at most once.
         pairs = []
@@ -86,43 +111,34 @@ class CellTracker:
             matched_cells.add(cell_id)
             matched_dets.add(i)
 
+        t_sec = frame_ts.timestamp()
         tracked = []
         for i, d in enumerate(detections):
             cell_id = assignment.get(i)
+            point = {"t": t_sec, "x": d["centroid_x"], "y": d["centroid_y"]}
             if cell_id is None:
                 cell_id = f"CELL-{uuid.uuid4().hex[:6].upper()}"
-                history = deque(maxlen=self.history_length)
+                history = deque([point], maxlen=self.history_length)
                 speed = bearing = None
                 status = "new"
             else:
                 cell = self.cells[cell_id]
                 history = cell["history"]
-                dt_hours = max((frame_ts - cell["last_ts"]).total_seconds(),
-                               1.0) / 3600.0
-                dist_km = _distance(cell["x"], cell["y"], d["centroid_x"],
-                                    d["centroid_y"]) * km_per_px
-                raw_speed = dist_km / dt_hours
-                if raw_speed > self.MAX_SPEED_KMH:
-                    # Implausible jump (merge/split or mismatch): keep the
-                    # position but contribute nothing to the motion estimate.
-                    history.append({"x": d["centroid_x"], "y": d["centroid_y"],
-                                    "speed": None, "bearing": None})
+                last = history[-1] if history else None
+                if last is not None:
+                    dt_hours = max(t_sec - last["t"], 1.0) / 3600.0
+                    jump_kmh = (_distance(last["x"], last["y"],
+                                          point["x"], point["y"])
+                                * km_per_px / dt_hours)
+                    if jump_kmh <= self.MAX_SPEED_KMH:
+                        history.append(point)
+                    # else: implausible jump — drop the sample entirely so it
+                    # cannot bend the fitted track (the cell's match position
+                    # below still updates, so tracking continues).
                 else:
-                    history.append({
-                        "x": d["centroid_x"], "y": d["centroid_y"],
-                        "speed": raw_speed,
-                        "bearing": _bearing(cell["x"], cell["y"],
-                                            d["centroid_x"], d["centroid_y"]),
-                    })
-                speeds = [h["speed"] for h in history if h["speed"] is not None]
-                bearings = [h["bearing"] for h in history
-                            if h["bearing"] is not None]
-                speed = sum(speeds) / len(speeds) if speeds else None
-                bearing = _circular_mean(bearings)
+                    history.append(point)
+                speed, bearing = self._motion(history, km_per_px)
                 status = "active"
-            if not history or status == "new":
-                history.append({"x": d["centroid_x"], "y": d["centroid_y"],
-                                "speed": None, "bearing": None})
 
             self.cells[cell_id] = {
                 "x": d["centroid_x"], "y": d["centroid_y"],
