@@ -24,7 +24,7 @@ PUBLIC_PAGES = [
     ("/flood", "Flood Monitor", flood),
     ("/fire", "Fire / Incidents", fire),
     ("/weather", "Weather Warnings", weather),
-    ("/storm", "Storm Tracker", storm_page),
+    ("/storm", "Storm Tracker (Alpha)", storm_page),
     ("/power", "Power Outages", power),
 ]
 ADMIN_PAGES = [

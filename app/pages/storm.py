@@ -39,7 +39,7 @@ def layout():
     radars = radar_ids(load_config())
     return html.Div([
         html.Div([
-            html.H2("Storm Tracker", style={"display": "inline-block"}),
+            html.H2("Storm Tracker (Alpha)", style={"display": "inline-block"}),
             html.Button("⤓ Impact areas (GeoJSON)", id="storm-geojson-btn",
                         className="btn btn-primary",
                         style={"float": "right", "marginTop": "6px"}),

@@ -38,7 +38,7 @@ LAYER_URL = ("https://reg.bom.gov.au/products/radar_transparencies/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 PROBE_WINDOW_MINUTES = 16   # how far back each cycle looks for new frames
-KEEP_ANNOTATED_FRAMES = 24  # loop length kept on disk (~2 hours of frames)
+KEEP_ANNOTATED_FRAMES = 50  # loop length kept on disk (~4 hours of frames)
 
 # Approximate WGS84 radar site coordinates by product prefix (IDRxx). Used to
 # georeference cell centroids and impact polygons; extend via config
