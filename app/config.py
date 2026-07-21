@@ -82,6 +82,26 @@ DEFAULTS = {
         # Needed to georeference cells / impact polygons for that radar.
         "radar_sites": {},
     },
+    "roads": {
+        # VicRoads / Transport Victoria "Unplanned Disruptions - Road" API
+        # (GeoJSON, DoT + council roads). Unlike the fire/BoM feeds this one
+        # needs a free API key: request it via the Data Exchange Platform
+        # (https://data-exchange.vicroads.vic.gov.au/) then set feed_url + api_key
+        # here (or on the Settings page). Until BOTH are set the collector
+        # log-and-skips — nothing crashes on a fresh deploy.
+        #   feed_url: the v3 "Unplanned Disruptions - Road" endpoint (default below)
+        #   api_key : sent in the "KeyId" request header
+        "feed_url": ("https://api.opendata.transport.vic.gov.au"
+                     "/api/opendata/roads/disruptions/unplanned/v3"),
+        "api_key": "",
+        "interval_minutes": 3,
+        "autostart": True,
+        # Server-side paging (API params 'page'/'limit'). page_limit 0 = use the
+        # API default page size (100) and follow meta.total_pages; set a positive
+        # value to force a page size. max_pages caps the paging loop.
+        "page_limit": 0,
+        "max_pages": 20,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,
@@ -115,6 +135,7 @@ DEFAULTS = {
         "on_fire_alert": True,
         "on_weather_alert": True,
         "on_storm_alert": True,
+        "on_roads_alert": True,
         "on_watchdog": True,
         # Master pause: when true, suppress ALL notifications (the admin test
         # button still works — it uses force=True). Toggled from the Admin page.

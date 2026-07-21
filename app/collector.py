@@ -14,6 +14,7 @@ from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
 from app.modules.power.scraper import PowerScraper
+from app.modules.roads import scraper as roads_scraper
 from app.modules.storm import scraper as storm_scraper
 from app.modules.weather import aws as aws_rainfall
 from app.modules.weather import scraper as weather_scraper
@@ -68,6 +69,7 @@ class CollectorManager:
         self._weather = None
         self._rainfall = None
         self._storm = None
+        self._roads = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
@@ -77,6 +79,7 @@ class CollectorManager:
         self._weather_desired = None
         self._rainfall_desired = None
         self._storm_desired = None
+        self._roads_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -225,6 +228,34 @@ class CollectorManager:
         self.stop_storm()
         return self.start_storm()
 
+    # --- roads (VicRoads disruptions) ----------------------------------------
+    def start_roads(self):
+        """Start always-on road-disruption collection. Harmless before the API
+        key/URL are set: the scraper log-and-skips until both appear in config."""
+        with self._lock:
+            self._roads_desired = True
+            if self._roads and self._roads.is_alive():
+                return False, "Road collection is already running."
+            cfg = load_config()
+            interval = max(1, cfg["roads"]["interval_minutes"]) * 60
+            self._roads = _Collector(
+                "roads-collector", interval, roads_scraper.fetch_road_data)
+            self._roads.start()
+            return True, "Road collection started."
+
+    def stop_roads(self):
+        with self._lock:
+            self._roads_desired = False
+            if self._roads:
+                self._roads.stop()
+                self._roads = None
+            return True, "Road collection stopped."
+
+    def restart_roads(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_roads()
+        return self.start_roads()
+
     # --- power ---------------------------------------------------------------
     def start_power(self):
         with self._lock:
@@ -293,6 +324,11 @@ class CollectorManager:
             return self._storm_desired
         return cfg["storm"].get("autostart", True)
 
+    def roads_wanted(self, cfg):
+        if self._roads_desired is not None:
+            return self._roads_desired
+        return cfg["roads"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -329,6 +365,12 @@ class CollectorManager:
                 log.info("Autostart storm: %s", msg)
             except Exception:
                 log.exception("Autostart storm failed")
+        if cfg["roads"].get("autostart", True):
+            try:
+                ok, msg = self.start_roads()
+                log.info("Autostart roads: %s", msg)
+            except Exception:
+                log.exception("Autostart roads failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -366,6 +408,10 @@ class CollectorManager:
             "storm": {
                 "running": self._storm is not None and self._storm.is_alive(),
                 **(self._storm.status if self._storm else {}),
+            },
+            "roads": {
+                "running": self._roads is not None and self._roads.is_alive(),
+                **(self._roads.status if self._roads else {}),
             },
         }
 

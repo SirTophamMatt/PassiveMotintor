@@ -42,7 +42,7 @@ class Supervisor(threading.Thread):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
         self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
-                          "rainfall": [], "storm": []}
+                          "rainfall": [], "storm": [], "roads": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -52,13 +52,16 @@ class Supervisor(threading.Thread):
         self._first_weather_check = True
         self._storm_cells = {}             # cell_id -> (priority, label)
         self._first_storm_check = True
+        self._road_closures = {}           # source_id -> label
+        self._first_roads_check = True
         self._last_errors = {"flood": None, "power": None, "fire": None,
-                             "weather": None, "rainfall": None, "storm": None}
+                             "weather": None, "rainfall": None, "storm": None,
+                             "roads": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
                       "rainfall_restarts": 0, "storm_restarts": 0,
-                      "last_action": None}
+                      "roads_restarts": 0, "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -159,9 +162,17 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_storm()
                 self._record_restart("storm", reason, msg)
 
+        if manager.roads_wanted(cfg):
+            reason = self._stall_reason(status["roads"],
+                                        max(1, cfg["roads"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("roads"):
+                ok, msg = manager.restart_roads()
+                self._record_restart("roads", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
-        for which in ("flood", "power", "fire", "weather", "rainfall", "storm"):
+        for which in ("flood", "power", "fire", "weather", "rainfall", "storm",
+                      "roads"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")
@@ -175,6 +186,7 @@ class Supervisor(threading.Thread):
         self._check_fire_alert(cfg)
         self._check_weather_alert(cfg)
         self._check_storm_alert(cfg)
+        self._check_roads_alert(cfg)
 
     def _check_power_alert(self, cfg):
         from app.modules.power import data as power_data
@@ -390,6 +402,45 @@ class Supervisor(threading.Thread):
                             kind="storm_alert", cfg=cfg)
         self._storm_cells = current
         self._first_storm_check = False
+
+    def _check_roads_alert(self, cfg):
+        """Road disruptions: notify when a road first FULLY closes, and when a
+        tracked closure clears — change-only, like the other alert kinds.
+        Partial/lane disruptions never notify (too noisy)."""
+        from app.modules.roads import data as roads_data
+        df = roads_data.active_disruptions(closures_only=True)
+        current = {}
+        for _, row in df.iterrows():
+            where = (row.get("road_name") or row.get("location") or "road")
+            extra = f" ({row['location']})" if row.get("road_name") and row.get("location") else ""
+            reason = f" — {row['disruption_type']}" if row.get("disruption_type") else ""
+            current[row["source_id"]] = f"{where}{extra}{reason}"
+
+        if self._first_roads_check:
+            if current:
+                notify.send(f"Monitor started — {len(current)} road(s) fully "
+                            f"closed: " + "; ".join(list(current.values())[:5])
+                            + (f" (+{len(current) - 5} more)"
+                               if len(current) > 5 else ""),
+                            kind="roads_alert", cfg=cfg)
+        else:
+            new_closures = [label for sid, label in current.items()
+                            if sid not in self._road_closures]
+            cleared = [self._road_closures[sid] for sid in self._road_closures
+                       if sid not in current]
+            if new_closures:
+                notify.send("🚧 New road closure(s) — "
+                            + "; ".join(new_closures[:8])
+                            + (f" (+{len(new_closures) - 8} more)"
+                               if len(new_closures) > 8 else ""),
+                            kind="roads_alert", cfg=cfg)
+            if cleared:
+                notify.send(f"✅ Road reopened: " + ", ".join(cleared[:8])
+                            + (f" (+{len(cleared) - 8} more)"
+                               if len(cleared) > 8 else ""),
+                            kind="roads_alert", cfg=cfg)
+        self._road_closures = current
+        self._first_roads_check = False
 
 
 supervisor = Supervisor()

@@ -39,6 +39,24 @@ def layout():
         ], className="panel-row"),
         html.Div([
             html.Div([
+                html.H4("Road Disruptions (VicRoads)"),
+                html.P(["Request a free key at the ",
+                        html.A("VicRoads Data Exchange",
+                               href="https://data-exchange.vicroads.vic.gov.au/",
+                               target="_blank"),
+                        " (Disruptions - Road). Collection stays idle until both "
+                        "the feed URL and key are set."], className="muted",
+                       style={"fontSize": "12px"}),
+                _field("Feed URL", "set-roads-url", cfg["roads"]["feed_url"],
+                       placeholder="https://api.opendata.transport.vic.gov.au/…/v3"),
+                _field("API key (sent as 'KeyId' header)", "set-roads-key",
+                       cfg["roads"]["api_key"], input_type="password"),
+                _field("Fetch interval (minutes)", "set-roads-interval",
+                       cfg["roads"]["interval_minutes"], input_type="number", min=1),
+            ], className="panel"),
+        ], className="panel-row"),
+        html.Div([
+            html.Div([
                 html.H4("Collection Intervals"),
                 _field("Flood fetch interval (minutes)", "set-flood-interval",
                        cfg["flood"]["interval_minutes"], input_type="number", min=1),
@@ -62,10 +80,12 @@ def layout():
                     options=[
                         {"label": " Power threshold alerts", "value": "power"},
                         {"label": " Flood level alerts", "value": "flood"},
+                        {"label": " Road closure alerts", "value": "roads"},
                         {"label": " Watchdog / collector issues", "value": "watchdog"},
                     ],
                     value=[v for v, key in (("power", "on_power_alert"),
                                             ("flood", "on_flood_alert"),
+                                            ("roads", "on_roads_alert"),
                                             ("watchdog", "on_watchdog"))
                            if cfg["notify"].get(key, True)]),
                 html.Div("Send a test from the Admin page after saving.",
@@ -90,13 +110,17 @@ def register_callbacks(app):
         State("set-after-url", "value"),
         State("set-flood-interval", "value"),
         State("set-power-interval", "value"),
+        State("set-roads-url", "value"),
+        State("set-roads-key", "value"),
+        State("set-roads-interval", "value"),
         State("set-alert-high", "value"),
         State("set-alert-low", "value"),
         State("set-notify-webhook", "value"),
         State("set-notify-toggles", "value"),
         prevent_initial_call=True)
     def save(_, username, password, login_url, power_url, after_url,
-             flood_interval, power_interval, alert_high, alert_low,
+             flood_interval, power_interval, roads_url, roads_key,
+             roads_interval, alert_high, alert_low,
              notify_webhook, notify_toggles):
         if not auth.is_admin():
             return "Not authorised."
@@ -108,12 +132,16 @@ def register_callbacks(app):
         cfg["emcop"]["after_login_url"] = (after_url or "").strip()
         cfg["flood"]["interval_minutes"] = int(flood_interval or 5)
         cfg["power"]["interval_seconds"] = int(power_interval or 60)
+        cfg["roads"]["feed_url"] = (roads_url or "").strip()
+        cfg["roads"]["api_key"] = (roads_key or "").strip()
+        cfg["roads"]["interval_minutes"] = int(roads_interval or 3)
         cfg["alerts"]["high_customers_off"] = int(alert_high or 20000)
         cfg["alerts"]["low_customers_off"] = int(alert_low or 10000)
         toggles = notify_toggles or []
         cfg["notify"]["webhook_url"] = (notify_webhook or "").strip()
         cfg["notify"]["on_power_alert"] = "power" in toggles
         cfg["notify"]["on_flood_alert"] = "flood" in toggles
+        cfg["notify"]["on_roads_alert"] = "roads" in toggles
         cfg["notify"]["on_watchdog"] = "watchdog" in toggles
         try:
             save_config(cfg)

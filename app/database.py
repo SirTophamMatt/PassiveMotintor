@@ -329,6 +329,49 @@ CREATE TABLE IF NOT EXISTS storm_timeseries (
 );
 CREATE INDEX IF NOT EXISTS idx_storm_ts_time ON storm_timeseries (timestamp);
 
+-- VicRoads / Transport Victoria "Unplanned Disruptions - Road" GeoJSON feed,
+-- upserted each cycle on the disruption's stable feed id. A disruption that
+-- drops out of the feed (road reopened) is marked resolved rather than deleted,
+-- so history is kept — same policy as fire_incidents.
+CREATE TABLE IF NOT EXISTS road_disruptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT UNIQUE,       -- feed disruption id (stable across cycles)
+    status TEXT,                 -- e.g. Closed / Partially closed / Open
+    disruption_type TEXT,        -- reason/category (crash, flooding, works, ...)
+    is_closure INTEGER NOT NULL DEFAULT 0,  -- 1 when the road is fully closed
+    road_name TEXT,
+    location TEXT,               -- descriptive locality / between-streets text
+    direction TEXT,
+    lanes_affected TEXT,
+    lga TEXT,                    -- local government area
+    ses_region TEXT,             -- reference.closedRoadSESRegion (SES grouping)
+    transport_region TEXT,       -- reference.closedRoadTransportRegion
+    description TEXT,            -- public advice text
+    latitude REAL,
+    longitude REAL,
+    geometry TEXT,               -- raw GeoJSON geometry (LineString/Polygon render)
+    start_time TEXT,
+    end_time TEXT,
+    created TEXT,
+    updated TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    resolved INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_road_disruptions_active
+    ON road_disruptions (resolved, is_closure);
+
+-- One aggregate row per collection cycle: KPI history + continuity heartbeat
+-- (proves the collector ran even with no active disruptions).
+CREATE TABLE IF NOT EXISTS road_timeseries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    total_active INTEGER,
+    closures INTEGER,
+    other_disruptions INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_road_ts_time ON road_timeseries (timestamp);
+
 -- Event tags: named date ranges applied over the always-on data stream. An
 -- event is no longer a collection-time label but a (name, start, end) window
 -- used to slice flood + power data for viewing and export. NULL end = ongoing.
@@ -398,6 +441,8 @@ def init_db():
         _ensure_column(conn, "storm_cells", "latitude", "REAL")
         _ensure_column(conn, "storm_cells", "longitude", "REAL")
         _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
+        _ensure_column(conn, "road_disruptions", "ses_region", "TEXT")
+        _ensure_column(conn, "road_disruptions", "transport_region", "TEXT")
         _migrate_events_to_tags(conn)
         conn.commit()
     finally:

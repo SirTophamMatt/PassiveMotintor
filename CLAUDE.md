@@ -330,6 +330,47 @@ warning-level lines, colour-matched to the map kinds.
   Standard Emergency Warning Signal (SEWS) is active — those items show the whole time
   they're active. Hidden entirely when empty. Scroll speed scales with item count.
 
+## Roads module — VicRoads disruptions (built 2026-07-22)
+- **Source:** the Transport Victoria **"Unplanned Disruptions - Road" v3** API
+  (`api.opendata.transport.vic.gov.au/api/opendata/roads/disruptions/unplanned/v3`,
+  DoT-managed *and* local-council roads, refreshed ~60s). Bound to the v3 OpenAPI
+  (`seed/` copy of the spec is the reference). Needs a **free API key** (request
+  via the Data Exchange Platform, https://data-exchange.vicroads.vic.gov.au/) sent
+  in the **`KeyId`** header; the endpoint is the config default so only the key is
+  needed. Both live in config (`roads.feed_url` / `roads.api_key`, set on the
+  Settings page). Until the key is set the collector **log-and-skips** — a fresh
+  deploy never crashes (same shape as power without EM-COP creds).
+  `app/modules/roads/{scraper,data}.py`, page `app/pages/roads.py`, route `/roads`.
+- **Response shape (v3):** an envelope `{meta, data: <FeatureCollection>, links}`
+  — features are at `data.features` (`scraper._features_of` also tolerates a bare
+  FeatureCollection/list). Paging follows `meta.total_pages` (`page`/`limit`,
+  default page size 100; `roads.page_limit` forces a size, `roads.max_pages` caps
+  the loop). Geometry is Point or LineString; lines are stored raw and drawn as
+  `mapbox_layers` line overlays, Points use the centroid marker only.
+- **Model:** upsert each feature into `road_disruptions` on its per-feature `id`
+  (falls back to `impactId`/`eventId`); a disruption that drops out (road reopened)
+  is marked `resolved=1`, never deleted. Properties are partly nested: road name
+  from `closedRoadName`/`declaredRoadName`/`reference.localRoadName`, LGA from
+  `reference.localGovernmentArea`, direction from `impact.direction`, lanes from
+  `numberLanesImpacted`/`roadAccessType`, type from `eventType`+`eventSubType`.
+  `is_closure` (see `_is_closure`) = live full closure: NOT `eventLocationStatus`
+  Reopened/Inactive, NOT a partial/lane/reduced/shoulder `roadAccessType`, and
+  either a `closedRoadName` is set or "clos" appears in access-type/event-type.
+  A per-cycle `road_timeseries` row holds KPI counts + doubles as the heartbeat.
+  Datetimes (`created`/`lastUpdated`/`endTime`) normalised to one local-seconds
+  format (same pandas-NaT lesson as flood/fire). The v3 `reference` block's
+  `closedRoadSESRegion`/`closedRoadTransportRegion` are stored (`ses_region`/
+  `transport_region`; `_ensure_column` migrates existing DBs); SES Region shows in
+  the page table for the SES grouping angle.
+- **Wiring:** always-on collector (`roads.interval_minutes`=3, autostart), watchdog
+  supervision + change-only `roads_alert` webhooks (new full closures + reopenings;
+  partial/lane disruptions never notify), `/health` exposes
+  `roads_running`/`roads_last_heartbeat`/`roads_last_error`, Settings gains a
+  "Road Disruptions (VicRoads)" panel + a "Road closure alerts" notify toggle.
+- Not done: road disruptions on the unified/fire map + Overview KPI; the
+  cross-layer correlation backlog item ("road cuts near rising gauges") can now
+  join `road_disruptions` geometry against flood gauges via a shapely/STRtree pass.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·

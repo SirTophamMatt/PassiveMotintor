@@ -1,0 +1,418 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Road Disruptions - Unplanned - v3",
+    "description": "Disruptions to the road network in Victoria affect many people as they plan and undertake their journeys. This information contains details of disruptions in near real-time on roads managed by the Victorian Department of Transport and Planning as well as roads managed by local councils. The data includes the location and reason for the disruption along with which road it has occurred on.",
+    "version": "v3.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.opendata.transport.vic.gov.au"
+    }
+  ],
+  "security": [
+    {
+      "API.Key": []
+    }
+  ],
+  "paths": {
+    "/api/opendata/roads/disruptions/unplanned/v3": {
+      "get": {
+        "tags": [
+          "Unplanned Disruptions"
+        ],
+        "summary": "Get Road Unplanned Disruptions - version 3",
+        "description": "This dataset contains the locations and details of all unplanned road closures and traffic alerts recorded by the Department of Transport and Planning (DTP), in near real-time.",
+        "operationId": "GetUnplannedDisruptionsV3",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "The page that the user wants to return.",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of results per page the user wants to return.",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/unplannedDisruptionsV3ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "unplannedDisruptionsV3ApiResponse": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/meta"
+          },
+          "data": {
+            "$ref": "#/components/schemas/geoJsonFeatureCollection"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/link"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "geoJsonFeatureCollection": {
+        "required": [
+          "features"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "FeatureCollection"
+            ],
+            "type": "string",
+            "default": "FeatureCollection"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/geoJsonFeature"
+            }
+          }
+        }
+      },
+      "geoJsonFeature": {
+        "required": [
+          "geometry"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "Feature"
+            ],
+            "type": "string",
+            "default": "Feature"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/geoJsonGeometry"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/unplannedDisruptionProperties"
+          }
+        }
+      },
+      "geoJsonGeometry": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "Point",
+              "LineString"
+            ],
+            "type": "string",
+            "default": "Point"
+          }
+        },
+        "nullable": true
+      },
+      "impact": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "nullable": true
+          },
+          "impactType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "link": {
+        "type": "object",
+        "properties": {
+          "href": {
+            "type": "string",
+            "nullable": true
+          },
+          "rel": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "meta": {
+        "type": "object",
+        "properties": {
+          "total_records": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "total_pages": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "reference": {
+        "type": "object",
+        "properties": {
+          "localRoadName": {
+            "type": "string",
+            "nullable": true
+          },
+          "roadAuthority": {
+            "type": "string",
+            "nullable": true
+          },
+          "declaredRoadNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "startIntersectionRoadName": {
+            "type": "string",
+            "nullable": true
+          },
+          "startIntersectionDistance": {
+            "type": "string",
+            "nullable": true
+          },
+          "startIntersectionDirection": {
+            "type": "string",
+            "nullable": true
+          },
+          "startIntersectionLocality": {
+            "type": "string",
+            "nullable": true
+          },
+          "endIntersectionRoadName": {
+            "type": "string",
+            "nullable": true
+          },
+          "endIntersectionDistance": {
+            "type": "string",
+            "nullable": true
+          },
+          "endIntersectionDirection": {
+            "type": "string",
+            "nullable": true
+          },
+          "endIntersectionLocality": {
+            "type": "string",
+            "nullable": true
+          },
+          "localGovernmentArea": {
+            "type": "string",
+            "nullable": true
+          },
+          "srns": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedRoadSESRegion": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedRoadTransportRegion": {
+            "type": "string",
+            "nullable": true
+          },
+          "rmaClass": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedRoadTramRoute": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedRoadBusRoute": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "source": {
+        "type": "object",
+        "properties": {
+          "sourceName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      },
+      "unplannedDisruptionProperties": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "nullable": true
+          },
+          "impactId": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventLocationStatus": {
+            "enum": [
+              "Pending",
+              "Active",
+              "Reopened",
+              "Inactive"
+            ],
+            "type": "string",
+            "default": "Pending",
+            "nullable": true
+          },
+          "numberLanesImpacted": {
+            "type": "string",
+            "nullable": true
+          },
+          "roadAccessType": {
+            "type": "string",
+            "nullable": true
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastActive": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastClosed": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "nextUpdateDue": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closedRoadName": {
+            "type": "string",
+            "nullable": true
+          },
+          "declaredRoadName": {
+            "type": "string",
+            "nullable": true
+          },
+          "reference": {
+            "$ref": "#/components/schemas/reference"
+          },
+          "melway": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialMedia": {
+            "type": "string",
+            "nullable": true
+          },
+          "weblinkURL": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/source"
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventSubType": {
+            "type": "string",
+            "nullable": true
+          },
+          "impact": {
+            "$ref": "#/components/schemas/impact"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "vcsd": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "nullable": true
+      }
+    },
+    "securitySchemes": {
+      "API.Key": {
+        "type": "apiKey",
+        "description": "API Key",
+        "name": "KeyId",
+        "in": "header"
+      }
+    }
+  }
+}
