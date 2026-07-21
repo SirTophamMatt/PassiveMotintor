@@ -434,4 +434,12 @@ viewer roles + audit log · log rotation/capped backups · power-dependent-custo
 for a "rain by catchment" summary + a per-catchment total on gauge pages) · rainfall on the
 station briefing PDF · cross-layer correlation engine (outages inside flooded
 catchments, road cuts near rising gauges) — the `/map` unified view now exists as the shared
-canvas for this. (Unified map itself: DONE 2026-07-22, see above.)
+canvas for this. (Unified map itself: DONE 2026-07-22, see above.) ·
+**Settings-save shouldn't freeze all defaults** (2026-07-22): `settings.save()` calls
+`load_config()` (defaults merged with the existing file) then writes the WHOLE thing back to
+config.json, so once a deploy has ever saved Settings, every code-default change is silently
+overridden on that instance (this is why the IDR143 `radar_ids` default didn't reach the VPS —
+had to be set via the new Settings field / a config.json edit). Fix: have `save()` persist only
+the fields the form actually controls (load the RAW config.json, update those keys, write back),
+so unset keys keep falling through to code DEFAULTS. Touches `app/config.py` (add a raw
+load/save-partial helper) + `app/pages/settings.py`.
