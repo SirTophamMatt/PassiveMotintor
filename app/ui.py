@@ -14,6 +14,16 @@ def apply_theme(fig, dark):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=40, r=20, t=50, b=40),
+        # Give the legend an opaque panel + explicit font colour so it stays
+        # readable when it sits over map tiles (mapbox legends are otherwise
+        # transparent and the basemap shows through the text). Merges with any
+        # per-figure legend position/orientation set by the page.
+        legend=dict(
+            bgcolor="rgba(22,28,38,0.85)" if dark else "rgba(255,255,255,0.88)",
+            bordercolor="rgba(255,255,255,0.18)" if dark else "rgba(0,0,0,0.15)",
+            borderwidth=1,
+            font=dict(color="#e8eaed" if dark else "#202124", size=11),
+        ),
     )
     return fig
 

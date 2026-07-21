@@ -154,39 +154,47 @@ def register_callbacks(app):
                     **({"presentation": "markdown"} if col == "station_name" else {})}
                    for col, name in TABLE_COLUMNS]
 
-        graphs = []
-        for station in df["station_name"].dropna().unique():
-            station_df = df[df["station_name"] == station].dropna(subset=["height_m"])
-            if station_df.empty:
+        # Classify every station from its LATEST reading first (cheap), so we
+        # build Plotly figures only for the ~24 stations actually shown —
+        # rendering a figure per station (hundreds) then discarding all but
+        # MAX_GRAPHS was the main cause of the page being slow.
+        classified = []
+        for _, row in latest.iterrows():
+            station = row["station_name"]
+            if pd.isna(station):
                 continue
-            station_df = station_df.sort_values("timestamp")
             levels = levels_map.get(str(station).strip().lower())
-            latest_height = station_df["height_m"].iloc[-1]
-            priority, label, colour = flood_data.classify_station(latest_height, levels)
+            priority, label, colour = flood_data.classify_station(
+                row["height_m"], levels)
             if flooding_only and priority >= 4:
                 continue
-            graphs.append((priority, station, html.Div([
-                dcc.Link("Gauge details, impacts & briefing →",
-                         href=station_page.path_for(station),
-                         className="gauge-link"),
-                dcc.Graph(figure=_station_figure(station_df, station, label, levels, dark)),
-            ], className="graph-card",
-                style={"border": f"3px solid {colour}"})))
+            classified.append((priority, station, label, colour, levels))
+        classified.sort(key=lambda r: (r[0], r[1]))
 
-        graphs.sort(key=lambda item: (item[0], item[1]))
-        flooding_count = sum(1 for p, _, _ in graphs if p < 4)
+        flooding_count = sum(1 for r in classified if r[0] < 4)
         summary = (f"{df['station_name'].nunique()} stations, "
                    f"{len(df):,} observations — {flooding_count} at or above flood level. ")
         cycles, last_hb = flood_data.heartbeat_summary(start, end)
         if cycles:
             summary += f"Monitor ran {cycles} cycle(s), last {last_hb}. "
-        if len(graphs) > MAX_GRAPHS:
-            summary += (f"Showing {MAX_GRAPHS} of {len(graphs)} station graphs "
+        if len(classified) > MAX_GRAPHS:
+            summary += (f"Showing {MAX_GRAPHS} of {len(classified)} station graphs "
                         "(flooding stations first) — filter by catchment or use "
                         "'flooding only' to narrow. ")
-            graphs = graphs[:MAX_GRAPHS]
         if not levels_map:
             summary += "No flood levels loaded yet (import Flood Levels.xlsx on the Import page)."
 
-        return (summary, table_df.to_dict("records"), columns, *style_out,
-                [g for _, _, g in graphs])
+        graphs = []
+        for priority, station, label, colour, levels in classified[:MAX_GRAPHS]:
+            station_df = (df[df["station_name"] == station]
+                          .dropna(subset=["height_m"]).sort_values("timestamp"))
+            if station_df.empty:
+                continue
+            graphs.append(html.Div([
+                dcc.Link("Gauge details, impacts & briefing →",
+                         href=station_page.path_for(station),
+                         className="gauge-link"),
+                dcc.Graph(figure=_station_figure(station_df, station, label, levels, dark)),
+            ], className="graph-card", style={"border": f"3px solid {colour}"}))
+
+        return (summary, table_df.to_dict("records"), columns, *style_out, graphs)

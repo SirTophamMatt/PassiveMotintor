@@ -134,7 +134,16 @@ html, body { height: 100%; }
 .status-on { color: #2ecc71; }
 .status-off { color: #ff6b6b; }
 
-label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
+/* Filter/section labels and checklist/radio option text. Uses --text (not
+   --muted) so the controls stay readable — muted grey on the panel background
+   was too low-contrast to read. */
+label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
+/* dcc.Checklist / dcc.RadioItems options render as <label><input>text; keep
+   their text bright and normal-weight in both themes. */
+.app .dash-checklist label, .app .dash-radioitems label,
+.app label > input[type="checkbox"] ~ *, .app label:has(> input) {
+    color: var(--text);
+}
 
 /* dropdowns readable in dark mode */
 .app.dark .Select-control, .app.dark .Select-menu-outer,
