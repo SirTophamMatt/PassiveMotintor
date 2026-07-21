@@ -9,6 +9,7 @@ import json
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from dash import Input, Output, dash_table, dcc, html
 
 from app import ui
@@ -69,69 +70,81 @@ def layout():
     ])
 
 
-def _geom_layers(df):
-    """Line overlays for LineString disruptions + fill overlays for polygons,
-    coloured by kind. Sits below the marker traces."""
-    if df.empty or "geometry" not in df.columns:
-        return []
-    line_feats = {k: [] for k in KIND_COLOURS}
-    fill_feats = {k: [] for k in KIND_COLOURS}
-    for _, row in df.iterrows():
-        raw = row.get("geometry")
-        if not raw:
-            continue
-        try:
-            geom = json.loads(raw)
-        except (ValueError, TypeError):
-            continue
-        kind = _kind(row.get("is_closure"))
-        feat = {"type": "Feature", "properties": {}, "geometry": geom}
-        t = (geom or {}).get("type")
-        if t in ("LineString", "MultiLineString"):
-            line_feats[kind].append(feat)
-        elif t in ("Polygon", "MultiPolygon"):
-            fill_feats[kind].append(feat)
+def _line_segments(geom):
+    """Yield each LineString part's [[lon, lat], ...] from a v3 geometry
+    (LineString, or defensively MultiLineString)."""
+    t = (geom or {}).get("type")
+    if t == "LineString":
+        yield geom.get("coordinates") or []
+    elif t == "MultiLineString":
+        for part in geom.get("coordinates") or []:
+            yield part
 
-    layers = []
-    for kind, colour in KIND_COLOURS.items():
-        if fill_feats[kind]:
-            layers.append({
-                "sourcetype": "geojson", "type": "fill", "below": "traces",
-                "color": colour, "opacity": 0.25,
-                "source": {"type": "FeatureCollection", "features": fill_feats[kind]}})
-        if line_feats[kind]:
-            layers.append({
-                "sourcetype": "geojson", "type": "line", "below": "traces",
-                "color": colour, "opacity": 0.85, "line": {"width": 4},
-                "source": {"type": "FeatureCollection", "features": line_feats[kind]}})
-    return layers
+
+def _hover(row):
+    """Hover label so a highlighted road is still identifiable without a marker."""
+    txt = "<b>%s</b>" % (row.get("road_name") or "Road")
+    if row.get("location"):
+        txt += "<br>%s" % row["location"]
+    bits = [str(row[c]) for c in ("disruption_type", "status", "direction")
+            if row.get(c)]
+    if bits:
+        txt += "<br>%s" % " · ".join(bits)
+    if row.get("ses_region"):
+        txt += "<br>SES: %s" % row["ses_region"]
+    return txt
 
 
 def _map_figure(df, dark):
-    located = df.dropna(subset=["latitude", "longitude"]) if not df.empty else df
-    if located is None or located.empty:
-        fig = px.scatter_mapbox(
-            pd.DataFrame({"latitude": [], "longitude": []}),
-            lat="latitude", lon="longitude", zoom=5.2, center=VIC_CENTER,
-            mapbox_style="open-street-map", title="Active Road Disruptions")
-    else:
-        plot = located.copy()
-        plot["Kind"] = plot["is_closure"].apply(_kind)
-        fig = px.scatter_mapbox(
-            plot, lat="latitude", lon="longitude", color="Kind",
-            color_discrete_map=KIND_COLOURS,
-            category_orders={"Kind": ["Closure", "Other disruption"]},
-            hover_name="road_name",
-            hover_data={"location": True, "disruption_type": True,
-                        "status": True, "latitude": False, "longitude": False,
-                        "Kind": False},
-            zoom=5.2, center=VIC_CENTER, mapbox_style="open-street-map",
-            title="Active Road Disruptions")
-        fig.update_traces(marker=dict(size=11))
-    layers = _geom_layers(df)
-    if layers:
-        fig.update_layout(mapbox_layers=layers)  # magic-underscore: keeps style/zoom
-    fig.update_layout(legend=dict(orientation="h", y=1.02))
+    """Highlight each impacted road as a coloured LINE (closures thicker/red,
+    other disruptions amber). Only Point-only disruptions — which have no road
+    segment in the feed — fall back to a marker dot."""
+    fig = go.Figure()
+    if df is not None and not df.empty:
+        df = df.copy()
+        df["Kind"] = df["is_closure"].apply(_kind)
+        for kind, colour in KIND_COLOURS.items():
+            sub = df[df["Kind"] == kind]
+            if sub.empty:
+                continue
+
+            # --- impacted road segments (LineString geometry) -> highlight ----
+            lats, lons, texts = [], [], []
+            for _, r in sub.iterrows():
+                raw = r.get("geometry")
+                if not raw:
+                    continue
+                try:
+                    geom = json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+                label = _hover(r)
+                for seg in _line_segments(geom):
+                    for lon, lat in seg:
+                        lons.append(lon); lats.append(lat); texts.append(label)
+                    lons.append(None); lats.append(None); texts.append(None)
+            has_lines = bool(lats)
+            if has_lines:
+                fig.add_trace(go.Scattermapbox(
+                    mode="lines", lat=lats, lon=lons, name=kind,
+                    legendgroup=kind, line=dict(color=colour,
+                    width=5 if kind == "Closure" else 3),
+                    hoverinfo="text", text=texts))
+
+            # --- point-only disruptions (no road segment) -> marker dot -------
+            pts = sub[sub["geometry"].isna() | (sub["geometry"] == "")]
+            pts = pts.dropna(subset=["latitude", "longitude"])
+            if not pts.empty:
+                fig.add_trace(go.Scattermapbox(
+                    mode="markers", lat=pts["latitude"], lon=pts["longitude"],
+                    name=kind, legendgroup=kind, showlegend=not has_lines,
+                    marker=dict(size=10, color=colour), hoverinfo="text",
+                    text=[_hover(r) for _, r in pts.iterrows()]))
+
+    fig.update_layout(
+        title="Active Road Disruptions",
+        mapbox=dict(style="open-street-map", center=VIC_CENTER, zoom=5.2),
+        legend=dict(orientation="h", y=1.02))
     return ui.apply_theme(fig, dark)
 
 

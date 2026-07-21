@@ -345,8 +345,11 @@ warning-level lines, colour-matched to the map kinds.
   — features are at `data.features` (`scraper._features_of` also tolerates a bare
   FeatureCollection/list). Paging follows `meta.total_pages` (`page`/`limit`,
   default page size 100; `roads.page_limit` forces a size, `roads.max_pages` caps
-  the loop). Geometry is Point or LineString; lines are stored raw and drawn as
-  `mapbox_layers` line overlays, Points use the centroid marker only.
+  the loop). Geometry is Point or LineString. The map **highlights the impacted
+  road**: LineString disruptions render as coloured `go.Scattermapbox` line traces
+  (closures red/width 5, other amber/width 3, hover keeps the road identifiable);
+  only Point-only disruptions (no road segment in the feed) fall back to a marker
+  dot. (`_map_figure`/`_line_segments`/`_hover` in `pages/roads.py`.)
 - **Model:** upsert each feature into `road_disruptions` on its per-feature `id`
   (falls back to `impactId`/`eventId`); a disruption that drops out (road reopened)
   is marked `resolved=1`, never deleted. Properties are partly nested: road name
