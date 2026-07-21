@@ -53,7 +53,8 @@ def layout():
         html.Div(id="power-kpis", className="kpi-row"),
         html.Div(id="power-trend-graphs", className="graph-grid"),
         html.Div([
-            html.Div(dcc.Graph(id="power-map", style={"height": "650px"}),
+            html.Div(dcc.Graph(id="power-map", style={"height": "650px"},
+                               config=ui.MAP_CONFIG),
                      style={"flex": "3"}),
             html.Div(dcc.Graph(id="power-durations", style={"height": "650px"}),
                      style={"flex": "2"}),

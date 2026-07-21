@@ -1,6 +1,12 @@
 """Shared UI helpers: KPI cards, figure theming, table styles."""
 from dash import html
 
+# dcc.Graph `config` for map figures. Plotly disables mouse-wheel zoom on
+# mapbox maps by default (only the +/- buttons work); scrollZoom re-enables it.
+# Use on MAP graphs only — enabling it on cartesian line charts would hijack
+# page scrolling. `displayModeBar: "hover"` keeps the toolbar out of the way.
+MAP_CONFIG = {"scrollZoom": True, "displayModeBar": "hover"}
+
 
 def apply_theme(fig, dark):
     fig.update_layout(

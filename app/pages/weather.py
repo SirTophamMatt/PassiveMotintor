@@ -74,7 +74,8 @@ def layout():
                  "gauges — an upstream leading indicator.", className="muted"),
         html.Div(id="weather-rain-summary", className="muted",
                  style={"margin": "6px 0"}),
-        html.Div(dcc.Graph(id="weather-rain-map", style={"height": "520px"}),
+        html.Div(dcc.Graph(id="weather-rain-map", style={"height": "520px"},
+                           config=ui.MAP_CONFIG),
                  className="graph-card"),
         dash_table.DataTable(
             id="weather-rain-table", page_size=15,
@@ -86,7 +87,8 @@ def layout():
                  className="muted"),
         html.Div(id="weather-aws-summary", className="muted",
                  style={"margin": "6px 0"}),
-        html.Div(dcc.Graph(id="weather-aws-map", style={"height": "560px"}),
+        html.Div(dcc.Graph(id="weather-aws-map", style={"height": "560px"},
+                           config=ui.MAP_CONFIG),
                  className="graph-card"),
         dash_table.DataTable(
             id="weather-aws-table", page_size=20,

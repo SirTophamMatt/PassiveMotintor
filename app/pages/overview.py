@@ -55,11 +55,13 @@ def layout():
 
         html.H3("Power Outages"),
         html.Div(id="overview-power-trends", className="graph-grid"),
-        html.Div(dcc.Graph(id="overview-power-map", style={"height": "560px"}),
+        html.Div(dcc.Graph(id="overview-power-map", style={"height": "560px"},
+                           config=ui.MAP_CONFIG),
                  className="graph-card"),
 
         html.H3("Fire / Incidents"),
-        html.Div(dcc.Graph(id="overview-fire-map", style={"height": "560px"}),
+        html.Div(dcc.Graph(id="overview-fire-map", style={"height": "560px"},
+                           config=ui.MAP_CONFIG),
                  className="graph-card"),
 
         html.H3("Flooding Stations"),

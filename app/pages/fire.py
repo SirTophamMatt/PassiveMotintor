@@ -163,7 +163,8 @@ def layout():
         html.Div(id="fire-summary", className="muted", style={"margin": "10px 0"}),
         html.Div(id="fire-kpis", className="kpi-row"),
         html.Div([
-            dcc.Graph(id="fire-map", style={"height": "620px"}),
+            dcc.Graph(id="fire-map", style={"height": "620px"},
+                      config=ui.MAP_CONFIG),
             _aws_legend(),
         ], className="graph-card"),
         html.H3("Community Warnings"),

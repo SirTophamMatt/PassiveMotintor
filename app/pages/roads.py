@@ -54,7 +54,8 @@ def layout():
         dcc.Interval(id="roads-interval", interval=60_000, n_intervals=0),
         html.Div(id="roads-summary", className="muted", style={"margin": "10px 0"}),
         html.Div(id="roads-kpis", className="kpi-row"),
-        html.Div(dcc.Graph(id="roads-map", style={"height": "600px"}),
+        html.Div(dcc.Graph(id="roads-map", style={"height": "600px"},
+                           config=ui.MAP_CONFIG),
                  className="graph-card"),
         html.H3("Active Disruptions", style={"marginTop": "16px"}),
         dash_table.DataTable(

@@ -205,12 +205,16 @@ def _fetch_feed(cfg):
 
         batch, meta = _features_of(payload)
         features.extend(batch)
-        # Prefer the API's own page count; otherwise stop on a short/empty page.
+        # With no explicit limit the v3 API returns the full set in one page
+        # (meta.total_pages is null), so don't fetch a wasteful page 2. Only
+        # page when a positive page_limit forces a page size.
+        if limit <= 0:
+            break
         total_pages = meta.get("total_pages")
         if total_pages:
             if page >= int(total_pages):
                 break
-        elif len(batch) < (limit or 100):  # v3 default page size is 100
+        elif len(batch) < limit:  # short page = last page
             break
         page += 1
     return features
