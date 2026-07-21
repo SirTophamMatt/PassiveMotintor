@@ -45,6 +45,7 @@ KEEP_ANNOTATED_FRAMES = 50  # loop length kept on disk (~4 hours of frames)
 # storm.radar_sites = {"IDR68": [lat, lon]} for radars not listed here.
 RADAR_SITES = {
     "IDR02": (-37.855, 144.755),   # Melbourne (Laverton)
+    "IDR14": (-37.75, 140.77),     # Mt Gambier SA (covers SW Victoria)
     "IDR31": (-34.942, 117.816),   # Albany WA
 }
 

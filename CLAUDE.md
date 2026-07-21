@@ -271,8 +271,9 @@ warning-level lines, colour-matched to the map kinds.
 - **Multi-radar** (added 2026-07-21): `storm.radar_ids` is a LIST — every listed radar is
   tracked each cycle (per-radar tracker/underlay/frames; cells stored with their radar_id;
   legacy single `radar_id` string still accepted). Defaults: IDR023 (Melbourne 128 km) +
-  IDR313 (Albany WA 128 km). The /storm page has a radar dropdown for the loop; tables mix
-  radars with a Radar column.
+  IDR313 (Albany WA 128 km) + IDR143 (Mt Gambier 128 km — covers SW Victoria; site `IDR14`
+  -37.75,140.77 added to `RADAR_SITES` 2026-07-22). The /storm page has a radar dropdown for
+  the loop; tables mix radars with a Radar column.
 - **Wiring:** always-on collector (`storm.interval_minutes`=5, autostart), watchdog
   supervision + change-only `storm_alert` webhooks (new/intensifying
   moderate+ cells, strong cells clearing; weak never notifies), `/health`

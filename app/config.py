@@ -73,8 +73,9 @@ DEFAULTS = {
         # last digit encodes zoom (…1=512 km, 2=256, 3=128, 4=64); frames are
         # published ~every 5 min, so 5-min polling catches each new frame.
         # Every listed radar is tracked each cycle (cells/frames are stored
-        # per radar). IDR023 = Melbourne 128 km, IDR313 = Albany WA 128 km.
-        "radar_ids": ["IDR023", "IDR313"],
+        # per radar). IDR023 = Melbourne 128 km, IDR313 = Albany WA 128 km,
+        # IDR143 = Mt Gambier 128 km (covers SW Victoria — Portland/Warrnambool).
+        "radar_ids": ["IDR023", "IDR313", "IDR143"],
         "interval_minutes": 5,
         "autostart": True,
         # Site coords for radars beyond the built-ins (app/modules/storm/
