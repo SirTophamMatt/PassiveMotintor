@@ -273,7 +273,12 @@ warning-level lines, colour-matched to the map kinds.
   legacy single `radar_id` string still accepted). Defaults: IDR023 (Melbourne 128 km) +
   IDR313 (Albany WA 128 km) + IDR143 (Mt Gambier 128 km — covers SW Victoria; site `IDR14`
   -37.75,140.77 added to `RADAR_SITES` 2026-07-22). The /storm page has a radar dropdown for
-  the loop; tables mix radars with a Radar column.
+  the loop; tables mix radars with a Radar column. The tracked radar list is now
+  editable from the **Settings page** ("Storm Radars", comma-separated) — it warns
+  if a radar's site has no coords (cells won't georeference). NOTE: a Settings save
+  writes the full merged config to config.json, so editing radars via the UI is the
+  supported way to change them on a live deploy (a code-default change to
+  `radar_ids` is overridden once config.json exists).
 - **Wiring:** always-on collector (`storm.interval_minutes`=5, autostart), watchdog
   supervision + change-only `storm_alert` webhooks (new/intensifying
   moderate+ cells, strong cells clearing; weak never notifies), `/health`

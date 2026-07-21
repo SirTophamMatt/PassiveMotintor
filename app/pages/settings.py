@@ -54,6 +54,18 @@ def layout():
                 _field("Fetch interval (minutes)", "set-roads-interval",
                        cfg["roads"]["interval_minutes"], input_type="number", min=1),
             ], className="panel"),
+            html.Div([
+                html.H4("Storm Radars"),
+                html.P(["Comma-separated BoM radar product IDs to track. Last "
+                        "digit = range (1=512 km, 2=256, 3=128, 4=64). Sites with "
+                        "built-in coordinates: IDR02 Melbourne, IDR14 Mt Gambier, "
+                        "IDR31 Albany — others need coords under "
+                        "storm.radar_sites in config.json to place cells on the "
+                        "map."], className="muted", style={"fontSize": "12px"}),
+                _field("Radar IDs", "set-storm-radars",
+                       ", ".join(cfg["storm"]["radar_ids"]),
+                       placeholder="IDR023, IDR143"),
+            ], className="panel"),
         ], className="panel-row"),
         html.Div([
             html.Div([
@@ -113,6 +125,7 @@ def register_callbacks(app):
         State("set-roads-url", "value"),
         State("set-roads-key", "value"),
         State("set-roads-interval", "value"),
+        State("set-storm-radars", "value"),
         State("set-alert-high", "value"),
         State("set-alert-low", "value"),
         State("set-notify-webhook", "value"),
@@ -120,7 +133,7 @@ def register_callbacks(app):
         prevent_initial_call=True)
     def save(_, username, password, login_url, power_url, after_url,
              flood_interval, power_interval, roads_url, roads_key,
-             roads_interval, alert_high, alert_low,
+             roads_interval, storm_radars, alert_high, alert_low,
              notify_webhook, notify_toggles):
         if not auth.is_admin():
             return "Not authorised."
@@ -135,6 +148,17 @@ def register_callbacks(app):
         cfg["roads"]["feed_url"] = (roads_url or "").strip()
         cfg["roads"]["api_key"] = (roads_key or "").strip()
         cfg["roads"]["interval_minutes"] = int(roads_interval or 3)
+        # Storm radars: comma/;-separated product IDs. Only overwrite when at
+        # least one is given, so clearing the box can't silently stop tracking.
+        radars = [t.strip().upper()
+                  for t in (storm_radars or "").replace(";", ",").split(",")
+                  if t.strip()]
+        ungeoref = []
+        if radars:
+            cfg["storm"]["radar_ids"] = radars
+            from app.modules.storm.scraper import RADAR_SITES
+            known = set(RADAR_SITES) | set(cfg["storm"].get("radar_sites", {}))
+            ungeoref = [r for r in radars if r[:5] not in known]
         cfg["alerts"]["high_customers_off"] = int(alert_high or 20000)
         cfg["alerts"]["low_customers_off"] = int(alert_low or 10000)
         toggles = notify_toggles or []
@@ -145,6 +169,12 @@ def register_callbacks(app):
         cfg["notify"]["on_watchdog"] = "watchdog" in toggles
         try:
             save_config(cfg)
-            return "✅ Settings saved."
         except OSError as e:
             return f"❌ Could not save settings: {e}"
+        msg = "✅ Settings saved."
+        if radars:
+            msg += f" Tracking radars: {', '.join(radars)} (applies next storm cycle)."
+        if ungeoref:
+            msg += (f" ⚠ No site coordinates for {', '.join(ungeoref)} — their "
+                    "cells won't be placed on the map until coords are added.")
+        return msg
