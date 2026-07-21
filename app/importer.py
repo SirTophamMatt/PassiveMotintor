@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 # correctly with no manual import step.
 SEED_FLOOD_LEVELS = os.path.join(BUNDLE_DIR, "seed", "Flood Levels.xlsx")
 SEED_LFG_IMPACTS = os.path.join(BUNDLE_DIR, "seed", "lfg_impacts.json")
+SEED_GAUGE_COORDS = os.path.join(BUNDLE_DIR, "seed", "gauge_coords.json")
 
 # Suggested default paths into the old projects (one level up). Flood levels
 # prefer the bundled seed copy when present (always true on the server).
@@ -61,6 +62,50 @@ def ensure_lfg_impacts_seed():
         return
     log.info("Loading bundled LFG impacts: %s",
              import_lfg_impacts(SEED_LFG_IMPACTS))
+
+
+def ensure_gauge_coords_seed():
+    """(Re)load flood gauge coordinates on every startup, same policy as the
+    flood levels / LFG seeds: the bundled JSON (produced by
+    seed/gauge_coords_tool.py) is the source of truth and updates arrive via
+    redeploy. Absent seed leaves the existing table untouched."""
+    if not os.path.exists(SEED_GAUGE_COORDS):
+        log.info("No bundled gauge coords seed at %s — keeping existing table.",
+                 SEED_GAUGE_COORDS)
+        return
+    log.info("Loading bundled gauge coords: %s",
+             import_gauge_coords(SEED_GAUGE_COORDS))
+
+
+def import_gauge_coords(path):
+    """Loads seed/gauge_coords.json (gauge name -> lat/lon matched from BoM
+    Water Data Online) into the gauge_coords table. Only rows with coordinates
+    are stored; unmatched gauges (null coords) are skipped."""
+    if not os.path.exists(path):
+        return f"File not found: {path}"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        rows = []
+        for g in data.get("gauges", []):
+            if g.get("latitude") is None or g.get("longitude") is None:
+                continue
+            rows.append({
+                "station_key": g.get("station_key"),
+                "station_name": g.get("station_name"),
+                "latitude": g["latitude"],
+                "longitude": g["longitude"],
+                "kiwis_no": g.get("kiwis_no"),
+                "kiwis_name": g.get("kiwis_name"),
+                "confidence": g.get("confidence"),
+                "method": g.get("method"),
+            })
+        database.execute("DELETE FROM gauge_coords")
+        database.insert_rows("gauge_coords", rows)
+        return f"Loaded coordinates for {len(rows):,} gauges."
+    except Exception as e:
+        log.exception("Gauge coords import failed")
+        return f"Import failed: {e}"
 
 
 def import_lfg_impacts(path):

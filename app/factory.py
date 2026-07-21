@@ -194,6 +194,7 @@ def create_app(autostart=False):
     from app import importer
     importer.ensure_flood_levels_seed()
     importer.ensure_lfg_impacts_seed()
+    importer.ensure_gauge_coords_seed()
 
     app = Dash(
         __name__,

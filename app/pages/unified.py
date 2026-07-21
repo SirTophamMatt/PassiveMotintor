@@ -17,6 +17,7 @@ from dash import Input, Output, dcc, html
 
 from app import ui
 from app.modules.fire import data as fire_data
+from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
 from app.modules.roads import data as roads_data
 from app.modules.storm import data as storm_data
@@ -28,13 +29,14 @@ VIC_CENTER = {"lat": -37.0, "lon": 145.0}
 
 LAYER_OPTIONS = [
     {"label": " Fire & warnings", "value": "fire"},
+    {"label": " Flood gauges", "value": "flood"},
     {"label": " Road disruptions", "value": "roads"},
     {"label": " Storm cells", "value": "storm"},
     {"label": " Power outages", "value": "power"},
     {"label": " Rainfall (AWS)", "value": "rain"},
 ]
 # Rainfall is off by default (it's the busiest layer); the rest are on.
-DEFAULT_LAYERS = ["fire", "roads", "storm", "power"]
+DEFAULT_LAYERS = ["fire", "flood", "roads", "storm", "power"]
 
 
 def _val(row, col):
@@ -80,6 +82,39 @@ def _fire_hover(r):
     bits = [b for b in (_val(r, "category1"), _val(r, "status"), _val(r, "size")) if b]
     if bits:
         txt += "<br>" + " · ".join(bits)
+    return txt
+
+
+def _flood_layer(on):
+    if "flood" not in on:
+        return [], []
+    df = flood_data.map_gauges()
+    if df is None or df.empty:
+        return [], []
+    traces = []
+    # Most severe first; below-flood gauges shown small/grey for network context.
+    tiers = [("Major flooding", "#d62728", 13, "Gauge: Major"),
+             ("Moderate flooding", "#ff7f0e", 12, "Gauge: Moderate"),
+             ("Minor flooding", "#e6c700", 11, "Gauge: Minor"),
+             ("Below flood level", "#5b8def", 6, "Gauge: below level")]
+    for label, colour, size, legend in tiers:
+        sub = df[df["label"] == label]
+        if sub.empty:
+            continue
+        traces.append(go.Scattermapbox(
+            mode="markers", lat=sub["latitude"], lon=sub["longitude"],
+            name=legend, legendgroup="flood",
+            marker=dict(size=size, color=colour),
+            hoverinfo="text", text=[_flood_hover(r) for _, r in sub.iterrows()]))
+    return traces, []
+
+
+def _flood_hover(r):
+    txt = "<b>%s</b>" % (_val(r, "station_name") or "Gauge")
+    if pd.notna(r.get("height_m")):
+        txt += "<br>%.2f m" % r["height_m"]
+    if _val(r, "label"):
+        txt += " · %s" % r["label"]
     return txt
 
 
@@ -214,7 +249,8 @@ def _rain_layer(on):
         hoverinfo="text", text=text)], []
 
 
-_BUILDERS = (_fire_layer, _roads_layer, _storm_layer, _power_layer, _rain_layer)
+_BUILDERS = (_fire_layer, _flood_layer, _roads_layer, _storm_layer,
+             _power_layer, _rain_layer)
 
 
 def _map_figure(on, dark):
@@ -246,8 +282,9 @@ def layout():
                               value=DEFAULT_LAYERS,
                               labelStyle={"display": "block"}),
                 html.Div("Legend entries are also clickable to isolate a layer. "
-                         "Flood gauges aren't shown yet (no coordinates in the "
-                         "BoM feed).", className="muted",
+                         "Flood gauges are matched to BoM Water Data Online "
+                         "coordinates (~77% of gauges; the rest are being "
+                         "filled in).", className="muted",
                          style={"marginTop": "8px", "fontSize": "12px"}),
             ], className="panel"),
         ], className="panel-row"),
@@ -278,6 +315,7 @@ def register_callbacks(app):
         power_t = power_data.latest_totals() or {}
         warnings = fire_c["emergency"] + fire_c["watch_act"] + fire_c["advice"]
         customers_off = power_t.get("customers_off")
+        flooding = flood_data.flooding_station_count()
 
         kpis = [
             ui.kpi_card("Active Fires", str(fire_c["active_fires"]),
@@ -285,6 +323,8 @@ def register_callbacks(app):
             ui.kpi_card("Fire Warnings", str(warnings),
                         "#d62728" if fire_c["emergency"] else
                         ("#ff7f0e" if warnings else None)),
+            ui.kpi_card("Gauges ≥ Minor", str(flooding),
+                        "#e6c700" if flooding else None),
             ui.kpi_card("Road Closures", str(roads_c["closures"]),
                         "#d62728" if roads_c["closures"] else None),
             ui.kpi_card("Storm Cells (strong)", str(storm_c["strong"]),
@@ -294,7 +334,7 @@ def register_callbacks(app):
                         "#7048e8" if customers_off else None),
         ]
 
-        summary = ("One map, live layers: %d fire/incident event(s), %d road "
-                   "disruption(s), %d storm cell(s)." % (
-                       fire_c["total"], roads_c["total"], storm_c["total"]))
+        summary = ("One map, live layers: %d fire/incident event(s), %d gauge(s) "
+                   "at/above minor, %d road disruption(s), %d storm cell(s)." % (
+                       fire_c["total"], flooding, roads_c["total"], storm_c["total"]))
         return summary, kpis, _map_figure(on, dark)

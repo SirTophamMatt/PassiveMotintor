@@ -88,6 +88,22 @@ CREATE TABLE IF NOT EXISTS gauge_impacts (
 );
 CREATE INDEX IF NOT EXISTS idx_gauge_impacts_key ON gauge_impacts (station_key);
 
+-- Flood gauge coordinates, matched from BoM Water Data Online (KiWIS) station
+-- names to our flood-warning gauge names. Lets flood gauges render on the map
+-- (the BoM flood feed itself carries no lat/lons). Reloaded from
+-- seed/gauge_coords.json on every boot (seed is the source of truth), same
+-- policy as flood_levels / gauge_impacts. Only matched gauges are stored.
+CREATE TABLE IF NOT EXISTS gauge_coords (
+    station_key TEXT PRIMARY KEY,   -- lowercased station name (= flood_levels key)
+    station_name TEXT,
+    latitude REAL,
+    longitude REAL,
+    kiwis_no TEXT,                  -- BoM Water Data Online station number (AWRC)
+    kiwis_name TEXT,                -- the matched KiWIS station name (for audit)
+    confidence TEXT,               -- high / medium / low / manual
+    method TEXT                    -- exact / subset / fuzzy / manual
+);
+
 -- BoM warnings (api.weather.bom.gov.au /warnings), upserted on the BoM id.
 -- A warning no longer in the feed (or past expiry) is marked inactive, kept.
 CREATE TABLE IF NOT EXISTS weather_warnings (

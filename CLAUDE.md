@@ -393,9 +393,34 @@ warning-level lines, colour-matched to the map kinds.
 - Fill layers are attached via `layout.mapbox.layers` (built INTO the mapbox dict,
   not a second `update_layout`, so the style/center/zoom aren't clobbered).
 
+## Flood gauge coordinates + flood layer (built 2026-07-22)
+- **The BoM flood feed carries no lat/lons**, so flood gauges couldn't be mapped.
+  Fixed by matching our flood-warning gauge NAMES to **BoM Water Data Online
+  (KiWIS `getStationList`)** station names, which do carry coordinates.
+- **`seed/gauge_coords_tool.py`** — re-runnable matcher (like `lfg_extract_tool.py`).
+  Fetches KiWIS (national; filtered to a VIC bbox — kept generous ON PURPOSE so
+  NSW-administered **Murray border gauges** aren't dropped), normalises away the
+  watercourse word + `@`/`at`, then matches exact → token-subset → fuzzy and writes
+  **`seed/gauge_coords.json`** with a confidence flag + the matched KiWIS name/number
+  for audit. Current result: **359/467 (77%)** — 182 high, 141 medium, 36 low;
+  108 unmatched (reservoirs/retarding basins/`(Upstream)` variants) written with
+  null coords for hand-filling. NOTE: the flood-warning station number on the BoM
+  page (e.g. 582015) is NOT the KiWIS/AWRC number (Biggara = 401012) — they don't
+  cross-reference, so matching is by NAME.
+- **`gauge_coords` table** (station_key PK + lat/lon + kiwis_no/name + confidence),
+  reloaded on boot from the seed via `importer.ensure_gauge_coords_seed()` — same
+  source-of-truth policy as flood_levels / LFG impacts. Only matched gauges stored.
+- **`flood.data.map_gauges()`** joins the latest reading per gauge to its coords and
+  classifies it (Major/Moderate/Minor/Below via `classify_station`).
+- **Flood layer on `/map`** (`unified._flood_layer`): gauge markers coloured by class
+  (red/orange/yellow), below-level gauges as small blue dots for network context;
+  a "Gauges ≥ Minor" KPI. Default on. To refresh coords, re-run the tool (on the
+  server it fetches KiWIS live) and redeploy.
+
 ## Backlog (not started)
-Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
-lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·
+Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
+lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
+~108 unmatched gauge coords in `seed/gauge_coords.json` ·
 event timeline/compare · BoM forecast overlay · data retention/archive · deploy pipeline
 (GitHub Action + Watchtower) · in-browser file upload on Import page · auto-tagging of events ·
 viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus ·

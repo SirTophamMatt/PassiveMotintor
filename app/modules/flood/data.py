@@ -139,6 +139,29 @@ def classify_station(latest_height, levels):
     return 4, "Below flood level", "#9aa0a6"
 
 
+def map_gauges():
+    """Latest reading for every gauge that has coordinates (gauge_coords),
+    classified by flood level. Returns a DataFrame with station_name, height_m,
+    latitude, longitude, priority, label, colour — for the map layers."""
+    df = database.read_df(
+        "SELECT o.station_name, o.height_m, g.latitude, g.longitude "
+        "FROM (SELECT station_name, height_m, MAX(timestamp) AS ts "
+        "      FROM flood_observations GROUP BY station_name) o "
+        "JOIN gauge_coords g ON g.station_key = LOWER(TRIM(o.station_name)) "
+        "WHERE g.latitude IS NOT NULL AND g.longitude IS NOT NULL")
+    if df.empty:
+        return df
+    levels = load_flood_levels()
+    df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
+    pri, lab, col = [], [], []
+    for _, row in df.iterrows():
+        lv = levels.get(str(row["station_name"]).strip().lower())
+        p, l, c = classify_station(row["height_m"], lv)
+        pri.append(p); lab.append(l); col.append(c)
+    df["priority"], df["label"], df["colour"] = pri, lab, col
+    return df
+
+
 def flooding_station_count(event=None):
     """Number of stations whose most recent reading exceeds their minor level."""
     query = "SELECT station_name, height_m, timestamp FROM flood_observations"
