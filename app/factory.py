@@ -14,13 +14,15 @@ from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page, fire, flood,
                        importer_page, overview, power, roads as roads_page,
-                       settings, station, storm as storm_page, weather)
+                       settings, station, storm as storm_page,
+                       unified as unified_page, weather)
 
 log = logging.getLogger(__name__)
 
 # path -> (label, module). Public pages first, then admin-only pages.
 PUBLIC_PAGES = [
     ("/", "Overview", overview),
+    ("/map", "Unified Map", unified_page),
     ("/flood", "Flood Monitor", flood),
     ("/fire", "Fire / Incidents", fire),
     ("/weather", "Weather Warnings", weather),

@@ -374,6 +374,25 @@ warning-level lines, colour-matched to the map kinds.
   cross-layer correlation backlog item ("road cuts near rising gauges") can now
   join `road_disruptions` geometry against flood gauges via a shapely/STRtree pass.
 
+## Unified map (built 2026-07-22)
+- **One map, every located layer, toggleable.** `app/pages/unified.py`, route `/map`
+  (2nd nav item, public). A single `go.Figure` assembled from per-layer builders,
+  each reading straight from its module's data layer and REUSING the fire/roads
+  render helpers so styling matches the per-hazard pages: **Fire** (kind-coloured
+  markers + area fills via `fire._fill_layer`), **Roads** (highlighted line
+  segments + point dots via `roads._line_segments`/`_hover`), **Storm** (cells
+  sized by area + impact-polygon fills from `storm.impact_featurecollection`),
+  **Power** (geocoded outage markers sized by customers-off), **Rainfall** (AWS
+  stations with rain-since-9am, off by default). A `dcc.Checklist` toggles layer
+  groups and Plotly's legend isolates individual traces.
+- **View is pinned across refreshes:** `uirevision="unified-map"` so the 60s
+  auto-refresh never resets pan/zoom (sit zoomed on a fireground while data
+  updates). Uses `ui.MAP_CONFIG` for scroll-wheel zoom like every other map.
+- **Flood gauges are intentionally excluded** — still no lat/lons (BoM KiWIS
+  backlog item); a note on the page says so rather than faking positions.
+- Fill layers are attached via `layout.mapbox.layers` (built INTO the mapbox dict,
+  not a second `update_layout`, so the style/center/zoom aren't clobbered).
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · flood map view (needs gauge
 lat/longs — BoM KiWIS `getStationList` likely has them; email to BoM drafted 2026-07-04) ·
@@ -382,5 +401,6 @@ event timeline/compare · BoM forecast overlay · data retention/archive · depl
 viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus ·
 **per-catchment rainfall rollup** (aggregate rainfall_observations by weather_locations.catchment
 for a "rain by catchment" summary + a per-catchment total on gauge pages) · rainfall on the
-station briefing PDF · unified map · cross-layer correlation engine (outages inside flooded
-catchments, road cuts near rising gauges).
+station briefing PDF · cross-layer correlation engine (outages inside flooded
+catchments, road cuts near rising gauges) — the `/map` unified view now exists as the shared
+canvas for this. (Unified map itself: DONE 2026-07-22, see above.)
