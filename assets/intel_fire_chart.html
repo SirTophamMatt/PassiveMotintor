@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fire burnt area chart generator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1e2a32;
+      --muted: #5f6b73;
+      --line: #d8dee2;
+      --soft: #f4f6f7;
+      --teal: #1f4e5f;
+      --orange: #d26a3c;
+      --danger: #a43d32;
+      --success: #386641;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--soft);
+      font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+      font-size: 15px;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .48; }
+    .app-header {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px 24px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+    .app-header h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .button {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 13px;
+      color: var(--ink);
+      background: #ffffff;
+      border: 1px solid #b9c2c8;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .button:hover { background: #f7f9fa; }
+    .button-primary {
+      color: #ffffff;
+      background: var(--teal);
+      border-color: var(--teal);
+    }
+    .button-primary:hover { background: #173e4c; }
+    .workspace {
+      min-height: calc(100vh - 68px);
+      display: grid;
+      grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+    }
+    .editor {
+      padding: 22px 24px 30px;
+      background: #ffffff;
+      border-right: 1px solid var(--line);
+    }
+    .preview {
+      min-width: 0;
+      padding: 22px 24px 34px;
+    }
+    .section-heading {
+      margin: 0 0 14px;
+      font-size: 16px;
+      line-height: 1.3;
+    }
+    .total-field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+    .field-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .text-input {
+      width: 100%;
+      min-width: 0;
+      height: 40px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: #ffffff;
+      border: 1px solid #aeb8bf;
+      border-radius: 5px;
+    }
+    .text-input:focus {
+      border-color: var(--teal);
+      outline: 3px solid rgba(31, 78, 95, .16);
+    }
+    .total-input {
+      height: 46px;
+      font-size: 19px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .totals-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      margin-bottom: 20px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .total-item {
+      min-width: 0;
+      padding: 12px;
+      background: var(--soft);
+    }
+    .total-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .total-item strong {
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: 17px;
+      font-variant-numeric: tabular-nums;
+    }
+    .total-item.is-invalid strong { color: var(--danger); }
+    .rows-header, .fire-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(118px, .8fr) 34px;
+      gap: 8px;
+      align-items: center;
+    }
+    .rows-header {
+      padding: 0 0 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .rows-header span:nth-child(2) { text-align: right; }
+    .fire-rows {
+      display: grid;
+      gap: 8px;
+    }
+    .fire-row .value-input {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .remove-button {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      color: #6a747b;
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      font-size: 23px;
+      line-height: 1;
+    }
+    .remove-button:hover {
+      color: var(--danger);
+      background: #f8ecea;
+    }
+    .status {
+      min-height: 22px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .status.is-error { color: var(--danger); font-weight: 600; }
+    .status.is-valid { color: var(--success); }
+    .preview-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .preview-heading h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .preview-heading span {
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chart-shell {
+      max-width: 1280px;
+      overflow-x: auto;
+      background: #ffffff;
+      border: 1px solid var(--line);
+    }
+    #chart {
+      display: block;
+      width: 100%;
+      min-width: 900px;
+      height: auto;
+      background: #ffffff;
+    }
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 1fr; }
+      .editor { border-right: 0; border-bottom: 1px solid var(--line); }
+      .preview { padding-left: 16px; padding-right: 16px; }
+    }
+    @media (max-width: 520px) {
+      .app-header { align-items: flex-start; padding: 14px 16px; }
+      .app-header { flex-direction: column; }
+      .actions { width: 100%; }
+      .actions .button { flex: 1 1 auto; }
+      .editor { padding: 18px 16px 24px; }
+      .rows-header, .fire-row {
+        grid-template-columns: minmax(0, 1fr) 112px 34px;
+      }
+      .totals-strip { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Fire burnt area chart generator</h1>
+    <div class="actions">
+      <button type="button" class="button" id="addFire"><span aria-hidden="true">+</span> Add fire</button>
+      <button type="button" class="button button-primary" id="downloadSvg">Download SVG</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="editor" aria-labelledby="dataHeading">
+      <h2 class="section-heading" id="dataHeading">Chart data</h2>
+      <label class="total-field" for="totalHectares">
+        <span class="field-label">Total hectares</span>
+        <input class="text-input total-input" id="totalHectares" inputmode="decimal" autocomplete="off" value="438,278.02">
+      </label>
+
+      <div class="totals-strip" aria-live="polite">
+        <div class="total-item">
+          <span>Named fires total</span>
+          <strong id="namedTotal">409,264.34 ha</strong>
+        </div>
+        <div class="total-item" id="othersTotalItem">
+          <span>All Others</span>
+          <strong id="othersTotal">29,013.68 ha</strong>
+        </div>
+      </div>
+
+      <div class="rows-header" aria-hidden="true">
+        <span>Fire name</span>
+        <span>Hectares</span>
+        <span></span>
+      </div>
+      <div class="fire-rows" id="fireRows"></div>
+      <p class="status is-valid" id="status" aria-live="polite">Figures reconcile with the total.</p>
+    </section>
+
+    <section class="preview" aria-labelledby="previewHeading">
+      <div class="preview-heading">
+        <h2 id="previewHeading">Chart preview</h2>
+        <span id="previewMeta">11 categories | 438,278.02 ha</span>
+      </div>
+      <div class="chart-shell">
+        <svg id="chart" role="img" aria-labelledby="chartTitle chartDesc"></svg>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var initialFires = [
+        { name: "Longwood", value: 132150.00 },
+        { name: "Walwa", value: 120914.35 },
+        { name: "Boinka", value: 55503.16 },
+        { name: "Dargo - Wonnangatta Complex", value: 49940.00 },
+        { name: "Streatham", value: 19298.95 },
+        { name: "Carlisle River", value: 11716.14 },
+        { name: "Grass Flat", value: 8190.00 },
+        { name: "Ravenswood", value: 4402.96 },
+        { name: "Wyperfeld National Park", value: 3720.68 },
+        { name: "Kennedys Creek", value: 3428.10 }
+      ];
+
+      var colors = [
+        "#1F4E5F", "#D26A3C", "#7A8E3C", "#4B6F96", "#C2912B",
+        "#66558D", "#A44E48", "#4D8D80", "#8A7955", "#6D7A88",
+        "#B65C83", "#5F7357", "#AD7145", "#56788A"
+      ];
+      var othersColor = "#C7B99A";
+      var svgNs = "http://www.w3.org/2000/svg";
+      var rows = initialFires.slice();
+      var rowSequence = rows.length;
+      var measureCanvas = document.createElement("canvas");
+      var measureContext = measureCanvas.getContext("2d");
+
+      var fireRows = document.getElementById("fireRows");
+      var totalInput = document.getElementById("totalHectares");
+      var namedTotalOutput = document.getElementById("namedTotal");
+      var othersTotalOutput = document.getElementById("othersTotal");
+      var othersTotalItem = document.getElementById("othersTotalItem");
+      var statusOutput = document.getElementById("status");
+      var chart = document.getElementById("chart");
+      var previewMeta = document.getElementById("previewMeta");
+      var addFireButton = document.getElementById("addFire");
+      var downloadButton = document.getElementById("downloadSvg");
+
+      function parseNumber(value) {
+        var parsed = Number(String(value).replace(/,/g, "").trim());
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function formatHectares(value) {
+        return new Intl.NumberFormat("en-AU", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        }).format(Math.round(value * 100) / 100);
+      }
+
+      function formatInput(value) {
+        return new Intl.NumberFormat("en-AU", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(Math.round(value * 100) / 100);
+      }
+
+      function formatPercent(value, total) {
+        if (total <= 0) return "0.0%";
+        return ((value / total) * 100).toFixed(1) + "%";
+      }
+
+      function svgElement(tagName, attributes, text) {
+        var element = document.createElementNS(svgNs, tagName);
+        Object.keys(attributes || {}).forEach(function (name) {
+          element.setAttribute(name, attributes[name]);
+        });
+        if (text !== undefined) element.textContent = text;
+        return element;
+      }
+
+      function polarPoint(cx, cy, radius, angleDegrees) {
+        var radians = (angleDegrees - 90) * Math.PI / 180;
+        return {
+          x: cx + radius * Math.cos(radians),
+          y: cy + radius * Math.sin(radians)
+        };
+      }
+
+      function donutPath(cx, cy, outerRadius, innerRadius, startAngle, endAngle) {
+        var outerStart = polarPoint(cx, cy, outerRadius, startAngle);
+        var outerEnd = polarPoint(cx, cy, outerRadius, endAngle);
+        var innerEnd = polarPoint(cx, cy, innerRadius, endAngle);
+        var innerStart = polarPoint(cx, cy, innerRadius, startAngle);
+        var largeArc = endAngle - startAngle > 180 ? 1 : 0;
+        return [
+          "M", outerStart.x.toFixed(3), outerStart.y.toFixed(3),
+          "A", outerRadius, outerRadius, 0, largeArc, 1, outerEnd.x.toFixed(3), outerEnd.y.toFixed(3),
+          "L", innerEnd.x.toFixed(3), innerEnd.y.toFixed(3),
+          "A", innerRadius, innerRadius, 0, largeArc, 0, innerStart.x.toFixed(3), innerStart.y.toFixed(3),
+          "Z"
+        ].join(" ");
+      }
+
+      function wrapText(text, maxWidth, font) {
+        var words = String(text || "Unnamed fire").trim().split(/\s+/);
+        var lines = [];
+        var line = "";
+        measureContext.font = font;
+        words.forEach(function (word) {
+          var testLine = line ? line + " " + word : word;
+          if (line && measureContext.measureText(testLine).width > maxWidth) {
+            lines.push(line);
+            line = word;
+          } else {
+            line = testLine;
+          }
+        });
+        if (line) lines.push(line);
+        return lines.length ? lines : ["Unnamed fire"];
+      }
+
+      function appendTextLines(parent, lines, x, y, className, anchor, lineHeight) {
+        var text = svgElement("text", {
+          x: x,
+          y: y,
+          "class": className,
+          "text-anchor": anchor || "start"
+        });
+        lines.forEach(function (line, index) {
+          text.appendChild(svgElement("tspan", {
+            x: x,
+            dy: index === 0 ? 0 : lineHeight
+          }, line));
+        });
+        parent.appendChild(text);
+        return text;
+      }
+
+      function renderRows() {
+        fireRows.replaceChildren();
+        rows.forEach(function (row, index) {
+          var wrapper = document.createElement("div");
+          wrapper.className = "fire-row";
+
+          var nameInput = document.createElement("input");
+          nameInput.className = "text-input";
+          nameInput.type = "text";
+          nameInput.value = row.name;
+          nameInput.setAttribute("aria-label", "Fire name " + (index + 1));
+          nameInput.addEventListener("input", function () {
+            row.name = nameInput.value;
+            update();
+          });
+
+          var valueInput = document.createElement("input");
+          valueInput.className = "text-input value-input";
+          valueInput.type = "text";
+          valueInput.inputMode = "decimal";
+          valueInput.value = formatInput(row.value);
+          valueInput.setAttribute("aria-label", "Hectares for " + (row.name || "fire " + (index + 1)));
+          valueInput.addEventListener("input", function () {
+            row.value = Math.max(0, parseNumber(valueInput.value));
+            update();
+          });
+          valueInput.addEventListener("blur", function () {
+            valueInput.value = formatInput(row.value);
+          });
+
+          var removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.className = "remove-button";
+          removeButton.textContent = "x";
+          removeButton.title = "Remove fire";
+          removeButton.setAttribute("aria-label", "Remove " + (row.name || "fire " + (index + 1)));
+          removeButton.disabled = rows.length === 1;
+          removeButton.addEventListener("click", function () {
+            rows.splice(index, 1);
+            renderRows();
+            update();
+          });
+
+          wrapper.appendChild(nameInput);
+          wrapper.appendChild(valueInput);
+          wrapper.appendChild(removeButton);
+          fireRows.appendChild(wrapper);
+        });
+      }
+
+      function layoutCallouts(items, side) {
+        var minY = 150;
+        var maxY = 610;
+        var gap = 10;
+        var cursor = minY;
+        items.sort(function (a, b) { return a.desiredY - b.desiredY; });
+        items.forEach(function (item) {
+          item.y = Math.max(item.desiredY, cursor);
+          cursor = item.y + item.blockHeight + gap;
+        });
+        var overflow = cursor - gap - maxY;
+        if (overflow > 0) {
+          items.forEach(function (item) { item.y -= overflow; });
+        }
+        for (var i = items.length - 2; i >= 0; i -= 1) {
+          var latest = items[i + 1].y - items[i].blockHeight - gap;
+          if (items[i].y > latest) items[i].y = latest;
+        }
+        if (items.length && items[0].y < minY) {
+          var shift = minY - items[0].y;
+          items.forEach(function (item) { item.y += shift; });
+        }
+        return items;
+      }
+
+      function renderChart(total, namedTotal, allOthers) {
+        chart.replaceChildren();
+
+        var named = rows.map(function (row, index) {
+          return {
+            name: row.name.trim() || "Unnamed fire",
+            value: Math.max(0, row.value),
+            color: colors[index % colors.length]
+          };
+        }).sort(function (a, b) { return b.value - a.value; });
+
+        var data = named.concat([{
+          name: "All Others",
+          value: Math.max(0, allOthers),
+          color: othersColor
+        }]);
+
+        var legendRows = data.map(function (item) {
+          var lines = wrapText(item.name, 238, "15px Arial");
+          return {
+            item: item,
+            lines: lines,
+            height: Math.max(34, lines.length * 18 + 10)
+          };
+        });
+
+        var legendHeight = legendRows.reduce(function (sum, row) { return sum + row.height; }, 0);
+        var height = Math.max(760, 176 + legendHeight + 78);
+        chart.setAttribute("xmlns", svgNs);
+        chart.setAttribute("width", "1280");
+        chart.setAttribute("height", String(height));
+        chart.setAttribute("viewBox", "0 0 1280 " + height);
+        chart.setAttribute("data-ready", "true");
+
+        var style = svgElement("style", {}, [
+          ".sheet{fill:#FFFFFF}",
+          ".chart-title{font:700 32px Arial,Helvetica,sans-serif;fill:#1E2A32}",
+          ".chart-subtitle{font:16px Arial,Helvetica,sans-serif;fill:#526069}",
+          ".centre-label{font:700 18px Arial,Helvetica,sans-serif;fill:#1E2A32;text-anchor:middle}",
+          ".centre-value{font-family:Arial,Helvetica,sans-serif;font-weight:700;fill:#1E2A32;text-anchor:middle}",
+          ".centre-note{font:14px Arial,Helvetica,sans-serif;fill:#526069;text-anchor:middle}",
+          ".legend-heading{font:700 12px Arial,Helvetica,sans-serif;fill:#526069}",
+          ".legend-name{font:15px Arial,Helvetica,sans-serif;fill:#1E2A32}",
+          ".legend-value{font:700 15px Arial,Helvetica,sans-serif;fill:#1E2A32;text-anchor:end}",
+          ".legend-ha{font:13px Arial,Helvetica,sans-serif;fill:#526069;text-anchor:end}",
+          ".callout{font:700 14px Arial,Helvetica,sans-serif;fill:#1E2A32}",
+          ".callout-sub{font:12px Arial,Helvetica,sans-serif;fill:#526069}",
+          ".hairline{stroke:#7B858B;stroke-width:1.2;fill:none;opacity:.65}",
+          ".segment{stroke:#FFFFFF;stroke-width:3}",
+          ".footnote{font:12px Arial,Helvetica,sans-serif;fill:#69757D}"
+        ].join(""));
+        chart.appendChild(style);
+        chart.appendChild(svgElement("title", { id: "chartTitle" }, "Hectares burnt by fire name"));
+        chart.appendChild(svgElement("desc", { id: "chartDesc" }, "Donut chart showing each fire's share of the total burnt area."));
+        chart.appendChild(svgElement("rect", { "class": "sheet", width: 1280, height: height }));
+        chart.appendChild(svgElement("text", { x: 70, y: 72, "class": "chart-title" }, "Hectares burnt by fire name"));
+        chart.appendChild(svgElement("text", { x: 70, y: 102, "class": "chart-subtitle" }, "Share of total recorded burnt area across listed fires"));
+
+        if (total <= 0 || namedTotal > total + 0.005) {
+          chart.appendChild(svgElement("text", {
+            x: 640,
+            y: 350,
+            "text-anchor": "middle",
+            "class": "chart-title"
+          }, total <= 0 ? "Enter a total greater than zero" : "Named fires exceed the total"));
+          return;
+        }
+
+        var cx = 430;
+        var cy = 340;
+        var outer = 210;
+        var inner = 118;
+        var angle = 0;
+        var segments = [];
+
+        data.forEach(function (item) {
+          var sweep = total > 0 ? item.value / total * 360 : 0;
+          var segment = {
+            name: item.name,
+            value: item.value,
+            color: item.color,
+            start: angle,
+            end: angle + sweep,
+            mid: angle + sweep / 2
+          };
+          segments.push(segment);
+          angle += sweep;
+        });
+
+        segments.forEach(function (item) {
+          if (item.value <= 0) return;
+          var path = svgElement("path", {
+            "class": "segment",
+            d: donutPath(cx, cy, outer, inner, item.start, item.end),
+            fill: item.color
+          });
+          path.appendChild(svgElement("title", {}, item.name + " - " + formatHectares(item.value) + " hectares (" + formatPercent(item.value, total) + ")"));
+          chart.appendChild(path);
+        });
+
+        var calloutItems = segments.filter(function (item) {
+          return item.name !== "All Others" && item.value > 0;
+        }).slice(0, 4);
+        var leftLabels = [];
+        var rightLabels = [];
+
+        calloutItems.forEach(function (item) {
+          var anchor = polarPoint(cx, cy, outer + 8, item.mid);
+          var desired = polarPoint(cx, cy, outer + 62, item.mid);
+          var left = desired.x < cx;
+          var lines = wrapText(item.name, left ? 190 : 112, "700 14px Arial");
+          var label = {
+            item: item,
+            anchor: anchor,
+            desiredY: desired.y,
+            lines: lines,
+            blockHeight: lines.length * 16 + 22,
+            left: left
+          };
+          (left ? leftLabels : rightLabels).push(label);
+        });
+
+        layoutCallouts(leftLabels, true);
+        layoutCallouts(rightLabels, false);
+
+        leftLabels.concat(rightLabels).forEach(function (label) {
+          var textX = label.left ? 205 : 675;
+          var lineEndX = label.left ? 217 : 663;
+          var elbowX = label.left ? 227 : 653;
+          var anchorMode = label.left ? "end" : "start";
+          var labelY = label.y;
+          var pathData = [
+            "M", label.anchor.x.toFixed(2), label.anchor.y.toFixed(2),
+            "L", elbowX, labelY - 4,
+            "L", lineEndX, labelY - 4
+          ].join(" ");
+          chart.appendChild(svgElement("path", { "class": "hairline", d: pathData }));
+          appendTextLines(chart, label.lines, textX, labelY, "callout", anchorMode, 16);
+          chart.appendChild(svgElement("text", {
+            x: textX,
+            y: labelY + label.lines.length * 16 + 2,
+            "text-anchor": anchorMode,
+            "class": "callout-sub"
+          }, formatPercent(label.item.value, total) + " of burnt area"));
+        });
+
+        chart.appendChild(svgElement("circle", { cx: cx, cy: cy, r: inner, fill: "#FFFFFF" }));
+        chart.appendChild(svgElement("text", { x: cx, y: cy - 20, "class": "centre-label" }, "Total burnt area"));
+        var totalText = formatHectares(total);
+        var totalFontSize = totalText.length > 13 ? 24 : totalText.length > 10 ? 28 : 34;
+        chart.appendChild(svgElement("text", {
+          x: cx,
+          y: cy + 20,
+          "class": "centre-value",
+          "font-size": totalFontSize
+        }, totalText));
+        chart.appendChild(svgElement("text", { x: cx, y: cy + 48, "class": "centre-note" }, "hectares"));
+
+        chart.appendChild(svgElement("text", { x: 844, y: 136, "class": "legend-heading" }, "Fire name"));
+        chart.appendChild(svgElement("text", { x: 1110, y: 136, "text-anchor": "end", "class": "legend-heading" }, "Share"));
+        chart.appendChild(svgElement("text", { x: 1250, y: 136, "text-anchor": "end", "class": "legend-heading" }, "Hectares burnt"));
+
+        var legendY = 176;
+        legendRows.forEach(function (row) {
+          var group = svgElement("g", { transform: "translate(820 " + legendY + ")" });
+          group.appendChild(svgElement("rect", {
+            x: 0,
+            y: -10,
+            width: 14,
+            height: 14,
+            rx: 3,
+            fill: row.item.color
+          }));
+          appendTextLines(group, row.lines, 24, 0, "legend-name", "start", 18);
+          group.appendChild(svgElement("text", { x: 290, y: 0, "class": "legend-value" }, formatPercent(row.item.value, total)));
+          group.appendChild(svgElement("text", { x: 430, y: 0, "class": "legend-ha" }, formatHectares(row.item.value) + " ha"));
+          chart.appendChild(group);
+          legendY += row.height;
+        });
+
+        chart.appendChild(svgElement("text", {
+          x: 70,
+          y: height - 38,
+          "class": "footnote"
+        }, "All Others is calculated as total hectares minus the named fires."));
+      }
+
+      function update() {
+        var total = Math.max(0, parseNumber(totalInput.value));
+        var namedTotal = rows.reduce(function (sum, row) {
+          return sum + Math.max(0, Number(row.value) || 0);
+        }, 0);
+        var allOthers = total - namedTotal;
+        var valid = total > 0 && allOthers >= -0.005;
+        var displayedOthers = Math.abs(allOthers) < 0.005 ? 0 : allOthers;
+
+        namedTotalOutput.textContent = formatHectares(namedTotal) + " ha";
+        othersTotalOutput.textContent = formatHectares(displayedOthers) + " ha";
+        othersTotalItem.classList.toggle("is-invalid", !valid);
+        downloadButton.disabled = !valid;
+
+        if (total <= 0) {
+          statusOutput.className = "status is-error";
+          statusOutput.textContent = "Enter a total greater than zero.";
+        } else if (allOthers < -0.005) {
+          statusOutput.className = "status is-error";
+          statusOutput.textContent = "Named fires exceed the total by " + formatHectares(Math.abs(allOthers)) + " ha.";
+        } else {
+          statusOutput.className = "status is-valid";
+          statusOutput.textContent = "Figures reconcile with the total.";
+        }
+
+        previewMeta.textContent = (rows.length + 1) + " categories | " + formatHectares(total) + " ha";
+        renderChart(total, namedTotal, displayedOthers);
+      }
+
+      totalInput.addEventListener("input", update);
+      totalInput.addEventListener("blur", function () {
+        totalInput.value = formatInput(Math.max(0, parseNumber(totalInput.value)));
+      });
+
+      addFireButton.addEventListener("click", function () {
+        rowSequence += 1;
+        rows.push({ name: "New fire " + rowSequence, value: 0 });
+        renderRows();
+        update();
+        var inputs = fireRows.querySelectorAll(".fire-row input:first-child");
+        var latest = inputs[inputs.length - 1];
+        if (latest) {
+          latest.focus();
+          latest.select();
+        }
+      });
+
+      downloadButton.addEventListener("click", function () {
+        if (downloadButton.disabled) return;
+        var copy = chart.cloneNode(true);
+        copy.setAttribute("xmlns", svgNs);
+        var source = '<?xml version="1.0" encoding="UTF-8"?>\n' + copy.outerHTML;
+        var blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "fire-burnt-donut.svg";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+
+      renderRows();
+      update();
+    }());
+  </script>
+</body>
+</html>

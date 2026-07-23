@@ -13,7 +13,7 @@ DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page, fire, flood,
-                       importer_page, overview, power, roads as roads_page,
+                       importer_page, intel, overview, power, roads as roads_page,
                        settings, station, storm as storm_page,
                        unified as unified_page, weather)
 
@@ -29,6 +29,9 @@ PUBLIC_PAGES = [
     ("/storm", "Storm Tracker (Alpha)", storm_page),
     ("/roads", "Road Disruptions", roads_page),
     ("/power", "Power Outages", power),
+    # Renders its own password gate (like /admin), so it is deliberately NOT in
+    # RESTRICTED — that mechanism is for admin-only pages.
+    ("/intel", "Intel Tool", intel),
 ]
 ADMIN_PAGES = [
     ("/admin", "Admin", admin),
