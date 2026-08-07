@@ -3,6 +3,7 @@
 dist/
 build/
 backups/
+storm_frames/
 __pycache__/
 *.pyc
 *.db

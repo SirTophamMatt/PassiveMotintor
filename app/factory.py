@@ -4,7 +4,7 @@ import os
 import secrets
 
 import flask
-from dash import Dash, Input, Output, State, dcc, html
+from dash import Dash, Input, Output, State, dcc, get_asset_url, html
 
 # Set by run_desktop.py so the app renders a custom frameless title bar
 # (with window controls) instead of relying on the OS chrome.
@@ -52,8 +52,9 @@ def _titlebar():
     (wired up in assets/titlebar.js)."""
     return html.Div([
         html.Div([
-            html.Span("⚡", className="tb-logo"),
-            html.Span("Passive Monitor", className="tb-title"),
+            html.Img(src=get_asset_url("watchdesk-favicon.svg"), alt="",
+                     className="tb-logo"),
+            html.Span("Watchdesk", className="tb-title"),
         ], className="tb-drag pywebview-drag-region"),
         html.Div([
             html.Div("–", id="win-min", className="win-btn",
@@ -77,7 +78,15 @@ def _shell_layout():
         children.append(_titlebar())
     children.append(html.Div([
         html.Div([
-            html.Div("⚡ Passive Monitor", className="brand"),
+            html.Div([
+                # Two lockups, one per theme (cream wordmark on dark, navy on
+                # light); CSS shows whichever matches the active theme so the
+                # swap needs no callback.
+                html.Img(src=get_asset_url("watchdesk-lockup-dark.svg"),
+                         alt="Watchdesk", className="brand-mark brand-dark"),
+                html.Img(src=get_asset_url("watchdesk-lockup-light.svg"),
+                         alt="Watchdesk", className="brand-mark brand-light"),
+            ], className="brand"),
             html.Nav(id="main-nav", className="nav"),
             html.Div([
                 html.Div("VicEmergency feed", className="side-log-title"),
@@ -202,9 +211,18 @@ def create_app(autostart=False):
     app = Dash(
         __name__,
         suppress_callback_exceptions=True,
-        title="Passive Monitor",
+        title="Watchdesk",
         assets_folder=os.path.join(BUNDLE_DIR, "assets"),
     )
+    # Dash auto-discovers assets/favicon.ico (raster, every browser) and emits
+    # it via {%favicon%}. Append the brand SVG after it so modern browsers pick
+    # the vector and stay crisp on high-DPI screens. Patching the default index
+    # rather than replacing it keeps whatever Dash's template does next.
+    app.index_string = app.index_string.replace(
+        "{%favicon%}",
+        '{%favicon%}\n        <link rel="icon" type="image/svg+xml" '
+        f'href="{get_asset_url("watchdesk-favicon.svg")}">')
+
     app.layout = _shell_layout()
 
     # Secret key for the admin session cookie. Prefer a stable key from the

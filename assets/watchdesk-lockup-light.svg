@@ -1,0 +1,12 @@
+<svg width="270" height="64" viewBox="0 0 270 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Watchdesk">
+  <title>Watchdesk lockup (light backgrounds)</title>
+  <desc>Header lockup: radar-over-desk mark with monospace wordmark, navy and amber on transparent for light UI headers.</desc>
+  <circle cx="32" cy="26" r="16" fill="none" stroke="#1B2A41" stroke-width="2.5"/>
+  <path d="M32 26 L25.2 11.5 A16 16 0 0 1 32 10 Z" fill="#5C6E8C"/>
+  <path d="M32 26 L32 10 A16 16 0 0 1 42.3 13.7 Z" fill="#F2A93B"/>
+  <circle cx="38" cy="32" r="2.2" fill="#1B2A41"/>
+  <rect x="14" y="46" width="36" height="4" rx="2" fill="#1B2A41"/>
+  <rect x="18" y="50" width="3" height="6" fill="#1B2A41"/>
+  <rect x="43" y="50" width="3" height="6" fill="#1B2A41"/>
+  <text x="62" y="42" font-family="ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace" font-size="30" font-weight="500" letter-spacing="2" fill="#1B2A41">watchdesk</text>
+</svg>

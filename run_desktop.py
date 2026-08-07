@@ -80,7 +80,7 @@ def main():
     global _window
     controls = WindowControls()
     _window = webview.create_window(
-        "Passive Monitor", f"http://{HOST}:{PORT}",
+        "Watchdesk", f"http://{HOST}:{PORT}",
         width=1480, height=950, min_size=(1100, 700),
         frameless=True,            # hide the native title bar / border
         easy_drag=False,           # drag only via the title bar's drag region
