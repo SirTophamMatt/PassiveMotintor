@@ -473,8 +473,10 @@ def _detect_flood(cfg, cutoff):
         window_ts, window_height = _rate_anchor(
             readings, int(settings["flood_rate_window_minutes"]))
         analysis = _trend_for(station_key, level, cfg)
-        headline = (f"{station} {(analysis or {}).get('headline', 'rising')
-                                 .lower()}"
+        # Kept out of the f-string on purpose: a replacement field may only span
+        # lines from Python 3.12 (PEP 701), and the Docker image is 3.11.
+        trend_headline = (analysis or {}).get("headline", "rising").lower()
+        headline = (f"{station} {trend_headline}"
                     if analysis and analysis.get("rate_m_hr")
                     else f"{station} rising quickly")
         record("flood", "rising", MAJOR if priority < 4 else NOTABLE,
