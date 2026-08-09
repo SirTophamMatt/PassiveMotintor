@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS flood_observations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_flood_obs_unique2
     ON flood_observations (event, station_name, timestamp, height_m);
 CREATE INDEX IF NOT EXISTS idx_flood_obs_event ON flood_observations (event);
+-- EXPRESSION index, and it has to be one: every per-gauge lookup in the app
+-- matches on LOWER(TRIM(station_name)) (station_latest, station_history,
+-- flood trend analysis, projection verification), which no plain index on
+-- station_name can serve — SQLite falls back to scanning the whole table.
+-- At VPS scale (~1.4M rows) that is ~390 ms per lookup, and the 60-second
+-- intel pass issues hundreds of them. Measured end-to-end on a 1.4M-row DB
+-- with a 300-projection backlog: one cycle took 103.6 s against a 60 s
+-- interval, which is what took the server down on 2026-08-09; with this index
+-- the same cycle is 3.1 s. Created here (not via _ensure_column) because
+-- init_db replays the whole schema on every boot, so existing DBs pick it up
+-- automatically — it takes ~2 s to build on 1.4M rows.
+CREATE INDEX IF NOT EXISTS idx_flood_obs_station_ts
+    ON flood_observations (LOWER(TRIM(station_name)), timestamp);
 
 -- One row per collection cycle, proving the monitor was running even when no
 -- new observations arrived (the "heartbeat").

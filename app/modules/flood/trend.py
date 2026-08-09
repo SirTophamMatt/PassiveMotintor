@@ -415,7 +415,7 @@ def record_projection(analysis, station_name=None):
                                 ignore_duplicates=True) > 0
 
 
-def verify_projections(cfg=None, now=None, limit=500):
+def verify_projections(cfg=None, now=None, limit=None):
     """Score every pending projection against what the gauge actually did.
 
     A projection is REACHED when an observation at or above the target height
@@ -429,6 +429,8 @@ def verify_projections(cfg=None, now=None, limit=500):
     cfg = cfg or load_config()
     now = now or datetime.now()
     grace = timedelta(hours=float(cfg["flood"]["projection_grace_hours"]))
+    if limit is None:
+        limit = int(cfg["intel"].get("projection_verify_limit", 100))
 
     pending = database.read_df(
         "SELECT * FROM flood_projections WHERE outcome = ? "

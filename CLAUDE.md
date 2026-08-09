@@ -533,6 +533,37 @@ warning-level lines, colour-matched to the map kinds.
   impacts, an accuracy trend over time, calibrating `trend_min_range_pct` from the observed
   in-window rate once real events have accumulated.
 
+## POSTMORTEM — the projection cycle took the VPS down (2026-08-09, fixed same day)
+- **What happened.** Shipping the flood trend work wedged the production server. The intel
+  detector ran `run_projection_cycle` on its 60-second pass; at production scale one pass
+  measured **103 s** (and worse with the original 500-verification cap), so the thread never
+  finished before the next was due. It pegged a core and thrashed the disk alongside the
+  Chrome/Xvfb power scraper. It degraded over time rather than failing immediately, because
+  the cost scales with the backlog of pending projections.
+- **Root cause: `LOWER(TRIM(station_name))` is not sargable.** Every per-gauge lookup in the
+  app matches on it (`station_latest`, `station_history`, `trend.analyse`,
+  `verify_projections`). No plain index on `station_name` can serve that expression, so
+  SQLite scanned the whole table every time — ~390 ms per lookup at 1.4M rows, and the cycle
+  issues hundreds per pass. It was invisible locally because the dev DB is 69k rows (21 ms),
+  20x smaller.
+- **Fix 1 — expression index.** `idx_flood_obs_station_ts ON flood_observations
+  (LOWER(TRIM(station_name)), timestamp)`. SQLite indexes expressions, so the existing
+  queries became sargable with no code change: 390 ms -> 0.1 ms, measured cycle 103.6 s ->
+  3.1 s. It lives in `SCHEMA` (not `_ensure_column`) because `init_db` replays the whole
+  schema on every boot, so existing DBs pick it up automatically; ~2-4 s to build on 1.4M
+  rows. This also speeds up every gauge detail page.
+- **Fix 2 — the cycle runs on its own slower clock.** `intel.projection_interval_seconds`
+  (300) gated via `_projection_due`. Gauges only report every ~15 min, so running it every
+  60 s repeated identical work against unchanged data. In-process state, so a restart runs it
+  once immediately.
+- **Fix 3 — bounded verification.** `intel.projection_verify_limit` (100, was a hardcoded
+  500) so a backlog is worked off steadily instead of in one unbounded burst.
+- **The lesson for anything new on the intel pass:** it runs every 60 s against tables that
+  grow forever. Before adding work there, check the query plan against a PRODUCTION-SIZED
+  table — `EXPLAIN QUERY PLAN` showing `SCAN` on `flood_observations`, `rainfall_aws` or
+  `storm_cells` is a wedged server waiting to happen, and the dev DB is far too small to
+  reveal it.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the

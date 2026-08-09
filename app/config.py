@@ -176,6 +176,14 @@ DEFAULTS = {
         # A continuing trend (rising gauge, growing outage, rain burst) re-fires
         # at most once per this many minutes.
         "repeat_suppress_minutes": 30,
+        # The flood projection cycle runs on its OWN, slower clock rather than
+        # on every detector pass. Gauges only report every ~15 min, so running
+        # it every 60 s repeated the same work with no new input — and on a
+        # large DB that work is heavy enough to overrun the interval entirely.
+        "projection_interval_seconds": 300,
+        # Hard ceiling on verifications resolved per cycle, so a backlog is
+        # worked off steadily instead of in one unbounded burst.
+        "projection_verify_limit": 100,
     },
     "alerts": {
         "high_customers_off": 20000,

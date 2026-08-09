@@ -98,6 +98,10 @@ _WARNING_ORDINAL = {"emergency warning": 1, "evacuate": 1, "evacuation": 1,
                     "watch and act": 2, "advice": 3,
                     "community information": 3}
 
+# When the flood projection cycle last ran. It is far heavier than the rest of
+# a detector pass, so it runs on its own slower clock (see _projection_due).
+_last_projection_run = None
+
 
 # --------------------------------------------------------------------------- #
 # Small helpers
@@ -893,11 +897,20 @@ def detect():
     cutoff = _now() - timedelta(minutes=int(cfg["intel"]["lookback_minutes"]))
     # Record and score flood trend projections BEFORE the detectors run, so a
     # flood entry written this pass can quote the projection made from the same
-    # reading rather than the previous one.
-    try:
-        flood_trend.run_projection_cycle(cfg)
-    except Exception:
-        log.exception("Flood projection cycle failed")
+    # reading rather than the previous one. Gated to its own slower interval:
+    # gauges report every ~15 min, so running this every 60 s redid the same
+    # work against unchanged data — and at production scale that work took
+    # longer than the interval itself.
+    if _projection_due(cfg):
+        try:
+            flood_trend.run_projection_cycle(cfg)
+        except Exception:
+            log.exception("Flood projection cycle failed")
+        finally:
+            # Stamp AFTER the run, so a slow cycle spaces itself out rather
+            # than starting again the instant it finishes.
+            global _last_projection_run
+            _last_projection_run = _now()
     before = _event_count()
     for detector in _DETECTORS:
         try:
@@ -909,6 +922,17 @@ def detect():
         log.info("Intelligence feed: %d new entr%s",
                  written, "y" if written == 1 else "ies")
     return written
+
+
+def _projection_due(cfg):
+    """Whether the flood projection cycle is due to run again.
+
+    In-process only: a restart runs it once immediately, which is harmless and
+    means a fresh deploy does not wait out the interval before projecting."""
+    interval = float(cfg["intel"].get("projection_interval_seconds", 300))
+    if _last_projection_run is None:
+        return True
+    return (_now() - _last_projection_run).total_seconds() >= interval
 
 
 def _event_count():
