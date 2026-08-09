@@ -3,6 +3,7 @@ gauge "stick" showing where the water is against the flood class levels, and
 the watch points / expected impacts extracted from the VICSES Local Flood
 Guides (seed/lfg_impacts.json). Routed as /flood/station/<station_key>.
 """
+import logging
 import textwrap
 from urllib.parse import quote, unquote
 
@@ -12,6 +13,9 @@ from dash import Input, Output, State, dcc, html
 
 from app import ui
 from app.modules.flood import data as flood_data
+from app.modules.flood import trend
+
+log = logging.getLogger(__name__)
 
 HISTORY_CHOICES = [("7", "Past 7 days"), ("30", "Past 30 days"),
                    ("90", "Past 90 days"), ("all", "All data")]
@@ -133,12 +137,43 @@ def build_gauge_stick(current, levels, impacts_df, dark, title="Gauge"):
     return ui.apply_theme(fig, dark)
 
 
-def _history_figure(hist, station_name, label, levels, dark):
+def _history_figure(hist, station_name, label, levels, dark, analysis=None):
     from app.pages.flood import _station_figure
     fig = _station_figure(hist, station_name, label, levels, dark)
     fig.update_layout(height=560)
     _add_rainfall_overlay(fig, hist, station_name)
+    if analysis:
+        _add_projection(fig, analysis)
     return fig
+
+
+def _add_projection(fig, analysis):
+    """Draw the trend projection as a cone from the last reading to the target
+    threshold: a dashed centre line at the fitted rate, bounded by the early
+    and late arrivals. Drawn only when a projection was actually supportable,
+    so a steady gauge's graph stays clean."""
+    if not analysis or not analysis.get("eta_point"):
+        return
+    start_t, start_h = analysis["observed_at"], analysis["current_height"]
+    target = analysis["target_height"]
+    # The bounds first, as a filled cone, so the dashed centre line sits on top.
+    fig.add_trace(go.Scatter(
+        x=[start_t, analysis["eta_early"], analysis["eta_late"], start_t],
+        y=[start_h, target, target, start_h],
+        fill="toself", fillcolor="rgba(214,39,40,0.13)",
+        line=dict(width=0), hoverinfo="skip",
+        name="Projection range", showlegend=False))
+    fig.add_trace(go.Scatter(
+        x=[start_t, analysis["eta_point"]], y=[start_h, target],
+        mode="lines", line=dict(color="#d62728", width=2, dash="dot"),
+        name=f"Trend projection → {str(analysis['target_name']).title()}",
+        hovertext=(f"Projected {str(analysis['target_name']).title()} "
+                   f"({target:.2f} m) between "
+                   f"{analysis['eta_early']:%H:%M} and "
+                   f"{analysis['eta_late']:%H:%M}<br>"
+                   "Trend projection — not an official flood forecast"),
+        hoverinfo="text"))
+    fig.update_layout(showlegend=True, legend=dict(orientation="h", y=1.08))
 
 
 def _add_rainfall_overlay(fig, hist, station_name):
@@ -166,6 +201,163 @@ def _add_rainfall_overlay(fig, hist, station_name):
         yaxis2=dict(title="Rain since 9am (mm)", overlaying="y", side="right",
                     showgrid=False, rangemode="tozero"),
         showlegend=True, legend=dict(orientation="h", y=1.08))
+
+
+def _fmt_signed(value, unit="", dp=2):
+    return "—" if value is None else f"{value:+.{dp}f} {unit}".strip()
+
+
+def _trend_panel(analysis, rainfall):
+    """Rate / acceleration / threshold distance / projection, plus the readings
+    the numbers were computed from — showing the working, so the projection can
+    be judged rather than believed."""
+    if not analysis:
+        return html.Div("Not enough recent observations to compute a trend.",
+                        className="muted")
+
+    accel = analysis["accel_label"]
+    accel_colour = {"Rate increasing": "#d62728", "Rate easing": "#2ca02c"}.get(
+        accel, "#9aa0a6")
+    rate = analysis["rate_m_hr"]
+    target = analysis["target_name"]
+
+    if analysis.get("eta_point"):
+        eta_value = (f"{analysis['eta_early']:%H:%M}–{analysis['eta_late']:%H:%M}")
+        eta_label = f"{str(target).title()} potentially reached"
+        eta_colour = "#d62728"
+    else:
+        eta_value = "—"
+        eta_label = "No projection"
+        eta_colour = None
+
+    if analysis["distance_m"] is None:
+        distance = "—"
+        distance_label = "Threshold distance"
+    else:
+        distance = f"{analysis['distance_m']:.2f} m"
+        distance_label = f"Below {str(target).title()}"
+
+    cards = html.Div([
+        ui.kpi_card("Rate", _fmt_signed(rate, "m/hr"),
+                    "#d62728" if rate and rate > 0 else "#9aa0a6"),
+        ui.kpi_card("Acceleration", accel, accel_colour),
+        ui.kpi_card(distance_label, distance,
+                    CLASS_COLOURS.get(str(target), None)
+                    if analysis["target_kind"] == "class" else None),
+        ui.kpi_card(eta_label, eta_value, eta_colour),
+    ], className="kpi-row")
+
+    summary_bits = [html.Strong(analysis["headline"])]
+    if rate is not None and analysis["span_minutes"]:
+        summary_bits.append(html.Span(
+            f" · {_fmt_signed(rate, 'm/hr')} over the last "
+            f"{analysis['span_minutes']} minutes"))
+    if rainfall and rainfall.get("max_mm"):
+        where = rainfall.get("catchment") or "the surrounding catchment"
+        summary_bits.append(html.Span(
+            f" · {rainfall['max_mm']:.0f} mm rain in {where} "
+            f"({rainfall['wettest']}, "
+            f"{rainfall['station_count']} station"
+            f"{'s' if rainfall['station_count'] != 1 else ''} within "
+            f"{rainfall['radius_km']:g} km, last "
+            f"{rainfall['window_hours']:g} h)"))
+    summary = html.Div(summary_bits, className="trend-summary")
+
+    body = [cards, summary]
+    if analysis.get("eta_reason") and not analysis.get("eta_point"):
+        body.append(html.Div(analysis["eta_reason"], className="muted",
+                             style={"marginTop": "4px"}))
+    body.append(html.Div([
+        html.Span("Trend projection — not an official flood forecast. ",
+                  className="trend-disclaimer-strong"),
+        html.Span(
+            "Straight-line extrapolation of the readings below; it does not "
+            "model rainfall, catchment routing or upstream inflows. For "
+            "official warnings and forecasts see the Bureau of Meteorology "
+            "and VICSES."),
+    ], className="trend-disclaimer"))
+    body.append(_readings_table(analysis["readings"]))
+    return html.Div(body)
+
+
+def _readings_table(readings):
+    """The measurements the fit used, with each step's change — which is what
+    makes 'Rate increasing' legible rather than an assertion."""
+    if not readings:
+        return html.Div()
+    rows = [html.Tr([html.Th("Time"), html.Th("Height"), html.Th("Change")])]
+    previous = None
+    for ts, height in readings[-12:]:
+        if previous is None:
+            delta = ""
+        else:
+            step = height - previous
+            delta = html.Span(f"{step:+.2f} m",
+                              className="trend-up" if step > 0 else
+                              ("trend-down" if step < 0 else "muted"))
+        rows.append(html.Tr([
+            html.Td(f"{ts:%H:%M}", className="trend-time"),
+            html.Td(f"{height:.2f} m", className="trend-height"),
+            html.Td(delta),
+        ]))
+        previous = height
+    return html.Div([
+        html.Div("Measurements used", className="trend-table-title"),
+        html.Table(rows, className="trend-table"),
+    ])
+
+
+def _accuracy_panel(summary, title, blurb):
+    """The back-check: how the projections have actually performed."""
+    if not summary or not summary["total"]:
+        pending = summary["pending"] if summary else 0
+        return html.Div([
+            html.H4(title),
+            html.Div(
+                f"No projections have been verified yet"
+                + (f" ({pending} awaiting their outcome)." if pending
+                   else " — one is scored as soon as its window closes."),
+                className="muted"),
+        ], className="panel")
+
+    def pct(value):
+        return "—" if value is None else f"{value * 100:.0f}%"
+
+    def minutes(value):
+        return "—" if value is None else f"{value:+.0f} min"
+
+    rows = [html.Tr([html.Th("Lead time"), html.Th("Projections"),
+                     html.Th("Reached"), html.Th("In window"),
+                     html.Th("Median error")])]
+    for bucket in summary["by_lead"]:
+        rows.append(html.Tr([
+            html.Td(bucket["label"]),
+            html.Td(str(bucket["total"])),
+            html.Td(pct(bucket["hit_rate"])),
+            html.Td(pct(bucket["within_range_rate"])),
+            html.Td("—" if bucket["median_abs_error_minutes"] is None
+                    else f"{bucket['median_abs_error_minutes']:.0f} min"),
+        ]))
+
+    return html.Div([
+        html.H4(title),
+        html.Div([
+            ui.kpi_card("Verified", str(summary["total"])),
+            ui.kpi_card("Threshold reached", pct(summary["hit_rate"])),
+            ui.kpi_card("Inside quoted window", pct(summary["within_range_rate"])),
+            ui.kpi_card("Median error",
+                        "—" if summary["median_abs_error_minutes"] is None
+                        else f"{summary['median_abs_error_minutes']:.0f} min"),
+            ui.kpi_card("Bias", minutes(summary["median_error_minutes"])),
+        ], className="kpi-row"),
+        html.Div(blurb, className="muted", style={"marginBottom": "8px"}),
+        html.Table(rows, className="trend-table") if summary["by_lead"] else html.Div(),
+        html.Div(f"{summary['pending']} projection(s) still open · "
+                 f"method {summary['method']} · a positive bias means the water "
+                 "arrived later than projected.",
+                 className="muted", style={"marginTop": "8px",
+                                           "fontSize": "12px"}),
+    ], className="panel")
 
 
 def _impact_table(impacts_df, current, levels):
@@ -216,12 +408,15 @@ def layout(station_key):
                          style={"width": "180px", "display": "inline-block",
                                 "verticalAlign": "middle"}),
         ], style={"margin": "8px 0"}),
+        html.H3("Rate of rise"),
+        html.Div(id="station-trend"),
         html.Div([
             html.Div(dcc.Graph(id="station-stick"),
                      className="graph-card station-stick-card"),
             html.Div(dcc.Graph(id="station-graph"),
                      className="graph-card station-graph-card"),
         ], className="station-row"),
+        html.Div(id="station-accuracy", style={"marginTop": "6px"}),
         html.H3("Watch points & expected impacts"),
         html.Div(id="station-impacts"),
         html.Div(id="station-source", className="muted",
@@ -233,6 +428,8 @@ def register_callbacks(app):
     @app.callback(
         Output("station-title", "children"),
         Output("station-kpis", "children"),
+        Output("station-trend", "children"),
+        Output("station-accuracy", "children"),
         Output("station-stick", "figure"),
         Output("station-graph", "figure"),
         Output("station-impacts", "children"),
@@ -268,6 +465,21 @@ def register_callbacks(app):
                     kpis.append(ui.kpi_card(f"{cls.title()} level", f"{v:g} m",
                                             CLASS_COLOURS[cls]))
 
+        # Rate-of-rise analysis drives the trend panel AND the projection cone
+        # on the history graph, so it is computed once here.
+        try:
+            analysis = trend.analyse(station_key, levels=levels, impacts=impacts)
+            rainfall = trend.catchment_rainfall(station_key)
+        except Exception:
+            log.exception("Trend analysis failed for %s", station_key)
+            analysis, rainfall = None, None
+        trend_panel = _trend_panel(analysis, rainfall)
+        accuracy = _accuracy_panel(
+            trend.accuracy_summary(station_key=station_key),
+            "Projection track record at this gauge",
+            "Every projection this page has shown was recorded when it was "
+            "made and scored against what the gauge actually did.")
+
         stick = build_gauge_stick(current, levels, impacts, dark,
                                   title="Flood gauge")
         days = None if window == "all" else int(window)
@@ -279,7 +491,8 @@ def register_callbacks(app):
                 title="No observations recorded for this station yet",
                 height=560)), dark)
         else:
-            graph = _history_figure(hist, station_name, label, levels, dark)
+            graph = _history_figure(hist, station_name, label, levels, dark,
+                                    analysis=analysis)
 
         if impacts.empty:
             table = html.Div("No Local Flood Guide impact information is "
@@ -293,7 +506,8 @@ def register_callbacks(app):
                       "; ".join(f"{t} ({s})" for t, s in
                                 zip(guides["town"], guides["source_pdf"])) +
                       ". Impacts are indicative — no two floods are the same.")
-        return station_name, kpis, stick, graph, table, source
+        return (station_name, kpis, trend_panel, accuracy, stick, graph,
+                table, source)
 
     @app.callback(
         Output("station-pdf-download", "data"),

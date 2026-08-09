@@ -449,6 +449,48 @@ CREATE TABLE IF NOT EXISTS intel_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_intel_metrics_lookup
     ON intel_metrics (hazard, entity_key, metric, ts DESC);
+
+-- Flood trend projections and their VERIFICATION (app/modules/flood/trend.py).
+-- Every ETA the app shows is written here when it is made, then scored against
+-- the observations that followed. That is what lets the UI publish a real hit
+-- rate next to the projection instead of asking anyone to take it on trust.
+-- A projection is never edited except to record its outcome, and never deleted.
+CREATE TABLE IF NOT EXISTS flood_projections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    station_key TEXT NOT NULL,
+    station_name TEXT,
+    made_at TEXT NOT NULL,        -- when the projection was computed
+    observed_at TEXT NOT NULL,    -- obs time of the latest reading it used
+    current_height REAL,
+    target_kind TEXT,             -- class | impact
+    target_name TEXT,             -- minor/moderate/major, or the impact text
+    target_height REAL,
+    distance_m REAL,
+    rate_m_hr REAL,
+    rate_stderr REAL,
+    accel_m_hr2 REAL,
+    accel_label TEXT,
+    readings_used INTEGER,
+    span_minutes INTEGER,
+    eta_point TEXT,
+    eta_early TEXT,
+    eta_late TEXT,
+    lead_minutes REAL,            -- eta_point - observed_at, for lead bucketing
+    rainfall_mm REAL,
+    method TEXT NOT NULL,         -- maths version, so scores aren't mixed
+    -- filled in by verify_projections()
+    outcome TEXT NOT NULL DEFAULT 'pending',  -- pending|reached|not_reached|receded
+    actual_ts TEXT,
+    error_minutes REAL,           -- actual - eta_point (+ = arrived late)
+    within_range INTEGER,         -- landed inside the quoted early..late window
+    verified_at TEXT
+);
+-- One projection per gauge per threshold per observation: the detector can run
+-- as often as it likes without inflating the sample it is later scored on.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_flood_proj_unique
+    ON flood_projections (station_key, target_name, observed_at, method);
+CREATE INDEX IF NOT EXISTS idx_flood_proj_outcome
+    ON flood_projections (outcome, station_key);
 """
 
 
@@ -563,10 +605,22 @@ def read_df(query, params=None):
 
 @_self_heal
 def insert_rows(table, rows, ignore_duplicates=False):
-    """Insert a list of dicts. Returns number of rows actually inserted."""
+    """Insert a list of dicts. Returns number of rows actually inserted.
+
+    The column list is the UNION of every row's keys, in first-seen order, so a
+    ragged batch (rows with different key sets — e.g. a fire incident with no
+    warning_level followed by a warning that has one) binds NULL for the keys a
+    given row is missing instead of silently dropping the extra values. For a
+    single row or a uniform batch this is exactly rows[0].keys()."""
     if not rows:
         return 0
     cols = list(rows[0].keys())
+    seen = set(cols)
+    for r in rows[1:]:
+        for c in r:
+            if c not in seen:
+                seen.add(c)
+                cols.append(c)
     verb = "INSERT OR IGNORE" if ignore_duplicates else "INSERT"
     sql = f"{verb} INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})"
     conn = get_connection()

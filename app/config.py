@@ -47,6 +47,32 @@ DEFAULTS = {
         # Web deployment is always-on: start flood collection automatically
         # when the server boots (run_web.py). Ignored by the desktop build.
         "autostart": True,
+        # --- rate-of-rise intelligence (app/modules/flood/trend.py) ---
+        # Window the rise rate is fitted over. Gauges report every ~15 min, so
+        # 180 min is ~12 readings — enough to fit a slope and its uncertainty
+        # without smearing a genuine surge into the preceding flat hours.
+        "trend_window_minutes": 180,
+        "trend_min_readings": 4,
+        # Below this the gauge is called Steady and NO ETA is offered —
+        # dividing a threshold distance by a near-zero rate produces a
+        # confident-looking number built on noise.
+        "trend_min_rate_m_hr": 0.02,
+        "trend_rapid_rate_m_hr": 0.25,      # headline "Rising rapidly"
+        # Never project further out than this: straight-line extrapolation
+        # stops meaning anything long before the arithmetic stops working.
+        "trend_max_horizon_hours": 12,
+        # Minimum half-width of the quoted ETA window, as a percentage of the
+        # lead time. On a smoothly-rising gauge the fitted slope's standard
+        # error collapses and the range would tighten to a few minutes on a
+        # multi-hour projection — precision this method has not earned.
+        "trend_min_range_pct": 20,
+        # Catchment rainfall context: AWS stations within this radius of the
+        # gauge, accumulated over this window (reset-proof totals).
+        "trend_rainfall_radius_km": 50,
+        "trend_rainfall_window_hours": 24,
+        # How long past the late bound to keep waiting before a projection is
+        # scored as not_reached.
+        "projection_grace_hours": 3,
     },
     "fire": {
         # VicEmergency incident/warning feed. Public, no credentials; always-on.

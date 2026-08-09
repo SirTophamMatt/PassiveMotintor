@@ -919,6 +919,102 @@ def build_station_pdf(station_key):
                                styles["Italic"]))
     story.append(Spacer(1, 5 * mm))
 
+    # --- Rate of rise --------------------------------------------------------
+    # Same numbers as the station page, including the disclaimer: a briefing
+    # PDF gets forwarded and printed, so an ETA must never travel without it.
+    try:
+        from app.modules.flood import trend as flood_trend
+        analysis = flood_trend.analyse(station_key, levels=levels,
+                                       impacts=impacts)
+        rainfall = flood_trend.catchment_rainfall(station_key)
+        accuracy = flood_trend.accuracy_summary(station_key=station_key)
+    except Exception:
+        log.exception("Trend block failed for %s briefing", station_key)
+        analysis, rainfall, accuracy = None, None, None
+
+    story.append(Paragraph("Rate of rise", styles["Heading2"]))
+    if not analysis or analysis.get("rate_m_hr") is None:
+        story.append(Paragraph(
+            "Not enough recent observations to compute a trend.",
+            styles["Italic"]))
+    else:
+        target = str(analysis.get("target_name") or "")
+        if analysis.get("eta_point"):
+            eta = (f"{target.title()} potentially reached "
+                   f"{analysis['eta_early']:%H:%M}–{analysis['eta_late']:%H:%M}")
+        else:
+            eta = analysis.get("eta_reason") or "No projection"
+        trend_rows = [
+            ["Rate", f"{analysis['rate_m_hr']:+.2f} m/hr",
+             "Acceleration", analysis.get("accel_label") or "—"],
+            ["Threshold distance",
+             ("—" if analysis.get("distance_m") is None
+              else f"{analysis['distance_m']:.2f} m below {target.title()}"),
+             "Window", f"last {analysis['span_minutes']} min "
+                       f"({analysis['reading_count']} readings)"],
+        ]
+        trend_table = Table(trend_rows,
+                            colWidths=[38 * mm, 52 * mm, 38 * mm, 52 * mm])
+        trend_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef2f7")),
+            ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(trend_table)
+        story.append(Spacer(1, 3 * mm))
+        summary_line = f"<b>{analysis['headline']}</b> — {eta}"
+        if rainfall and rainfall.get("max_mm"):
+            where = rainfall.get("catchment") or "the surrounding catchment"
+            summary_line += (f". {rainfall['max_mm']:.0f} mm rain in {where} "
+                             f"({rainfall['wettest']}, last "
+                             f"{rainfall['window_hours']:g} h).")
+        story.append(Paragraph(summary_line, styles["Normal"]))
+        story.append(Spacer(1, 2 * mm))
+        story.append(Paragraph(
+            f"<font color='#d62728'><b>{flood_trend.DISCLAIMER}</b></font>",
+            ParagraphStyle("disc", parent=styles["Normal"], fontSize=8,
+                           leading=10)))
+        if accuracy and accuracy["total"]:
+            hit = accuracy["hit_rate"]
+            window = accuracy["within_range_rate"]
+            err = accuracy["median_abs_error_minutes"]
+            story.append(Spacer(1, 2 * mm))
+            story.append(Paragraph(
+                f"Track record at this gauge: {accuracy['total']} projections "
+                f"verified, {hit * 100:.0f}% reached the threshold"
+                + (f", {window * 100:.0f}% inside the quoted window"
+                   if window is not None else "")
+                + (f", median error {err:.0f} min." if err is not None else "."),
+                ParagraphStyle("acc", parent=styles["Normal"], fontSize=8,
+                               leading=10)))
+        readings = analysis.get("readings") or []
+        if readings:
+            reading_rows = [["Time", "Height", "Change"]]
+            previous = None
+            for ts, height in readings[-10:]:
+                change = "" if previous is None else f"{height - previous:+.2f} m"
+                reading_rows.append([f"{ts:%H:%M}", f"{height:.2f} m", change])
+                previous = height
+            reading_table = Table(reading_rows,
+                                  colWidths=[25 * mm, 25 * mm, 25 * mm])
+            reading_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c8d0da")),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]))
+            story.append(Spacer(1, 3 * mm))
+            story.append(Paragraph("Measurements used", caption))
+            story.append(reading_table)
+    story.append(Spacer(1, 5 * mm))
+
     # --- Watch points / impacts ----------------------------------------------
     story.append(Paragraph("Watch points and expected impacts",
                            styles["Heading2"]))

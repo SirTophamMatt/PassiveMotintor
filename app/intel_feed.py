@@ -52,6 +52,7 @@ import pandas as pd
 from app import database
 from app.config import load_config
 from app.modules.flood import data as flood_data
+from app.modules.flood import trend as flood_trend
 from app.modules.weather import data as weather_data
 
 log = logging.getLogger(__name__)
@@ -404,7 +405,8 @@ def _detect_flood(cfg, cutoff):
         readings = [r for r in readings if r[0] is not None]
         if len(readings) < 2:
             continue
-        lat, lon = coords.get(str(station).strip().lower(), (None, None))
+        station_key = str(station).strip().lower()
+        lat, lon = coords.get(station_key, (None, None))
         latest_ts, latest_height = readings[-1]
         rate_text, rate_m_hr = _flood_rate(
             readings, int(settings["flood_rate_window_minutes"]))
@@ -424,15 +426,24 @@ def _detect_flood(cfg, cutoff):
             if rising and threshold is not None and pd.notna(threshold):
                 detail.append(f"{label.split()[0]} level is "
                               f"{_fmt(float(threshold))} m")
+            crossing_analysis = None
+            if rising:
+                # Having crossed one class, the operative question is when the
+                # NEXT one arrives — so the crossing entry carries the onward
+                # projection too.
+                crossing_analysis = _trend_for(station_key, level, cfg)
+                detail += _trend_lines(station_key, crossing_analysis, cfg)
             record(
                 "flood", "threshold" if rising else "receding",
                 {1: CRITICAL, 2: MAJOR, 3: MAJOR}.get(priority, INFO) if rising
                 else INFO,
                 (f"{label.split()[0]} flood threshold crossed" if rising
                  else f"Fallen back to {label.lower()}"),
-                ts, entity_key=str(station).strip().lower(), entity_name=station,
+                ts, entity_key=station_key, entity_name=station,
                 metric="height_m", prev_value=prev_height, new_value=height,
-                unit="m", since=prev_ts, rate=rate_text, detail=detail,
+                unit="m", since=prev_ts,
+                rate=_trend_rate_text(crossing_analysis, rate_text),
+                detail=detail,
                 latitude=lat, longitude=lon,
                 url=_station_href(station))
 
@@ -449,7 +460,6 @@ def _detect_flood(cfg, cutoff):
         if not approaching:
             continue
         suppress = timedelta(minutes=int(settings["repeat_suppress_minutes"]))
-        station_key = str(station).strip().lower()
         if _event_exists("flood", station_key, "rising", _now() - suppress):
             continue
         # A class crossing already reports this gauge's height AND rate; a
@@ -458,15 +468,80 @@ def _detect_flood(cfg, cutoff):
             continue
         window_ts, window_height = _rate_anchor(
             readings, int(settings["flood_rate_window_minutes"]))
+        analysis = _trend_for(station_key, level, cfg)
+        headline = (f"{station} {(analysis or {}).get('headline', 'rising')
+                                 .lower()}"
+                    if analysis and analysis.get("rate_m_hr")
+                    else f"{station} rising quickly")
         record("flood", "rising", MAJOR if priority < 4 else NOTABLE,
-               f"{station} rising quickly", latest_ts,
-               entity_key=str(station).strip().lower(), entity_name=station,
+               headline, latest_ts,
+               entity_key=station_key, entity_name=station,
                metric="height_m", prev_value=window_height,
                new_value=latest_height, unit="m", since=window_ts,
-               rate=rate_text,
-               detail=[label if priority < 4 else "Approaching minor flood level"],
+               rate=_trend_rate_text(analysis, rate_text),
+               detail=([label if priority < 4 else "Approaching minor flood level"]
+                       + _trend_lines(station_key, analysis, cfg)),
                latitude=lat, longitude=lon,
                url=_station_href(station))
+
+
+def _trend_for(station_key, level, cfg):
+    """Rate-of-rise analysis for a feed entry, or None if it cannot be had.
+    Never allowed to break a detector pass."""
+    try:
+        return flood_trend.analyse(station_key, levels=level, cfg=cfg)
+    except Exception:
+        log.exception("Trend analysis failed for %s", station_key)
+        return None
+
+
+def _trend_rate_text(analysis, fallback):
+    """Prefer the trend engine's fitted rate for the display line.
+
+    The feed used to quote its own rate over flood_rate_window_minutes while
+    the station page quoted the trend fit over trend_window_minutes — two
+    different numbers for the same gauge in the same app. The trend fit is the
+    one the projection is built on, so it wins wherever both exist."""
+    rate = (analysis or {}).get("rate_m_hr")
+    if rate is None:
+        return fallback
+    if abs(rate) < 0.01:
+        return "Steady"
+    word = "Rising" if rate > 0 else "Falling"
+    span = (analysis or {}).get("span_minutes")
+    suffix = f" over the last {span} minutes" if span else ""
+    return f"{word} {abs(rate):.2f} m/hr{suffix}"
+
+
+def _trend_lines(station_key, analysis, cfg):
+    """Acceleration, threshold distance, projected arrival and catchment
+    rainfall as feed context lines. The projection line always carries its
+    caveat inline — a feed entry gets read on its own, away from the station
+    page where the full disclaimer lives."""
+    lines = []
+    if not analysis:
+        return lines
+    if analysis.get("accel_label") not in (None, "Unknown", "Steady"):
+        lines.append(analysis["accel_label"])
+    distance, target = analysis.get("distance_m"), analysis.get("target_name")
+    if distance is not None and target and analysis.get("target_kind") == "class":
+        lines.append(f"{distance:.2f} m below {str(target).title()}")
+    if analysis.get("eta_point"):
+        lines.append(
+            f"{str(target).title()} potentially reached "
+            f"{analysis['eta_early']:%H:%M}–{analysis['eta_late']:%H:%M} "
+            "(trend projection, not an official forecast)")
+    try:
+        rainfall = flood_trend.catchment_rainfall(station_key, cfg=cfg)
+    except Exception:
+        log.exception("Catchment rainfall failed for %s", station_key)
+        rainfall = None
+    if rainfall and rainfall.get("max_mm"):
+        where = rainfall.get("catchment") or "the surrounding catchment"
+        lines.append(f"{rainfall['max_mm']:.0f} mm rain in {where} "
+                     f"({rainfall['wettest']}, last "
+                     f"{rainfall['window_hours']:g} h)")
+    return lines
 
 
 def _station_href(station_name):
@@ -816,6 +891,13 @@ def detect():
     Returns the number of new journal entries written."""
     cfg = load_config()
     cutoff = _now() - timedelta(minutes=int(cfg["intel"]["lookback_minutes"]))
+    # Record and score flood trend projections BEFORE the detectors run, so a
+    # flood entry written this pass can quote the projection made from the same
+    # reading rather than the previous one.
+    try:
+        flood_trend.run_projection_cycle(cfg)
+    except Exception:
+        log.exception("Flood projection cycle failed")
     before = _event_count()
     for detector in _DETECTORS:
         try:

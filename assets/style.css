@@ -448,3 +448,51 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .feed-compact .feed-time { font-size: 13px; }
 .feed-compact .feed-headline { font-size: 13px; }
 .feed-compact .feed-line { font-size: 12px; }
+
+/* ---- flood rate-of-rise / trend projection ---- */
+.trend-summary { font-size: 14px; margin: 6px 0 4px; line-height: 1.6; }
+
+/* The projection caveat is deliberately prominent and always adjacent to any
+   ETA: an extrapolated arrival time read as a forecast is the one genuinely
+   dangerous thing this page can produce. */
+.trend-disclaimer {
+    font-size: 12px;
+    color: var(--muted);
+    border-left: 3px solid #d62728;
+    padding: 6px 10px;
+    margin: 10px 0 14px;
+    background: rgba(214, 39, 40, 0.07);
+    border-radius: 0 6px 6px 0;
+    max-width: 900px;
+}
+.trend-disclaimer-strong { color: #d62728; font-weight: 700; }
+
+.trend-table-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin: 12px 0 6px;
+}
+.trend-table { border-collapse: collapse; font-size: 13px; }
+.trend-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding: 4px 16px 4px 0;
+    font-weight: 700;
+}
+.trend-table td {
+    padding: 3px 16px 3px 0;
+    border-bottom: 1px solid var(--border);
+}
+/* Readings are a column of numbers — monospace so they line up and a rise is
+   visible as a shape, not just as text. */
+.trend-time, .trend-height { font-family: Consolas, monospace; }
+.trend-height { font-weight: 600; }
+.trend-up { color: #d62728; font-family: Consolas, monospace; }
+.trend-down { color: #2ca02c; font-family: Consolas, monospace; }

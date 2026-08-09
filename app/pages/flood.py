@@ -12,6 +12,7 @@ from dash import Input, Output, dash_table, dcc, html
 from app import tags as tag_store
 from app import ui
 from app.modules.flood import data as flood_data
+from app.modules.flood import trend as flood_trend
 from app.pages import station as station_page
 
 LIVE_DAYS = 7  # how much recent data the "Live" view shows
@@ -72,6 +73,7 @@ def layout():
         ], className="panel-row"),
         dcc.Interval(id="flood-interval", interval=60_000, n_intervals=0),
         html.Div(id="flood-summary", className="muted", style={"margin": "10px 0"}),
+        html.Div(id="flood-projection-accuracy"),
         dash_table.DataTable(
             id="flood-table",
             page_size=15,
@@ -110,6 +112,20 @@ def _station_figure(station_df, station, label, levels, dark):
 
 
 def register_callbacks(app):
+    @app.callback(
+        Output("flood-projection-accuracy", "children"),
+        Input("flood-interval", "n_intervals"))
+    def projection_accuracy(_):
+        """Statewide back-check of the rate-of-rise projections. Published on
+        the public page on purpose: an ETA that cannot show its track record
+        is asking to be taken on trust."""
+        return station_page._accuracy_panel(
+            flood_trend.accuracy_summary(),
+            "Trend projection accuracy (all gauges, last 90 days)",
+            "Every rate-of-rise projection is recorded when it is made and "
+            "scored against the observations that followed. These are the "
+            "real results, not a self-assessment.")
+
     @app.callback(
         Output("flood-catchment-filter", "options"),
         Input("flood-event-selector", "value"))

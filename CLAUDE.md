@@ -473,6 +473,66 @@ warning-level lines, colour-matched to the map kinds.
   region field, only a location string + geocode, so the statewide + per-location split
   is what is honest today.
 
+## Flood rate-of-rise intelligence + projection verification (built 2026-08-09)
+- **`app/modules/flood/trend.py`.** Turns "this gauge is at Minor" into rate, acceleration,
+  threshold distance, a projected arrival window and catchment rainfall:
+  `Rising rapidly · +0.30 m/hr over the last 90 minutes · 0.45 m below Moderate ·
+  Moderate potentially reached 15:20–16:10 · 38 mm rain in the Broken Catchment`.
+- **Maths.** Rate = OLS slope over `flood.trend_window_minutes` (180; gauges report every
+  ~15 min so that is ~12 points). Acceleration compares the fitted slope of the recent half
+  against the earlier half — far stabler on noisy gauge data than a quadratic's second
+  derivative, and it yields the "Rate increasing / Steady / Rate easing" label directly.
+  ETA point estimate holds the current rate; the RANGE comes from the slope's standard error
+  plus, when accelerating, the earlier arrival implied by solving
+  `d = rt + ½at²`. Acceleration only ever moves the EARLY bound, never the point estimate.
+- **It refuses to project more often than it projects**, on purpose: fewer than
+  `trend_min_readings` (4), a span under 30 min, a rate below `trend_min_rate_m_hr` (0.02 —
+  otherwise dividing a distance by noise yields a confident-looking lie), or an arrival past
+  `trend_max_horizon_hours` (12) all return a reason instead of a time.
+- **Range floor.** On a smoothly-rising gauge the residuals vanish, the slope's standard
+  error collapses and the window would tighten to a few minutes on a multi-hour projection.
+  `trend_min_range_pct` (20%) floors the half-width at a share of the lead time, so vagueness
+  scales with reach.
+- **Target.** Next flood class above the current height; once past Major it falls through to
+  the next **Local Flood Guide impact height**, which is what matters operationally from
+  there (`target_kind` = class | impact). Many gauges have NaN class levels in the BoM seed,
+  so this fallback fires more than you would expect.
+- **Catchment rainfall** comes from the **AWS network** by radius
+  (`trend_rainfall_radius_km` 50), NOT `rainfall_observations` — that table is seeded for a
+  handful of towns (3 locations / 24 rows live), while `aws_stations` has all 103 with
+  coordinates. Totals reuse the reset-proof positive-increment sum, and the **wettest** nearby
+  station is reported rather than the mean (an average over a wide radius hides the cell
+  actually driving the rise).
+- **VERIFICATION — the back-check.** Every projection is written to `flood_projections` when
+  it is made (unique on station+target+observed_at+method, so the detector can run as often
+  as it likes without inflating the sample). `verify_projections` later scores each one
+  against the observations that followed: `reached` (with signed `error_minutes` and whether
+  it landed inside the quoted window), `not_reached` once past `eta_late` +
+  `projection_grace_hours`, or `receded` when the river turned over instead — a different
+  kind of miss, worth separating. `accuracy_summary` reports hit rate, in-window share,
+  median absolute error and bias, bucketed by lead time and by target. `method` is a version
+  tag (`linear-se-v1`) so changing the maths does not silently pollute the historical score.
+- **The track record is published next to the projection** — a per-gauge panel on the station
+  page and a statewide panel on `/flood`, both public. An ETA that cannot show its own hit
+  rate is asking to be taken on trust.
+- **`DISCLAIMER` travels with every ETA** (station page, feed entry, briefing PDF): "Trend
+  projection — not an official flood forecast." The one genuinely dangerous output here is an
+  extrapolated arrival time read as BoM hydrology, so the caveat is structural, not optional.
+- **Wiring:** `run_projection_cycle` runs at the top of every intel detector pass (before the
+  detectors, so a flood entry quotes the projection made from the same reading), gated to
+  gauges within 20% below minor or already in flood. Station page gains a "Rate of rise"
+  panel, a measurements-used table (with per-step change, which is what makes "Rate
+  increasing" legible) and a projection cone on the history graph. The Intelligence Feed's
+  flood entries carry acceleration / distance / ETA / rainfall lines, and `_trend_rate_text`
+  makes the trend fit the SINGLE source of the displayed rate (the feed used to quote its own
+  60-min window while the station page quoted the 180-min fit — two numbers for one gauge).
+  The gauge briefing PDF carries the same block, disclaimer and track record.
+- Config lives under `flood` (`trend_*`, `projection_grace_hours`).
+- Not done: rainfall-informed projection (rain is shown as context, it does not feed the
+  maths), per-catchment routing, projections for gauges with no class levels AND no LFG
+  impacts, an accuracy trend over time, calibrating `trend_min_range_pct` from the observed
+  in-window rate once real events have accumulated.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
