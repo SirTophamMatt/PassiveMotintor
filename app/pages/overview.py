@@ -53,6 +53,15 @@ def layout():
         html.Div(id="overview-kpis", className="kpi-row"),
         html.Div(panels, className="panel-row"),
 
+        # The state above answers "what is happening"; this answers "what
+        # changed while I was away". Full log on /feed.
+        html.Div([
+            html.H3("What changed", style={"display": "inline-block"}),
+            dcc.Link("Full Intelligence Feed →", href="/feed",
+                     className="gauge-link", style={"marginLeft": "12px"}),
+        ]),
+        html.Div(id="overview-whats-changed", className="feed feed-compact"),
+
         html.H3("Power Outages"),
         html.Div(id="overview-power-trends", className="graph-grid"),
         html.Div(dcc.Graph(id="overview-power-map", style={"height": "560px"},
@@ -70,6 +79,23 @@ def layout():
 
 
 def register_callbacks(app):
+    @app.callback(
+        Output("overview-whats-changed", "children"),
+        Input("overview-interval", "n_intervals"))
+    def refresh_changes(_):
+        """The five most recent changes, trimmed to the delta line — the full
+        context lines live on /feed. Context lookups are skipped here because
+        the compact card has no room for them and they are the expensive part."""
+        from app import intel_feed
+        from app.pages import feed as feed_page
+        entries = intel_feed.entries(hours=12, limit=5, with_context=False)
+        if not entries:
+            return html.Div("No changes detected in the last 12 hours.",
+                            className="muted")
+        for entry in entries:
+            entry["lines"] = entry["lines"][:2]
+        return [feed_page._entry_card(entry, is_new=False) for entry in entries]
+
     @app.callback(
         Output("overview-kpis", "children"),
         Output("overview-collectors", "children"),
@@ -146,6 +172,7 @@ def register_callbacks(app):
             line("Weather", weather_s),
             line("Storm", storm_s),
             line("Power", power_s),
+            line("Intelligence feed", status["intel"]),
         ]
         return kpis, collectors
 

@@ -357,3 +357,94 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
 }
+
+/* ---- Intelligence Feed (/feed) ----
+   Each entry is a left-accented card: one headline row (time · layer chip ·
+   what moved) over the quantified lines. The accent colour is the entry's
+   severity, so the eye can scan a long feed by colour alone. */
+.feed { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.feed-entry {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);   /* colour set per entry inline */
+    border-radius: 10px;
+    padding: 10px 14px;
+}
+.feed-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.feed-time {
+    font-family: Consolas, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--muted);
+}
+.feed-chip {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 1px 8px;
+}
+.feed-headline {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+}
+.feed-headline:hover { color: var(--accent); text-decoration: underline; }
+/* The numbers. Monospace so a column of "214 → 296 ha" lines reads as data. */
+.feed-body { margin: 5px 0 0 4px; }
+.feed-line {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+    font-family: Consolas, "Segoe UI", monospace;
+}
+/* The first line is the delta itself — the whole point of the entry. */
+.feed-line:first-child { color: var(--text); font-weight: 600; }
+.feed-empty-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+
+/* A newly-detected entry slots in at the top, reusing the sidebar log's
+   animation shape at card scale (grow from 0 height, slide down, accent glow
+   fading out). Only entries the page has not painted before get the class. */
+.feed-entry-new { animation: feed-card-in 0.7s ease-out; }
+@keyframes feed-card-in {
+    0% {
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-14px);
+        padding-top: 0;
+        padding-bottom: 0;
+        background: rgba(78, 161, 255, 0.30);
+    }
+    55% {
+        max-height: 320px;
+        opacity: 1;
+        transform: translateY(0);
+        background: rgba(78, 161, 255, 0.18);
+    }
+    100% {
+        max-height: 320px;
+        opacity: 1;
+        transform: translateY(0);
+        background: var(--bg-panel);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .feed-entry-new { animation: none; }
+}
+
+/* Filter controls on the feed panel: options on one line each, tight. */
+.radio-row label, .check-row label { margin-top: 4px; font-size: 13px; }
+
+/* ---- Overview "What changed" panel ---- */
+.feed-compact .feed-entry { padding: 7px 10px; border-radius: 8px; }
+.feed-compact .feed-time { font-size: 13px; }
+.feed-compact .feed-headline { font-size: 13px; }
+.feed-compact .feed-line { font-size: 12px; }

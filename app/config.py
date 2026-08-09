@@ -117,6 +117,40 @@ DEFAULTS = {
         # skips if they are missing, so nothing crashes on a fresh deploy.
         "autostart": True,
     },
+    "intel": {
+        # Intelligence Feed change detector (app/intel_feed.py). Reads only
+        # already-collected data, so it is cheap and can run often.
+        "interval_seconds": 60,
+        "autostart": True,
+        # How far back a pass will look for changes. Bounds the work AND stops
+        # a restart re-announcing yesterday; the unique dedup index does the
+        # rest. Raise it if a collector is down for long stretches.
+        "lookback_minutes": 180,
+        # Radius for the cross-layer context lines ("3 road disruptions within
+        # 10 km") shown under each entry.
+        "context_radius_km": 10,
+        # A fire must grow by BOTH this many hectares and this percentage
+        # before it is worth an entry (the feed reports movement, not noise).
+        "fire_min_growth_ha": 5.0,
+        "fire_min_growth_pct": 10,
+        # Window the gauge rise rate is measured over, and the rate at which a
+        # gauge that has NOT crossed a class still earns "rising quickly".
+        "flood_rate_window_minutes": 60,
+        "flood_rise_m_per_hr": 0.15,
+        # Statewide outage trend: compared against this many minutes ago, and
+        # reported only when both the absolute and percentage moves are big.
+        "power_window_minutes": 30,
+        "power_min_delta": 500,
+        "power_min_pct": 25,
+        # Customers a single location's outage must move by to earn an entry.
+        "power_location_min_delta": 300,
+        # AWS rainfall burst: mm accumulated (reset-proof) inside the window.
+        "rain_window_minutes": 60,
+        "rain_burst_mm": 10.0,
+        # A continuing trend (rising gauge, growing outage, rain burst) re-fires
+        # at most once per this many minutes.
+        "repeat_suppress_minutes": 30,
+    },
     "alerts": {
         "high_customers_off": 20000,
         "low_customers_off": 10000,

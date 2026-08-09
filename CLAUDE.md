@@ -423,6 +423,56 @@ warning-level lines, colour-matched to the map kinds.
   a "Gauges ≥ Minor" KPI. Default on. To refresh coords, re-run the tool (on the
   server it fetches KiWIS live) and redeploy.
 
+## Intelligence Feed (built 2026-08-09)
+- **The "what changed" layer.** Every other page answers *what is happening*; `/feed`
+  (`app/pages/feed.py`, 2nd nav item, public) answers **what changed, by how much, how
+  fast**. An entry is a time + a headline stating the movement + the numbers under it:
+  `12:43 — Walwa fire increased 38 ha` / `214 → 296 ha since 12:05` / `Watch and Act
+  remains current` / `3 road disruptions within 10 km`.
+- **Engine `app/intel_feed.py`.** Detector pass reads every module's stored data and
+  writes one `intel_events` row per *significant* change — change-only, like
+  `storm_alerts` and the watchdog. Detectors: fire area growth + warning
+  escalation/downgrade, flood class crossings + rise rate, statewide & per-location
+  power moves, storm cell intensification, BoM warning new/reissue/cancel, road
+  closure/reopen, AWS rainfall bursts. Each detector is isolated in a try/except so a
+  broken source can't take the feed down.
+- **THE KEY CONSTRAINT: `fire_incidents` / `power_outages` / `road_disruptions` are
+  UPSERTs and keep no past values**, so "214 → 296 ha since 12:05" is impossible from
+  them alone. `intel_metrics` (entity, metric, value, ts) fills that gap — a row is
+  written ONLY when a value changes, so it stays proportional to change, not to poll
+  rate. Sources that already keep history (`flood_observations`, `power_timeseries`,
+  `storm_cells`, `rainfall_aws`) are diffed straight out of their own tables and need
+  no metric rows.
+- **Restart/replay safe.** `ts` is the SOURCE time the change became true (not detection
+  time), detectors only look back `intel.lookback_minutes` (180), and
+  `idx_intel_events_dedup` is UNIQUE on (hazard, entity, metric, kind, ts) — so a repeat
+  pass, an overlapping cycle or a mid-event restart can never duplicate or re-fire an
+  entry. A metric with no prior value emits nothing, so cold start seeds silently with
+  no special-case flag. Continuing trends (rising gauge, growing outage, rain burst) are
+  rate-limited by `intel.repeat_suppress_minutes`; a gauge that just crossed a class
+  does NOT also emit "rising quickly" (the crossing entry carries the same numbers).
+- **Cross-layer context is NOT stored** — the "3 road disruptions within 10 km" /
+  "Watch and Act remains current" lines are resolved at READ time from current data
+  (`_nearby_lines`, `_own_warning_line`, radius `intel.context_radius_km`), so an
+  entry's context stays true as the situation develops. This is the long-standing
+  cross-layer-correlation backlog item, landed. The haversine is **vectorised** on
+  purpose: it runs per rendered entry × every located row of every layer, every 20 s.
+- **Wiring:** own `intel` collector (`intel.interval_seconds`=60, autostart; fetches
+  nothing, so it is cheap and started LAST in `autostart()`), watchdog supervision,
+  `/health` `intel_running`/`intel_last_entry`/`intel_last_error`, Admin panel with
+  Start/Stop/**Detect now** (runs inline), Overview gets a compact **"What changed"**
+  panel (top 5, context skipped for speed) + an "Intelligence feed" collector line.
+- **Name clash to remember:** `/intel` is the pre-existing password-gated *Intel Tool*
+  (burnt-area chart generator). The feed is `/feed`; the engine is `app/intel_feed.py`,
+  the page `app/pages/feed.py`.
+- Thresholds all live under the config `intel` block (fire ha/%, flood m/hr, power
+  customers/%, rain mm, windows, suppression).
+- Not done: feed entries in the briefing PDFs / XLSX export, webhook notifications for
+  feed entries (the watchdog already notifies separately — wiring both would
+  double-notify), regional power rollup ("Gippsland outages") — `power_outages` has no
+  region field, only a location string + geocode, so the statewide + per-location split
+  is what is honest today.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
@@ -432,9 +482,8 @@ event timeline/compare · BoM forecast overlay · data retention/archive · depl
 viewer roles + audit log · log rotation/capped backups · power-dependent-customer 24h focus ·
 **per-catchment rainfall rollup** (aggregate rainfall_observations by weather_locations.catchment
 for a "rain by catchment" summary + a per-catchment total on gauge pages) · rainfall on the
-station briefing PDF · cross-layer correlation engine (outages inside flooded
-catchments, road cuts near rising gauges) — the `/map` unified view now exists as the shared
-canvas for this. (Unified map itself: DONE 2026-07-22, see above.) ·
+station briefing PDF · cross-layer correlation engine — DONE 2026-08-09 as the Intelligence Feed's read-time
+context lines (see above); `/map` remains the shared visual canvas. ·
 **Settings-save shouldn't freeze all defaults** (2026-07-22): `settings.save()` calls
 `load_config()` (defaults merged with the existing file) then writes the WHOLE thing back to
 config.json, so once a deploy has ever saved Settings, every code-default change is silently

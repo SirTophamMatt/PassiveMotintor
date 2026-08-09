@@ -66,6 +66,7 @@ def _panel():
     weather_auto = cfg["weather"].get("autostart", True)
     rainfall_auto = cfg["rainfall"].get("autostart", True)
     storm_auto = cfg["storm"].get("autostart", True)
+    intel_auto = cfg["intel"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -145,6 +146,22 @@ def _panel():
                          className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-storm-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Intelligence feed"),
+                html.Button("Start", id="admin-intel-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-intel-stop", className="btn"),
+                html.Button("Detect now", id="admin-intel-now", className="btn"),
+                dcc.Checklist(
+                    id="admin-intel-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if intel_auto else [], style={"marginTop": "8px"}),
+                html.Div("Journals what CHANGED across every layer. Fetches "
+                         "nothing — reads only what the collectors stored.",
+                         className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-intel-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -424,6 +441,33 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-intel-status", "children"),
+        Input("admin-intel-start", "n_clicks"),
+        Input("admin-intel-stop", "n_clicks"),
+        Input("admin-intel-now", "n_clicks"),
+        State("admin-intel-autostart", "value"),
+        prevent_initial_call=True)
+    def intel_control(_s, _t, _n, autostart):
+        if not _s and not _t and not _n:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        if ctx.triggered_id == "admin-intel-now":
+            # Runs inline: a pass is a few DB reads, not a scrape.
+            from app import intel_feed
+            written = intel_feed.detect()
+            return (f"Detection pass complete — {written} new "
+                    f"entr{'y' if written == 1 else 'ies'}.")
+        cfg = load_config()
+        cfg["intel"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-intel-start":
+            _, msg = manager.start_intel()
+        else:
+            _, msg = manager.stop_intel()
+        return msg
+
+    @app.callback(
         Output("admin-power-status", "children"),
         Input("admin-power-start", "n_clicks"),
         Input("admin-power-stop", "n_clicks"),
@@ -480,6 +524,7 @@ def register_callbacks(app):
                          line("Weather", s["weather"]),
                          line("Rainfall", s["rainfall"]), line("Storm", s["storm"]),
                          line("Power", s["power"]),
+                         line("Intel feed", s["intel"]),
                          html.Div(watchdog_bits)])
 
     # --- tags ------------------------------------------------------------- #

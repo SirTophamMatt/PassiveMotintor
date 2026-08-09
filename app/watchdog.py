@@ -42,7 +42,7 @@ class Supervisor(threading.Thread):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
         self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
-                          "rainfall": [], "storm": [], "roads": []}
+                          "rainfall": [], "storm": [], "roads": [], "intel": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -56,12 +56,13 @@ class Supervisor(threading.Thread):
         self._first_roads_check = True
         self._last_errors = {"flood": None, "power": None, "fire": None,
                              "weather": None, "rainfall": None, "storm": None,
-                             "roads": None}
+                             "roads": None, "intel": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
                       "rainfall_restarts": 0, "storm_restarts": 0,
-                      "roads_restarts": 0, "last_action": None}
+                      "roads_restarts": 0, "intel_restarts": 0,
+                      "last_action": None}
 
     def ensure_started(self):
         if not self.is_alive():
@@ -169,10 +170,17 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_roads()
                 self._record_restart("roads", reason, msg)
 
+        if manager.intel_wanted(cfg):
+            reason = self._stall_reason(status["intel"],
+                                        max(15, cfg["intel"]["interval_seconds"]))
+            if reason and self._can_restart("intel"):
+                ok, msg = manager.restart_intel()
+                self._record_restart("intel", reason, msg)
+
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
         for which in ("flood", "power", "fire", "weather", "rainfall", "storm",
-                      "roads"):
+                      "roads", "intel"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")

@@ -400,6 +400,55 @@ CREATE TABLE IF NOT EXISTS event_tags (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_event_tags_start ON event_tags (start_ts);
+
+-- Intelligence Feed: append-only journal of DETECTED CHANGES across every
+-- module ("Walwa fire increased 38 ha", "Major flood threshold crossed").
+-- Written only by app/intel_feed.py, only when something actually moved, so
+-- the feed reads as a change log rather than a state dump. Never deleted.
+CREATE TABLE IF NOT EXISTS intel_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,             -- when the change became true (SOURCE time)
+    detected_at TEXT NOT NULL,    -- when the detector noticed it
+    hazard TEXT NOT NULL,         -- fire|flood|power|storm|weather|roads|rainfall
+    entity_key TEXT,              -- stable id within the hazard
+    entity_name TEXT,             -- display name ("Snowy River at Orbost")
+    kind TEXT NOT NULL,           -- growth|threshold|escalation|new|cleared|...
+    severity INTEGER NOT NULL,    -- 3 critical / 2 major / 1 notable / 0 info
+    headline TEXT NOT NULL,       -- "Walwa fire increased 38 ha"
+    metric TEXT,                  -- "area_ha", "height_m", "customers_off", ...
+    prev_value REAL,
+    new_value REAL,
+    unit TEXT,
+    prev_label TEXT,              -- non-numeric transitions (Moderate -> Strong)
+    new_label TEXT,
+    since TEXT,                   -- timestamp of the value we moved FROM
+    rate TEXT,                    -- "Rising 0.18 m/hr", "+82% over 30 minutes"
+    detail TEXT,                  -- JSON list of extra context lines
+    latitude REAL,
+    longitude REAL,
+    url TEXT                      -- deep link into the owning page
+);
+CREATE INDEX IF NOT EXISTS idx_intel_events_ts ON intel_events (ts DESC);
+-- One row per (entity, metric, moment): re-running the detector over the same
+-- data can never duplicate an entry, so restarts and overlapping cycles are safe.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_intel_events_dedup
+    ON intel_events (hazard, entity_key, metric, kind, ts);
+
+-- Metric history for entities whose own table is an UPSERT (fire area, per-
+-- location outage counts, road status) and therefore keeps no past values.
+-- A row is written ONLY when the value changes, so this stays small; it is
+-- what makes "214 -> 296 ha since 12:05" possible for those sources.
+CREATE TABLE IF NOT EXISTS intel_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hazard TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    value REAL,
+    label TEXT,
+    ts TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_intel_metrics_lookup
+    ON intel_metrics (hazard, entity_key, metric, ts DESC);
 """
 
 

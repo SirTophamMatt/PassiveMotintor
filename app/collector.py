@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import datetime
 
+from app import intel_feed
 from app.config import load_config, credentials_set
 from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
@@ -70,6 +71,7 @@ class CollectorManager:
         self._rainfall = None
         self._storm = None
         self._roads = None
+        self._intel = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
         # None = no explicit action yet, fall back to the autostart config.
@@ -80,6 +82,7 @@ class CollectorManager:
         self._rainfall_desired = None
         self._storm_desired = None
         self._roads_desired = None
+        self._intel_desired = None
 
     # --- flood ---------------------------------------------------------------
     def start_flood(self):
@@ -256,6 +259,35 @@ class CollectorManager:
         self.stop_roads()
         return self.start_roads()
 
+    # --- intel (Intelligence Feed change detector) ----------------------------
+    def start_intel(self):
+        """Start the Intelligence Feed detector. Unlike the others this fetches
+        nothing — it reads what the collectors already stored and journals what
+        CHANGED — so it is safe to run at a tighter interval than any scraper."""
+        with self._lock:
+            self._intel_desired = True
+            if self._intel and self._intel.is_alive():
+                return False, "Intelligence feed is already running."
+            cfg = load_config()
+            interval = max(15, cfg["intel"]["interval_seconds"])
+            self._intel = _Collector("intel-collector", interval,
+                                     intel_feed.detect)
+            self._intel.start()
+            return True, "Intelligence feed started."
+
+    def stop_intel(self):
+        with self._lock:
+            self._intel_desired = False
+            if self._intel:
+                self._intel.stop()
+                self._intel = None
+            return True, "Intelligence feed stopped."
+
+    def restart_intel(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_intel()
+        return self.start_intel()
+
     # --- power ---------------------------------------------------------------
     def start_power(self):
         with self._lock:
@@ -329,6 +361,11 @@ class CollectorManager:
             return self._roads_desired
         return cfg["roads"].get("autostart", True)
 
+    def intel_wanted(self, cfg):
+        if self._intel_desired is not None:
+            return self._intel_desired
+        return cfg["intel"].get("autostart", True)
+
     # --- autostart --------------------------------------------------------------
     def autostart(self):
         """Start collectors flagged for auto-start in config. Called once by the
@@ -377,6 +414,14 @@ class CollectorManager:
                 log.info("Autostart power: %s", msg)
             except Exception:
                 log.exception("Autostart power failed")
+        # Started last: it only reads what the others store, so there is no
+        # point detecting changes before they have had a chance to collect.
+        if cfg["intel"].get("autostart", True):
+            try:
+                ok, msg = self.start_intel()
+                log.info("Autostart intel feed: %s", msg)
+            except Exception:
+                log.exception("Autostart intel feed failed")
 
     # --- status ----------------------------------------------------------------
     def status(self):
@@ -412,6 +457,10 @@ class CollectorManager:
             "roads": {
                 "running": self._roads is not None and self._roads.is_alive(),
                 **(self._roads.status if self._roads else {}),
+            },
+            "intel": {
+                "running": self._intel is not None and self._intel.is_alive(),
+                **(self._intel.status if self._intel else {}),
             },
         }
 
