@@ -11,11 +11,12 @@ installed in a given environment.
 """
 import io
 import logging
+import os
 from datetime import datetime
 
 import pandas as pd
 
-from app.config import load_config
+from app.config import BUNDLE_DIR, load_config
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
@@ -26,9 +27,121 @@ log = logging.getLogger(__name__)
 # Print-friendly: light theme, fixed size.
 _FIG_W, _FIG_H = 1000, 420
 
+# ---- Watchdesk branding (see the brand spec in the Obsidian vault) ----------
+# reportlab cannot read SVG, so the logos are pre-rendered PNGs; regenerate them
+# with seed/brand_png_tool.py if the brand art changes.
+_BRAND_NAVY = "#1B2A41"
+_BRAND_GOLD = "#C9A24B"
+_BRAND_SLATE = "#5C6E8C"
+_LOCKUP_PNG = os.path.join(BUNDLE_DIR, "assets", "watchdesk-lockup-print.png")
+_MARK_PNG = os.path.join(BUNDLE_DIR, "assets", "watchdesk-mark-print.png")
+_LOCKUP_RATIO = 64 / 270  # height/width of the lockup art
+
 
 class ReportingUnavailable(RuntimeError):
     """Raised when kaleido/reportlab are not installed."""
+
+
+def _masthead(title, subtitle=None, lockup_mm=52, width_mm=180):
+    """Flowables for the branded block at the top of page 1: the Watchdesk
+    lockup on the left, report title and timestamp right-aligned, over a gold
+    rule. A missing logo file degrades to a plain text masthead rather than
+    failing the whole report."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (HRFlowable, Image, Paragraph, Spacer,
+                                    Table, TableStyle)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "wd-title", parent=styles["Title"], alignment=TA_RIGHT, fontSize=17,
+        leading=20, spaceAfter=0, textColor=colors.HexColor(_BRAND_NAVY))
+    sub_style = ParagraphStyle(
+        "wd-sub", parent=styles["Normal"], alignment=TA_RIGHT, fontSize=8.5,
+        leading=11, textColor=colors.HexColor(_BRAND_SLATE))
+
+    right = [Paragraph(title, title_style)]
+    if subtitle:
+        right.append(Spacer(1, 1.5 * mm))
+        right.append(Paragraph(subtitle, sub_style))
+
+    if os.path.exists(_LOCKUP_PNG):
+        left = Image(_LOCKUP_PNG, width=lockup_mm * mm,
+                     height=lockup_mm * _LOCKUP_RATIO * mm)
+    else:
+        log.warning("Report lockup missing at %s — text masthead", _LOCKUP_PNG)
+        left = Paragraph("watchdesk", ParagraphStyle(
+            "wd-word", parent=styles["Normal"], fontName="Courier-Bold",
+            fontSize=17, textColor=colors.HexColor(_BRAND_NAVY)))
+
+    # Title column takes whatever the lockup column does not, so the
+    # right-aligned title always lands flush with the rule beneath it.
+    left_mm = lockup_mm + 10
+    head = Table([[left, right]],
+                 colWidths=[left_mm * mm, (width_mm - left_mm) * mm])
+    head.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+        ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return [
+        head,
+        Spacer(1, 3 * mm),
+        HRFlowable(width="100%", thickness=1.2,
+                   color=colors.HexColor(_BRAND_GOLD), spaceAfter=0),
+        Spacer(1, 6 * mm),
+    ]
+
+
+def _page_furniture(report_name):
+    """Return an onPage callback drawing the running header (small mark +
+    report name, page 2 onward) and the footer (page number, every page).
+
+    reportlab calls this for each page with the canvas mid-build, so it draws
+    directly rather than appending flowables."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    def draw(canvas, doc):
+        # Align to the document's own margins so this works for the station
+        # briefing's tighter 13/14 mm page as well as the standard 15 mm one.
+        page_w, page_h = doc.pagesize
+        left = doc.leftMargin
+        right = page_w - doc.rightMargin
+        canvas.saveState()
+
+        # Running header: page 1 already carries the full masthead.
+        if canvas.getPageNumber() > 1:
+            y = page_h - 11 * mm
+            text_x = left
+            if os.path.exists(_MARK_PNG):
+                canvas.drawImage(_MARK_PNG, left, y - 1.5 * mm,
+                                 width=5 * mm, height=5 * mm, mask="auto")
+                text_x = left + 7 * mm
+            canvas.setFont("Helvetica-Bold", 8.5)
+            canvas.setFillColor(colors.HexColor(_BRAND_NAVY))
+            canvas.drawString(text_x, y, "Watchdesk")
+            canvas.setFont("Helvetica", 8.5)
+            canvas.setFillColor(colors.HexColor(_BRAND_SLATE))
+            canvas.drawString(text_x + 21 * mm, y, report_name)
+            canvas.setStrokeColor(colors.HexColor(_BRAND_GOLD))
+            canvas.setLineWidth(0.6)
+            canvas.line(left, y - 3 * mm, right, y - 3 * mm)
+
+        # Footer on every page.
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(colors.HexColor(_BRAND_SLATE))
+        canvas.drawString(left, 10 * mm, "Watchdesk")
+        canvas.drawRightString(right, 10 * mm,
+                               f"Page {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    return draw
 
 
 def _fig_png(fig, width=_FIG_W, height=_FIG_H):
@@ -63,9 +176,7 @@ def build_overview_pdf():
     story = []
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    story.append(Paragraph("Passive Monitor — Overview Briefing", styles["Title"]))
-    story.append(Paragraph(f"Generated {now}", styles["Normal"]))
-    story.append(Spacer(1, 8 * mm))
+    story.extend(_masthead("Overview Briefing", f"Generated {now}"))
 
     # --- KPIs -----------------------------------------------------------------
     totals = power_data.latest_totals() or {}
@@ -239,11 +350,12 @@ def build_overview_pdf():
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             topMargin=15 * mm, bottomMargin=15 * mm,
                             leftMargin=15 * mm, rightMargin=15 * mm,
-                            title="Passive Monitor Overview")
-    doc.build(story)
+                            title="Watchdesk Overview")
+    _furniture = _page_furniture("Overview Briefing")
+    doc.build(story, onFirstPage=_furniture, onLaterPages=_furniture)
     buffer.seek(0)
 
-    filename = f"passive_monitor_overview_{datetime.now():%Y%m%d_%H%M}.pdf"
+    filename = f"watchdesk_overview_{datetime.now():%Y%m%d_%H%M}.pdf"
     return filename, buffer.getvalue()
 
 
@@ -269,10 +381,8 @@ def build_fire_pdf():
     story = []
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    story.append(Paragraph("Passive Monitor — Fire / Incidents Situation Report",
-                           styles["Title"]))
-    story.append(Paragraph(f"Generated {now}", styles["Normal"]))
-    story.append(Spacer(1, 6 * mm))
+    story.extend(_masthead("Fire / Incidents Situation Report",
+                           f"Generated {now}"))
 
     # --- Headline counts ------------------------------------------------------
     c = fire_data.latest_counts()
@@ -385,8 +495,9 @@ def build_fire_pdf():
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             topMargin=15 * mm, bottomMargin=15 * mm,
                             leftMargin=15 * mm, rightMargin=15 * mm,
-                            title="Passive Monitor Fire Situation Report")
-    doc.build(story)
+                            title="Watchdesk Fire Situation Report")
+    _furniture = _page_furniture("Fire / Incidents Situation Report")
+    doc.build(story, onFirstPage=_furniture, onLaterPages=_furniture)
     buffer.seek(0)
     filename = f"fire_situation_report_{datetime.now():%Y%m%d_%H%M}.pdf"
     return filename, buffer.getvalue()
@@ -424,12 +535,10 @@ def build_storm_pdf():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     radars = radar_ids()
 
-    story.append(Paragraph("Passive Monitor — Storm Cell Briefing",
-                           styles["Title"]))
-    story.append(Paragraph(
-        f"Generated {now} · BoM radar(s) {', '.join(radars)} · "
-        "radar-indicated cells (experimental tracker)", styles["Normal"]))
-    story.append(Spacer(1, 6 * mm))
+    story.extend(_masthead(
+        "Storm Cell Briefing",
+        f"Generated {now} · BoM radar(s) {', '.join(radars)}<br/>"
+        "radar-indicated cells (experimental tracker)"))
 
     def _table(rows, widths):
         t = Table(rows, colWidths=widths, repeatRows=1)
@@ -639,7 +748,7 @@ def build_storm_pdf():
     story.append(Spacer(1, 4 * mm))
     story.append(Paragraph(
         "Source: Bureau of Meteorology radar imagery; cells detected and "
-        "tracked by Passive Monitor's experimental storm tracker. Situational "
+        "tracked by Watchdesk's experimental storm tracker. Situational "
         "awareness only — always act on official BoM warnings.",
         ParagraphStyle("src", parent=styles["Normal"], fontSize=7.5,
                        textColor=colors.HexColor("#5f6368"))))
@@ -648,8 +757,9 @@ def build_storm_pdf():
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             topMargin=15 * mm, bottomMargin=15 * mm,
                             leftMargin=15 * mm, rightMargin=15 * mm,
-                            title="Passive Monitor Storm Cell Briefing")
-    doc.build(story)
+                            title="Watchdesk Storm Cell Briefing")
+    _furniture = _page_furniture("Storm Cell Briefing")
+    doc.build(story, onFirstPage=_furniture, onLaterPages=_furniture)
     buffer.seek(0)
     filename = f"storm_briefing_{datetime.now():%Y%m%d_%H%M}.pdf"
     return filename, buffer.getvalue()
@@ -857,11 +967,8 @@ def build_station_pdf(station_key):
     story = []
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    story.append(Paragraph(f"Flood Gauge Briefing — {station_name}",
-                           styles["Title"]))
-    story.append(Paragraph(f"Generated {now} — Passive Monitor",
-                           styles["Normal"]))
-    story.append(Spacer(1, 6 * mm))
+    story.extend(_masthead(f"Flood Gauge Briefing<br/>{station_name}",
+                           f"Generated {now}", width_mm=184))
 
     # --- Current state -------------------------------------------------------
     def lv(key):
@@ -1070,7 +1177,8 @@ def build_station_pdf(station_key):
                             topMargin=14 * mm, bottomMargin=14 * mm,
                             leftMargin=13 * mm, rightMargin=13 * mm,
                             title=f"Flood Gauge Briefing — {station_name}")
-    doc.build(story)
+    _furniture = _page_furniture(f"Flood Gauge Briefing — {station_name}")
+    doc.build(story, onFirstPage=_furniture, onLaterPages=_furniture)
     buffer.seek(0)
 
     safe = "".join(c if c.isalnum() or c in " -_" else "_"
