@@ -379,6 +379,18 @@ warning-level lines, colour-matched to the map kinds.
   `closedRoadSESRegion`/`closedRoadTransportRegion` are stored (`ses_region`/
   `transport_region`; `_ensure_column` migrates existing DBs); SES Region shows in
   the page table for the SES grouping angle.
+- **Type breakdown + filter** (built 2026-08-10): `disruption_type` is stored as
+  `"eventType, eventSubType"`, so `data.split_type` treats everything before the
+  first `", "` as the PRIMARY type (`_TYPE_SQL` does the same split in SQLite for
+  the whole-table aggregate — keep the two in step). `type_breakdown` feeds a
+  **stacked bar** on `/roads` (one bar per type, split full-closure vs other,
+  sub-type counts in the hover) so "how many flooding disruptions, and how many of
+  those actually close the road" is one read. The **Disruption type** multi-select
+  filters map + chart + table together via `filter_types`; its options come from
+  `type_options()`, which spans **resolved rows too** (labelled `Flooding (4
+  active)`) so the list is the dataset's full catalogue of types rather than only
+  what happens to be live. The v3 spec does NOT enumerate eventType — it is free
+  text — so the list can only be derived from collected data.
 - **Wiring:** always-on collector (`roads.interval_minutes`=3, autostart), watchdog
   supervision + change-only `roads_alert` webhooks (new full closures + reopenings;
   partial/lane disruptions never notify), `/health` exposes

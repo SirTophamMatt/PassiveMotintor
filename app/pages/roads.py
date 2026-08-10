@@ -50,6 +50,11 @@ def layout():
                     id="roads-closures-only",
                     options=[{"label": " Full closures only", "value": "yes"}],
                     value=[]),
+                html.Label("Disruption type", style={"marginTop": "8px"}),
+                dcc.Dropdown(id="roads-type-filter", multi=True,
+                             placeholder="All types", className="dropdown"),
+                html.Div(id="roads-type-note", className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
             ], className="panel"),
         ], className="panel-row"),
         dcc.Interval(id="roads-interval", interval=60_000, n_intervals=0),
@@ -58,6 +63,8 @@ def layout():
         html.Div(dcc.Graph(id="roads-map", style={"height": "600px"},
                            config=ui.MAP_CONFIG),
                  className="graph-card"),
+        html.Div(dcc.Graph(id="roads-type-chart"), className="graph-card",
+                 style={"marginTop": "16px"}),
         html.H3("Active Disruptions", style={"marginTop": "16px"}),
         dash_table.DataTable(
             id="roads-table",
@@ -148,6 +155,29 @@ def _map_figure(df, dark):
     return ui.apply_theme(fig, dark)
 
 
+def _type_figure(bd, dark):
+    """Stacked bar: one bar per disruption type, split into full closures and
+    other disruptions, so 'how much of this is flooding, and how much of THAT
+    actually closes a road' is one read."""
+    if bd.empty:
+        return ui.apply_theme(
+            px.bar(title="Disruptions by type (nothing active)"), dark)
+    fig = go.Figure()
+    detail = bd[["total", "subtypes"]].values
+    for kind, col in (("Closure", "closures"), ("Other disruption", "other")):
+        fig.add_trace(go.Bar(
+            name=kind, x=bd["type"], y=bd[col],
+            marker_color=KIND_COLOURS[kind], customdata=detail,
+            hovertemplate=("<b>%{x}</b><br>%{fullData.name}: %{y}"
+                           "<br>Total active: %{customdata[0]}"
+                           "<br>Sub-types: %{customdata[1]}<extra></extra>")))
+    fig.update_layout(
+        barmode="stack", title="Active disruptions by type", height=340,
+        xaxis_title="", yaxis_title="Active disruptions",
+        legend=dict(orientation="h", y=1.12))
+    return ui.apply_theme(fig, dark)
+
+
 def _trend_figure(df, dark):
     if df.empty:
         return ui.apply_theme(
@@ -193,10 +223,14 @@ def register_callbacks(app):
         Output("roads-table", "style_header"),
         Output("roads-table", "style_data"),
         Output("roads-trend", "figure"),
+        Output("roads-type-chart", "figure"),
+        Output("roads-type-filter", "options"),
+        Output("roads-type-note", "children"),
         Input("roads-interval", "n_intervals"),
         Input("roads-closures-only", "value"),
+        Input("roads-type-filter", "value"),
         Input("theme-store", "data"))
-    def refresh(_, closures_only, dark):
+    def refresh(_, closures_only, types, dark):
         dark = bool(dark)
         styles = ui.table_styles(dark)
         style_out = (styles["style_table"], styles["style_cell"],
@@ -213,11 +247,29 @@ def register_callbacks(app):
 
         df = roads_data.active_disruptions(
             closures_only=bool(closures_only))
+        # The type filter narrows the map, chart and table together; the filter's
+        # own options stay the full catalogue so nothing disappears from the list
+        # once you pick something.
+        df = roads_data.filter_types(df, types)
+        type_options = roads_data.type_options()
         map_fig = _map_figure(df, dark)
+        type_fig = _type_figure(roads_data.type_breakdown(df), dark)
         trend_fig = _trend_figure(roads_data.load_road_timeseries(), dark)
 
+        if type_options:
+            note = f"{len(type_options)} type(s) seen in this dataset."
+            if types:
+                note += f" Showing {len(types)}."
+        else:
+            note = "No types yet — nothing collected."
+
         cycles, last_hb = roads_data.heartbeat_summary()
-        summary = f"{counts['total']} active disruption(s) state-wide. "
+        shown = 0 if df is None or df.empty else len(df)
+        if shown != counts["total"]:
+            summary = (f"Showing {shown} of {counts['total']} active "
+                       "disruption(s) state-wide. ")
+        else:
+            summary = f"{counts['total']} active disruption(s) state-wide. "
         if cycles:
             summary += f"Monitor ran {cycles} cycle(s), last {last_hb}."
         else:
@@ -233,4 +285,4 @@ def register_callbacks(app):
                 table_df["updated"], errors="coerce").dt.strftime("%d %b %H%Mhrs")
             table_data = table_df.to_dict("records")
         return (summary, kpis, map_fig, table_data, columns, *style_out,
-                trend_fig)
+                trend_fig, type_fig, type_options, note)
