@@ -14,3 +14,6 @@ config.json
 .env
 power_debug.html
 .git/
+tests/
+pytest.ini
+requirements-dev.txt

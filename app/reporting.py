@@ -144,6 +144,36 @@ def _page_furniture(report_name):
     return draw
 
 
+def _simple_table(header, rows, widths):
+    """The standard bordered table used across every Watchdesk report.
+
+    Lifted out of build_overview_pdf when the briefing report needed it too —
+    one definition means the reports cannot drift into two table styles. A cell
+    may be a pre-built Paragraph (for coloured text) or any value.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    cell = getSampleStyleSheet()["Normal"]
+
+    def mk(c):
+        return c if hasattr(c, "wrapOn") else Paragraph(str(c), cell)
+
+    data = [[Paragraph(f"<b>{h}</b>", cell) for h in header]]
+    data += [[mk(c) for c in r] for r in rows]
+    table = Table(data, colWidths=widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
 def _fig_png(fig, width=_FIG_W, height=_FIG_H):
     try:
         return fig.to_image(format="png", width=width, height=height, scale=2)
@@ -263,25 +293,6 @@ def build_overview_pdf():
                                styles["Italic"]))
 
     # --- BoM warnings ---------------------------------------------------------
-    def _simple_table(header, rows, widths):
-        cell = styles["Normal"]
-
-        def mk(c):  # allow a cell to be a pre-built Paragraph (e.g. coloured)
-            return c if hasattr(c, "wrapOn") else Paragraph(str(c), cell)
-
-        data = [[Paragraph(f"<b>{h}</b>", cell) for h in header]]
-        data += [[mk(c) for c in r] for r in rows]
-        t = Table(data, colWidths=widths, repeatRows=1)
-        t.setStyle(TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        return t
-
     story.append(Spacer(1, 4 * mm))
     story.append(Paragraph("Active BoM Warnings (VIC)", styles["Heading2"]))
     wdf = weather_data.active_warnings()
@@ -361,6 +372,227 @@ def build_overview_pdf():
 
     filename = f"watchdesk_overview_{datetime.now():%Y%m%d_%H%M}.pdf"
     return filename, buffer.getvalue()
+
+
+def build_briefing_pdf(snapshot=None, window_minutes=None):
+    """Return (filename, bytes) for the operational briefing.
+
+    Renders the SAME `app.briefing` snapshot the `/briefing` screen renders —
+    pass the one already on screen so the pack and the page cannot disagree, or
+    omit it to build a fresh one. Deliberately concise: an operational briefing,
+    not a dump of every table.
+
+    Every section degrades on its own. A missing section prints its "nothing to
+    report" line rather than being silently dropped, because on a briefing sheet
+    an absent heading and an empty one mean very different things.
+    """
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (PageBreak, Paragraph,
+                                        SimpleDocTemplate, Spacer, Table,
+                                        TableStyle)
+    except ImportError as e:
+        raise ReportingUnavailable(
+            "The 'reportlab' package is required for PDF reports "
+            "(pip install reportlab).") from e
+
+    from app import briefing as briefing_model
+
+    if snapshot is None:
+        snapshot = briefing_model.build_briefing_snapshot(
+            window_minutes=window_minutes
+            or briefing_model.DEFAULT_WINDOW_MINUTES)
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    def heading(text):
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(text, styles["Heading2"]))
+
+    def note(text):
+        story.append(Paragraph(text, styles["Italic"]))
+
+    # ---- Page 1: masthead, current situation, significant changes -----------
+    story.extend(_masthead(
+        "Operational Briefing",
+        f"Generated {snapshot.generated_label} · "
+        f"changes since last {snapshot.window_label}"))
+
+    stale = snapshot.stale_sources
+    if stale:
+        # Straight under the masthead on purpose. If a source is dead, that has
+        # to be known before anything below is read, not discovered on page 3.
+        story.append(Paragraph(
+            '<font color="#d62728"><b>Data warning:</b></font> '
+            "%d source(s) stale or not reporting — %s. Figures drawn from them "
+            "may be out of date." % (len(stale),
+                                     ", ".join(s.name for s in stale)),
+            styles["Normal"]))
+        story.append(Spacer(1, 3 * mm))
+
+    heading("Current Situation")
+    if snapshot.situation:
+        kpi_rows, pair = [], []
+        for kpi in snapshot.situation:
+            pair += [kpi.label, kpi.full_value]
+            if len(pair) == 4:
+                kpi_rows.append(pair)
+                pair = []
+        if pair:
+            kpi_rows.append(pair + [""] * (4 - len(pair)))
+        table = Table(kpi_rows, colWidths=[50 * mm, 35 * mm, 50 * mm, 35 * mm])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef2f7")),
+            ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c8d0da")),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(table)
+    else:
+        note("No module data available.")
+
+    heading("Significant Changes — last %s" % snapshot.window_label)
+    if snapshot.changes:
+        rows = []
+        for change in snapshot.changes[:18]:
+            colour = {3: "#d62728", 2: "#ff7f0e"}.get(change.severity, "#8a7c1f")
+            body = "<b>%s</b>" % _escape(change.headline)
+            for line in change.lines[:3]:
+                body += "<br/><font size=8 color='#5C6E8C'>%s</font>" % _escape(line)
+            rows.append([
+                change.time,
+                Paragraph('<font color="%s"><b>%s</b></font>'
+                          % (colour, change.severity_label), styles["Normal"]),
+                Paragraph(body, styles["Normal"])])
+        story.append(_simple_table(["Time", "Level", "Change"], rows,
+                                   [16 * mm, 20 * mm, 144 * mm]))
+    else:
+        note("No significant changes detected in this period.")
+
+    # ---- Page 2: warnings, consequences, watch points -----------------------
+    story.append(PageBreak())
+
+    heading("Active Warnings — VicEmergency")
+    vic = snapshot.warnings_from("VicEmergency")
+    if vic:
+        rows = []
+        for w in vic:
+            colour = {"Emergency Warning": "#d62728",
+                      "Watch and Act": "#ff7f0e"}.get(w.level, "#8a7c1f")
+            rows.append([
+                Paragraph('<font color="%s"><b>%s</b></font>'
+                          % (colour, _escape(w.level or "")), styles["Normal"]),
+                _escape(w.kind or "—"),
+                _escape(w.title or "—"),
+                w.issued.strftime("%d %b %H:%M") if w.issued else "—"])
+        story.append(_simple_table(["Level", "Event", "Location", "Issued"],
+                                   rows, [30 * mm, 34 * mm, 86 * mm, 30 * mm]))
+        if snapshot.omitted_advice:
+            note("... and %d further Advice warning(s) not listed."
+                 % snapshot.omitted_advice)
+    else:
+        note("No active VicEmergency community warnings.")
+
+    heading("Active Warnings — Bureau of Meteorology")
+    bom = snapshot.warnings_from("BoM")
+    if bom:
+        rows = [[_escape(w.kind or "—"), _escape(w.title or "—"),
+                 w.issued.strftime("%d %b %H:%M") if w.issued else "—",
+                 w.expires.strftime("%d %b %H:%M") if w.expires else "—"]
+                for w in bom[:15]]
+        story.append(_simple_table(["Type", "Warning", "Issued", "Expires"],
+                                   rows, [34 * mm, 96 * mm, 25 * mm, 25 * mm]))
+    else:
+        note("No active BoM warnings.")
+
+    heading("Emerging Consequences")
+    if snapshot.consequences:
+        for c in snapshot.consequences:
+            story.append(Paragraph("<b>%s</b>" % _escape(c.title),
+                                   styles["Normal"]))
+            for line in c.lines:
+                story.append(Paragraph("• %s" % _escape(line), styles["Normal"]))
+            story.append(Spacer(1, 2 * mm))
+    else:
+        note("No significant cross-layer consequences currently identified.")
+
+    heading("Watch Points")
+    if snapshot.watch_points:
+        for w in snapshot.watch_points:
+            tag = ("Trend projection" if w.kind == briefing_model.PROJECTION
+                   else "Observed")
+            colour = "#5b8def" if w.kind == briefing_model.PROJECTION else "#2ca02c"
+            story.append(Paragraph(
+                '<font color="%s"><b>[%s]</b></font> <b>%s</b>'
+                % (colour, tag, _escape(w.title)), styles["Normal"]))
+            for line in w.lines:
+                story.append(Paragraph("• %s" % _escape(line), styles["Normal"]))
+            story.append(Spacer(1, 2 * mm))
+    else:
+        note("Nothing currently approaching a threshold.")
+
+    # ---- Page 3: weather observations + data freshness ----------------------
+    story.append(PageBreak())
+
+    heading("Weather Observations")
+    if snapshot.weather:
+        story.append(_simple_table(
+            ["Observation", "Station"],
+            [[k.label, k.full_value] for k in snapshot.weather],
+            [70 * mm, 110 * mm]))
+    else:
+        note("No AWS observations available.")
+    note("Raw Bureau of Meteorology automatic weather station observations — "
+         "not quality-controlled, and not an official warning product.")
+
+    heading("Data Freshness")
+    rows = []
+    for s in snapshot.sources:
+        colour = {"ok": "#2ca02c", "stale": "#ff7f0e"}.get(s.state, "#d62728")
+        label = briefing_model.describe_age(s.age_minutes)
+        if s.detail:
+            label += " (%s)" % s.detail
+        rows.append([s.name,
+                     Paragraph('<font color="%s">%s</font>'
+                               % (colour, _escape(label)), styles["Normal"])])
+    if rows:
+        story.append(_simple_table(["Source", "Last update"], rows,
+                                   [50 * mm, 130 * mm]))
+    else:
+        note("No collector status available.")
+
+    story.append(Spacer(1, 4 * mm))
+    note("Passive Monitor aggregates public data sources. Trend projections "
+         "are straight-line extrapolations of recent observations, not "
+         "official forecasts. For official warnings see the Bureau of "
+         "Meteorology, VICSES and VicEmergency.")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=15 * mm, bottomMargin=15 * mm,
+                            leftMargin=15 * mm, rightMargin=15 * mm,
+                            title="Watchdesk Operational Briefing")
+    furniture = _page_furniture("Operational Briefing")
+    doc.build(story, onFirstPage=furniture, onLaterPages=furniture)
+    buffer.seek(0)
+    filename = f"watchdesk_briefing_{snapshot.generated_at:%Y%m%d_%H%M}.pdf"
+    return filename, buffer.getvalue()
+
+
+def _escape(text):
+    """reportlab Paragraphs parse a mini-HTML, so raw & < > in feed text (BoM
+    titles carry them) would raise a parse error mid-report."""
+    return (str(text or "").replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
 
 
 def build_fire_pdf():

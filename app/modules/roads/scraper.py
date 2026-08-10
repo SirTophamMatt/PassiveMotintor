@@ -25,7 +25,7 @@ from datetime import datetime
 
 import requests
 
-from app import database
+from app import database, history
 from app.config import load_config
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,37 @@ _FIELDS = [
     "description", "latitude", "longitude", "geometry", "start_time",
     "end_time", "created", "updated",
 ]
+
+
+# Material state journalled for replay. `updated`/`last_seen` are excluded so a
+# republished-but-unchanged disruption doesn't write a row every cycle; the
+# feed's `updated` is the effective time instead. Geometry is included because a
+# closure's extent is the operationally interesting part on a replay map.
+_HISTORY_FIELDS = [
+    "status", "disruption_type", "is_closure", "road_name", "location",
+    "direction", "lanes_affected", "lga", "ses_region", "transport_region",
+    "description", "geometry", "start_time", "end_time",
+]
+
+
+def _journal(now):
+    """Record this cycle's disruption state changes for Event Replay.
+
+    Reads back what the cycle touched (`last_seen = now`) so roads the
+    resolve-sweep just reopened get their tombstone in the same pass. A journal
+    failure must never break collection.
+    """
+    try:
+        df = database.read_df(
+            "SELECT source_id, %s, latitude, longitude, updated, resolved "
+            "FROM road_disruptions WHERE last_seen = ?"
+            % ", ".join(_HISTORY_FIELDS), [now])
+        history.record_dataframe(
+            history.ROADS, df, key_col="source_id",
+            state_cols=_HISTORY_FIELDS, active_col="resolved", active_value=0,
+            ts_col="updated", effective_ts=now)
+    except Exception:
+        log.exception("Roads: state journal write failed (collection unaffected)")
 
 
 def _flat(value):
@@ -282,6 +313,8 @@ def fetch_road_data():
             f"UPDATE road_disruptions SET resolved=1, last_seen=? "
             f"WHERE resolved=0 AND source_id NOT IN ({placeholders})",
             [now] + seen)
+
+    _journal(now)
 
     closures = sum(1 for r in rows if r["is_closure"])
     database.insert_rows("road_timeseries", [{

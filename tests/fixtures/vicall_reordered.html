@@ -1,0 +1,33 @@
+<!--
+The same Charlton observation as vicall_sample.html, but with the columns in a
+completely different order AND two columns BoM doesn't publish today wedged in
+the middle. Parsing is driven by each cell's `headers` ids, not its position,
+so this must produce byte-identical field values to the normal fixture — that
+is the regression guard against a future BoM layout change silently shifting
+values into the wrong fields.
+-->
+<html><body>
+<table>
+<tbody>
+<tr>
+  <th id="tMAL-station-charlton"><a href="/products/IDV60801/IDV60801.94839.shtml">Charlton</a></th>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-charlton">4602:40pm</td>
+  <td headers="tMAL-rainsince9am tMAL-station-charlton">1.4</td>
+  <td headers="tMAL-uv-index tMAL-station-charlton">3.2</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-charlton">15</td>
+  <td headers="tMAL-tmp tMAL-station-charlton">10.1</td>
+  <td headers="tMAL-press-msl tMAL-station-charlton">1010.1</td>
+  <td headers="tMAL-hightmp tMAL-station-charlton">16.303:02pm</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-charlton">W</td>
+  <td headers="tMAL-datetime tMAL-station-charlton">10/11:00pm</td>
+  <td headers="tMAL-cloud-cover tMAL-station-charlton">7</td>
+  <td headers="tMAL-delta-t tMAL-station-charlton">0.2</td>
+  <td headers="tMAL-highwind tMAL-highwind-dir tMAL-station-charlton">SW</td>
+  <td headers="tMAL-relhum tMAL-station-charlton">98</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-charlton">9</td>
+  <td headers="tMAL-dewpoint tMAL-station-charlton">9.8</td>
+  <td headers="tMAL-apptmp tMAL-station-charlton">8.4</td>
+</tr>
+</tbody>
+</table>
+</body></html>

@@ -1082,15 +1082,25 @@ def _delta_line(row):
 
 
 def entries(hours=24, hazards=None, min_severity=INFO, limit=120,
-            with_context=True, context_limit=40):
+            with_context=True, context_limit=40, since=None, until=None):
     """Rendered feed entries, newest first.
 
     Each entry is a dict ready for the page: a time, a headline, one quantified
     delta line, and context lines. Context (proximity + standing warning level)
     is resolved live for the first ``context_limit`` entries only — that is the
-    only expensive part and nobody reads past the top of a feed."""
+    only expensive part and nobody reads past the top of a feed.
+
+    ``since``/``until`` (datetimes) select an EXPLICIT window and override the
+    rolling ``hours``. The briefing uses this so its "changes since" period is
+    anchored to the briefing's own reference time rather than to now — which is
+    also what lets a briefing be rebuilt for a past moment.
+    """
     query = ["SELECT * FROM intel_events WHERE ts >= ?"]
-    params = [_stamp(_now() - timedelta(hours=float(hours)))]
+    params = [_stamp(since if since is not None
+                     else _now() - timedelta(hours=float(hours)))]
+    if until is not None:
+        query.append("AND ts <= ?")
+        params.append(_stamp(until))
     if hazards:
         query.append("AND hazard IN (%s)" % ",".join("?" * len(hazards)))
         params += list(hazards)

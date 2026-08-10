@@ -186,17 +186,37 @@ CREATE TABLE IF NOT EXISTS aws_stations (
     longitude REAL
 );
 
--- Every AWS rain-since-9am reading, kept for after-the-fact interrogation and
--- tagging (like flood/power). De-duped on the BoM observation time so polling
--- more often than BoM updates adds nothing. Event totals are derived from the
+-- Every AWS observation, kept for after-the-fact interrogation and tagging
+-- (like flood/power). De-duped on the BoM observation time so polling more
+-- often than BoM updates adds nothing. Event totals are derived from the
 -- positive increments (a drop = the 9am reset), so totals survive resets.
+-- Named `rainfall_aws` for history: it began as rain-only and grew the rest of
+-- the AWS observation set in 2026-08 (Phase A). The table was deliberately NOT
+-- renamed — every existing rainfall query, export and event total keeps working
+-- and no historical row had to be rewritten. Weather columns are NULL for rows
+-- collected before that, which is the honest answer: they were never observed.
 CREATE TABLE IF NOT EXISTS rainfall_aws (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     wmo TEXT NOT NULL,
     name TEXT,
     rain_since_9am_mm REAL,
     obs_time TEXT NOT NULL,
-    timestamp TEXT NOT NULL
+    timestamp TEXT NOT NULL,
+    -- Current-observation weather fields (all nullable: BoM prints "-" when a
+    -- station doesn't report a field, and that must stay NULL, never 0).
+    temperature_c REAL,
+    apparent_temperature_c REAL,
+    dew_point_c REAL,
+    relative_humidity_pct REAL,
+    delta_t_c REAL,
+    wind_direction TEXT,             -- compass point, or CALM
+    wind_speed_kmh REAL,
+    wind_gust_kmh REAL,
+    pressure_msl_hpa REAL,
+    -- Daily highest-gust summary (BoM prints value and time in one cell).
+    max_gust_direction TEXT,
+    max_gust_kmh REAL,
+    max_gust_time TEXT               -- local clock time as published, e.g. 02:40pm
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rainfall_aws_unique
     ON rainfall_aws (wmo, obs_time);
@@ -463,6 +483,52 @@ CREATE TABLE IF NOT EXISTS intel_metrics (
 CREATE INDEX IF NOT EXISTS idx_intel_metrics_lookup
     ON intel_metrics (hazard, entity_key, metric, ts DESC);
 
+-- Generic state-change journal for entities whose own table is an UPSERT and
+-- therefore keeps no past state (fire incidents, road disruptions, per-location
+-- power outages, weather warnings). This is what makes Event Replay able to
+-- answer "what did Passive Monitor know at 14:30".
+--
+-- It is a CHANGE JOURNAL, not a poll-by-poll snapshot table: a row is written
+-- only when an entity's relevant state actually differs from its last recorded
+-- state (compared by `state_hash` over canonical JSON). At a 60-second poll a
+-- snapshot table would write ~1,440 rows/entity/day; this writes one per actual
+-- change, which for a typical incident is a handful over its whole life.
+--
+-- Sources that ALREADY keep true history (flood_observations, storm_cells,
+-- rainfall_aws) are deliberately NOT duplicated here — they stay the primary
+-- historical source for their own layer.
+CREATE TABLE IF NOT EXISTS entity_state_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,         -- fire | roads | power | weather_warning
+    entity_key TEXT NOT NULL,     -- stable id within the source
+    effective_ts TEXT NOT NULL,   -- when the state became true (SOURCE time)
+    recorded_at TEXT NOT NULL,    -- when we noticed it
+    active INTEGER NOT NULL DEFAULT 1,  -- 0 = resolved/withdrawn (tombstone)
+    state_json TEXT NOT NULL,     -- the entity's state at that moment
+    state_hash TEXT NOT NULL,     -- hash of canonical state_json, for de-dup
+    latitude REAL,
+    longitude REAL
+);
+-- Reconstruction is always "latest row per entity at or before T, for one
+-- source", so both indexes are lookups that query plans actually use.
+CREATE INDEX IF NOT EXISTS idx_entity_hist_source_ts
+    ON entity_state_history (source, effective_ts);
+CREATE INDEX IF NOT EXISTS idx_entity_hist_entity
+    ON entity_state_history (source, entity_key, effective_ts);
+-- Re-running a collector over unchanged data can never double-write.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_hist_unique
+    ON entity_state_history (source, entity_key, effective_ts, state_hash);
+
+-- When each source's change journal started. Replay uses this to say plainly
+-- how far back full-fidelity reconstruction actually goes, instead of implying
+-- it can rebuild moments it was never running for. Written once per source, on
+-- the first cycle that records anything.
+CREATE TABLE IF NOT EXISTS history_availability (
+    source TEXT PRIMARY KEY,
+    available_from TEXT NOT NULL,
+    note TEXT
+);
+
 -- Flood trend projections and their VERIFICATION (app/modules/flood/trend.py).
 -- Every ETA the app shows is written here when it is made, then scored against
 -- the observations that followed. That is what lets the UI publish a real hit
@@ -505,6 +571,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_flood_proj_unique
 CREATE INDEX IF NOT EXISTS idx_flood_proj_outcome
     ON flood_projections (outcome, station_key);
 """
+
+
+# Weather columns added to `rainfall_aws` in Phase A. Kept as data (not inline
+# _ensure_column calls) so the collector can import the canonical list instead
+# of repeating the field names — one place to add a field in future.
+AWS_WEATHER_COLUMNS = [
+    ("temperature_c", "REAL"),
+    ("apparent_temperature_c", "REAL"),
+    ("dew_point_c", "REAL"),
+    ("relative_humidity_pct", "REAL"),
+    ("delta_t_c", "REAL"),
+    ("wind_direction", "TEXT"),
+    ("wind_speed_kmh", "REAL"),
+    ("wind_gust_kmh", "REAL"),
+    ("pressure_msl_hpa", "REAL"),
+    ("max_gust_direction", "TEXT"),
+    ("max_gust_kmh", "REAL"),
+    ("max_gust_time", "TEXT"),
+]
 
 
 def get_connection():
@@ -563,6 +648,11 @@ def init_db():
         _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
         _ensure_column(conn, "road_disruptions", "ses_region", "TEXT")
         _ensure_column(conn, "road_disruptions", "transport_region", "TEXT")
+        # AWS observations grew from rain-only to the full BoM field set
+        # (2026-08, Phase A). Purely additive: existing rows keep their rainfall
+        # and get NULL weather, so rainfall history/exports are untouched.
+        for col, decl in AWS_WEATHER_COLUMNS:
+            _ensure_column(conn, "rainfall_aws", col, decl)
         _migrate_events_to_tags(conn)
         conn.commit()
     finally:

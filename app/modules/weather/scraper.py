@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-from app import database
+from app import database, history
 from app.config import load_config
 from app.modules.weather import data as weather_data
 
@@ -133,7 +133,36 @@ def fetch_warnings(now):
     else:
         database.execute(
             "UPDATE weather_warnings SET active=0, last_seen=? WHERE active=1", [now])
+    _journal_warnings(now)
     return len(rows), new
+
+
+# Material warning state journalled for replay. The full `message` body is
+# deliberately excluded: it is already versioned in weather_warning_updates,
+# and hashing kilobytes of HTML per warning per cycle would bloat the journal
+# for no reconstruction benefit. `last_seen` is excluded for the usual reason.
+_HISTORY_FIELDS = ["type", "title", "short_title", "group_type", "phase",
+                   "state", "issue_time", "expiry_time"]
+
+
+def _journal_warnings(now):
+    """Record warning lifecycle changes so replay can tell whether a warning
+    was active at a given moment — which is the whole question for a warning.
+
+    BoM's `issue_time` is the effective time: a reissue is a genuinely new
+    state, and that is when it became true.
+    """
+    try:
+        df = database.read_df(
+            "SELECT warning_id, %s, active FROM weather_warnings "
+            "WHERE last_seen = ?" % ", ".join(_HISTORY_FIELDS), [now])
+        history.record_dataframe(
+            history.WEATHER_WARNING, df, key_col="warning_id",
+            state_cols=_HISTORY_FIELDS, active_col="active", active_value=1,
+            ts_col="issue_time", lat_col=None, lon_col=None, effective_ts=now)
+    except Exception:
+        log.exception("Weather: warning journal write failed "
+                      "(collection unaffected)")
 
 
 def _geohash_decode(gh):

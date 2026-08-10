@@ -186,6 +186,39 @@ def flooding_station_count(event=None):
     return count
 
 
+def flooding_breakdown():
+    """Gauges at or above each flood classification, as CUMULATIVE counts:
+    ``{'minor': n, 'moderate': n, 'major': n, 'total_gauges': n}`` where a gauge
+    at Major is counted in all three.
+
+    Kept separate from the levels rather than collapsed into one "flooding"
+    number because the levels ask for different responses — a single total lets
+    one Major hide behind a dozen Minors. Uses the same MAX(timestamp) GROUP BY
+    as map_gauges (SQLite returns the row owning the max) instead of reading
+    every observation into pandas, which matters at ~1.4M rows.
+    """
+    empty = {"minor": 0, "moderate": 0, "major": 0, "total_gauges": 0}
+    levels = load_flood_levels()
+    if not levels:
+        return empty
+    latest = database.read_df(
+        "SELECT station_name, height_m, MAX(timestamp) AS ts "
+        "FROM flood_observations GROUP BY station_name")
+    if latest.empty:
+        return empty
+    heights = pd.to_numeric(latest["height_m"], errors="coerce")
+    out = dict(empty, total_gauges=len(latest))
+    for name, height in zip(latest["station_name"], heights):
+        priority, _, _ = classify_station(height, levels.get(str(name).strip().lower()))
+        if priority <= 3:
+            out["minor"] += 1
+        if priority <= 2:
+            out["moderate"] += 1
+        if priority == 1:
+            out["major"] += 1
+    return out
+
+
 def current_flooding_stations(max_stations=12):
     """Stations whose most recent reading (any event) is at/above minor flood
     level, with their full height history for plotting. Returns a list of

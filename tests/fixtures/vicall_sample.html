@@ -1,0 +1,154 @@
+<!--
+Minimal stand-in for BoM's vic/observations/vicall.shtml, trimmed to the
+structure the parser actually depends on: a <th> carrying the station link
+(the WMO id lives in the href) and observation <td>s tagged with the column
+header ids they belong to. The "tMAL-" prefix is the regional sub-table, which
+is why only the header SUFFIX is stable enough to match on.
+
+Each row is a deliberate parser case — see tests/test_aws_parser.py.
+-->
+<html><body>
+<table>
+<thead>
+<tr>
+  <th id="tMAL-station">Station</th>
+  <th id="tMAL-datetime">Date/Time</th>
+  <th id="tMAL-tmp">Temp</th>
+  <th id="tMAL-apptmp">App Temp</th>
+  <th id="tMAL-dewpoint">Dew point</th>
+  <th id="tMAL-relhum">Rel hum</th>
+  <th id="tMAL-delta-t">Delta-T</th>
+  <th id="tMAL-wind-dir">Wind dir</th>
+  <th id="tMAL-wind-spd-kmh">Wind spd</th>
+  <th id="tMAL-wind-gust-kmh">Wind gust</th>
+  <th id="tMAL-press-msl">Pressure MSL</th>
+  <th id="tMAL-rainsince9am">Rain since 9am</th>
+  <th id="tMAL-highwind-dir">Max gust dir</th>
+  <th id="tMAL-highwind-gust-kmh">Max gust</th>
+</tr>
+</thead>
+<tbody>
+
+<!-- CASE: a normal station reporting every field. -->
+<tr>
+  <th id="tMAL-station-charlton"><a href="/products/IDV60801/IDV60801.94839.shtml">Charlton</a></th>
+  <td headers="tMAL-datetime tMAL-station-charlton">10/11:00pm</td>
+  <td headers="tMAL-tmp tMAL-station-charlton">10.1</td>
+  <td headers="tMAL-apptmp tMAL-station-charlton">8.4</td>
+  <td headers="tMAL-dewpoint tMAL-station-charlton">9.8</td>
+  <td headers="tMAL-relhum tMAL-station-charlton">98</td>
+  <td headers="tMAL-delta-t tMAL-station-charlton">0.2</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-charlton">W</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-charlton">9</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-charlton">15</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kts tMAL-station-charlton">5</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kts tMAL-station-charlton">8</td>
+  <td headers="tMAL-press-msl tMAL-station-charlton">1010.1</td>
+  <td headers="tMAL-rainsince9am tMAL-station-charlton">1.4</td>
+  <td headers="tMAL-lowtmp tMAL-station-charlton">10.011:00pm</td>
+  <td headers="tMAL-hightmp tMAL-station-charlton">16.303:02pm</td>
+  <td headers="tMAL-highwind tMAL-highwind-dir tMAL-station-charlton">SW</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-charlton">4602:40pm</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kts tMAL-station-charlton">2502:40pm</td>
+</tr>
+
+<!-- CASE: no mean-sea-level pressure (common; many AWS never report it). -->
+<tr>
+  <th id="tMAL-station-nhill"><a href="/products/IDV60801/IDV60801.95839.shtml">Nhill</a></th>
+  <td headers="tMAL-datetime tMAL-station-nhill">10/10:30pm</td>
+  <td headers="tMAL-tmp tMAL-station-nhill">7.6</td>
+  <td headers="tMAL-apptmp tMAL-station-nhill">4.1</td>
+  <td headers="tMAL-dewpoint tMAL-station-nhill">6.0</td>
+  <td headers="tMAL-relhum tMAL-station-nhill">89</td>
+  <td headers="tMAL-delta-t tMAL-station-nhill">0.9</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-nhill">NW</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-nhill">22</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-nhill">35</td>
+  <td headers="tMAL-press-msl tMAL-station-nhill">-</td>
+  <td headers="tMAL-rainsince9am tMAL-station-nhill">0.0</td>
+  <td headers="tMAL-highwind tMAL-highwind-dir tMAL-station-nhill">NW</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-nhill">5201:05pm</td>
+</tr>
+
+<!-- CASE: no gust at all, current or daily. Must stay NULL, never 0. -->
+<tr>
+  <th id="tMAL-station-sheoaks"><a href="/products/IDV60801/IDV60801.94842.shtml">Sheoaks</a></th>
+  <td headers="tMAL-datetime tMAL-station-sheoaks">10/11:00pm</td>
+  <td headers="tMAL-tmp tMAL-station-sheoaks">9.2</td>
+  <td headers="tMAL-apptmp tMAL-station-sheoaks">7.7</td>
+  <td headers="tMAL-dewpoint tMAL-station-sheoaks">8.1</td>
+  <td headers="tMAL-relhum tMAL-station-sheoaks">93</td>
+  <td headers="tMAL-delta-t tMAL-station-sheoaks">0.4</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-sheoaks">SSW</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-sheoaks">11</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-sheoaks">-</td>
+  <td headers="tMAL-press-msl tMAL-station-sheoaks">1008.4</td>
+  <td headers="tMAL-rainsince9am tMAL-station-sheoaks">3.2</td>
+  <td headers="tMAL-highwind tMAL-highwind-dir tMAL-station-sheoaks">-</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-sheoaks">-</td>
+</tr>
+
+<!-- CASE: no temperature (so no apparent temp / dew point / delta-T either). -->
+<tr>
+  <th id="tMAL-station-coldstream"><a href="/products/IDV60801/IDV60801.94870.shtml">Coldstream</a></th>
+  <td headers="tMAL-datetime tMAL-station-coldstream">10/11:00pm</td>
+  <td headers="tMAL-tmp tMAL-station-coldstream">-</td>
+  <td headers="tMAL-apptmp tMAL-station-coldstream">-</td>
+  <td headers="tMAL-dewpoint tMAL-station-coldstream">-</td>
+  <td headers="tMAL-relhum tMAL-station-coldstream">-</td>
+  <td headers="tMAL-delta-t tMAL-station-coldstream">-</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-coldstream">S</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-coldstream">7</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-coldstream">13</td>
+  <td headers="tMAL-press-msl tMAL-station-coldstream">1011.0</td>
+  <td headers="tMAL-rainsince9am tMAL-station-coldstream">0.6</td>
+  <td headers="tMAL-highwind tMAL-highwind-dir tMAL-station-coldstream">SW</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-coldstream">3111:48am</td>
+</tr>
+
+<!-- CASE: junk in several cells. Each bad value is dropped on its own; the
+     station's good fields still make it through. -->
+<tr>
+  <th id="tMAL-station-garbled"><a href="/products/IDV60801/IDV60801.99999.shtml">Garbled Creek</a></th>
+  <td headers="tMAL-datetime tMAL-station-garbled">10/09:30pm</td>
+  <td headers="tMAL-tmp tMAL-station-garbled">abc</td>
+  <td headers="tMAL-relhum tMAL-station-garbled">N/A</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-garbled">NNE</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-garbled">18</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-garbled">29</td>
+  <td headers="tMAL-press-msl tMAL-station-garbled">1002.5</td>
+  <td headers="tMAL-rainsince9am tMAL-station-garbled">1.2.3</td>
+  <td headers="tMAL-highwind tMAL-highwind-gust-kmh tMAL-station-garbled">??:??</td>
+</tr>
+
+<!-- CASE: calm. BoM publishes the direction as CALM with a 0 speed. -->
+<tr>
+  <th id="tMAL-station-calm"><a href="/products/IDV60801/IDV60801.94800.shtml">Still Plains</a></th>
+  <td headers="tMAL-datetime tMAL-station-calm">10/11:00pm</td>
+  <td headers="tMAL-tmp tMAL-station-calm">5.5</td>
+  <td headers="tMAL-relhum tMAL-station-calm">100</td>
+  <td headers="tMAL-wind tMAL-wind-dir tMAL-station-calm">CALM</td>
+  <td headers="tMAL-wind tMAL-wind-spd-kmh tMAL-station-calm">0</td>
+  <td headers="tMAL-wind tMAL-wind-gust-kmh tMAL-station-calm">0</td>
+  <td headers="tMAL-press-msl tMAL-station-calm">1013.2</td>
+  <td headers="tMAL-rainsince9am tMAL-station-calm">0.0</td>
+</tr>
+
+<!-- CASE: no observation time. Nothing can be de-duped against, so the row is
+     dropped entirely rather than stored under a guessed timestamp. -->
+<tr>
+  <th id="tMAL-station-silent"><a href="/products/IDV60801/IDV60801.94801.shtml">Silent Hill</a></th>
+  <td headers="tMAL-datetime tMAL-station-silent">-</td>
+  <td headers="tMAL-tmp tMAL-station-silent">12.0</td>
+  <td headers="tMAL-rainsince9am tMAL-station-silent">4.0</td>
+</tr>
+
+<!-- Not a station row: no WMO link. Must be ignored, not crash the parse. -->
+<tr>
+  <th id="tMAL-note">Notes</th>
+  <td headers="tMAL-note">Observations are automatic and not quality controlled.</td>
+</tr>
+
+</tbody>
+</table>
+</body></html>

@@ -496,3 +496,40 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .trend-height { font-weight: 600; }
 .trend-up { color: #d62728; font-family: Consolas, monospace; }
 .trend-down { color: #2ca02c; font-family: Consolas, monospace; }
+
+/* --- Briefing Mode ------------------------------------------------------ */
+/* Warning rows are links, but a panel of default-blue anchors is unreadable
+   against the dark theme and turns the section into a wall of colour. Same
+   treatment as .feed-headline: body colour, accent only on hover. */
+.briefing-warning {
+    color: var(--text);
+    text-decoration: none;
+    font-size: 13px;
+}
+.briefing-warning:hover { color: var(--accent); text-decoration: underline; }
+.briefing-level { font-weight: 600; margin: 8px 0 4px; }
+
+/* --- Event Replay ------------------------------------------------------- */
+/* Timeline entries are real <button>s so they are keyboard-reachable, but they
+   must read as a list, not a row of chrome buttons. */
+.replay-seek {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    border-left: 3px solid transparent;
+    padding: 6px 8px;
+    margin-bottom: 2px;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+}
+.replay-seek:hover { background: var(--bg-panel); }
+/* The entry nearest the selected moment — this is what ties the timeline to
+   the slider, so it has to be obvious at a glance. */
+.replay-seek-active {
+    background: var(--bg-panel);
+    border-left-color: var(--accent);
+}

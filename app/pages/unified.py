@@ -10,6 +10,7 @@ The map's `uirevision` is pinned so the 60-second auto-refresh never resets the
 user's pan/zoom — you can sit zoomed on a fireground while data updates under you.
 """
 import json
+import logging
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -25,6 +26,8 @@ from app.modules.weather import data as weather_data
 from app.pages import fire as fire_page
 from app.pages import roads as roads_page
 
+log = logging.getLogger(__name__)
+
 VIC_CENTER = {"lat": -37.0, "lon": 145.0}
 
 LAYER_OPTIONS = [
@@ -34,9 +37,16 @@ LAYER_OPTIONS = [
     {"label": " Storm cells", "value": "storm"},
     {"label": " Power outages", "value": "power"},
     {"label": " Rainfall (AWS)", "value": "rain"},
+    {"label": " Weather observations (gusts)", "value": "wind"},
 ]
-# Rainfall is off by default (it's the busiest layer); the rest are on.
+# Rainfall and weather observations are off by default — drawing all ~104 AWS
+# stations at once buries the hazard layers this map exists to show. Both are
+# one click away when wind or rain is the thing being briefed.
 DEFAULT_LAYERS = ["fire", "flood", "roads", "storm", "power"]
+# Only stations gusting at least this hard are drawn, so switching the layer on
+# during a wind event highlights where it's actually blowing rather than
+# stippling the whole state with calm sites.
+WIND_LAYER_MIN_GUST_KMH = 40
 
 
 def _val(row, col):
@@ -48,13 +58,17 @@ def _val(row, col):
     return s if s and s.lower() not in ("nan", "none") else None
 
 
-# --- per-layer builders: each returns (list[Scattermapbox], list[fill layer]) --
+# --- per-layer RENDERERS ------------------------------------------------------
+# Each takes a DataFrame and returns (list[Scattermapbox], list[fill layer]).
+#
+# They deliberately do NOT fetch. That is what lets Event Replay draw the same
+# map from `history.state_at(t)` instead of from the current tables, without a
+# second copy of the rendering code — the live map and the replay map are the
+# same renderer fed different frames. Keep them pure: a fetch in here would
+# silently make replay show live data.
 
-def _fire_layer(on):
-    if "fire" not in on:
-        return [], []
-    df = fire_data.active_incidents()
-    if df.empty:
+def render_fire(df):
+    if df is None or df.empty:
         return [], []
     df = df.copy()
     df["Kind"] = df.apply(fire_page._kind, axis=1)
@@ -85,10 +99,7 @@ def _fire_hover(r):
     return txt
 
 
-def _flood_layer(on):
-    if "flood" not in on:
-        return [], []
-    df = flood_data.map_gauges()
+def render_flood(df):
     if df is None or df.empty:
         return [], []
     traces = []
@@ -118,11 +129,8 @@ def _flood_hover(r):
     return txt
 
 
-def _roads_layer(on):
-    if "roads" not in on:
-        return [], []
-    df = roads_data.active_disruptions()
-    if df.empty:
+def render_roads(df):
+    if df is None or df.empty:
         return [], []
     df = df.copy()
     df["Kind"] = df["is_closure"].apply(roads_page._kind)
@@ -164,12 +172,10 @@ def _roads_layer(on):
     return traces, []
 
 
-def _storm_layer(on):
-    if "storm" not in on:
+def render_storm(df):
+    if df is None or df.empty:
         return [], []
-    df = storm_data.active_cells()
-    if df.empty:
-        return [], []
+    source_df = df
     df = df.dropna(subset=["latitude", "longitude"])
     traces, fills = [], []
     for cls, (_, colour) in storm_data.CLASS_STYLE.items():
@@ -183,10 +189,21 @@ def _storm_layer(on):
             name="Storm: %s" % cls, legendgroup="storm",
             marker=dict(size=sizes, color=colour),
             hoverinfo="text", text=[_storm_hover(r) for _, r in sub.iterrows()]))
-    fc = storm_data.impact_featurecollection()
-    if fc.get("features"):
+    # Impact polygons come from the frame's own column rather than a fresh
+    # impact_featurecollection() call, so a replayed frame draws the polygons
+    # that existed at that moment instead of today's.
+    features = []
+    if "impact_geojson" in source_df.columns:
+        for raw in source_df["impact_geojson"].dropna():
+            try:
+                features.append(json.loads(raw))
+            except (ValueError, TypeError):
+                continue
+    if features:
         fills.append({"sourcetype": "geojson", "type": "fill", "below": "traces",
-                      "color": "#d62728", "opacity": 0.15, "source": fc})
+                      "color": "#d62728", "opacity": 0.15,
+                      "source": {"type": "FeatureCollection",
+                                 "features": features}})
     return traces, fills
 
 
@@ -204,10 +221,7 @@ def _storm_hover(r):
     return txt
 
 
-def _power_layer(on):
-    if "power" not in on:
-        return [], []
-    df = power_data.active_outages()
+def render_power(df):
     if df is None or df.empty:
         return [], []
     df = df.dropna(subset=["latitude", "longitude"])
@@ -227,10 +241,7 @@ def _power_layer(on):
         text=text)], []
 
 
-def _rain_layer(on):
-    if "rain" not in on:
-        return [], []
-    df = weather_data.latest_aws_rainfall()
+def render_rain(df):
     if df is None or df.empty:
         return [], []
     df = df.dropna(subset=["latitude", "longitude"])
@@ -249,26 +260,114 @@ def _rain_layer(on):
         hoverinfo="text", text=text)], []
 
 
-_BUILDERS = (_fire_layer, _flood_layer, _roads_layer, _storm_layer,
-             _power_layer, _rain_layer)
+def render_wind(df):
+    """AWS wind gusts — the observation that matters alongside storms, fires
+    and warnings. Uses the AWS station coordinates already in the registry; no
+    new geocoding."""
+    if df is None or df.empty or "wind_gust_kmh" not in df.columns:
+        return [], []
+    df = df.dropna(subset=["latitude", "longitude", "wind_gust_kmh"])
+    df = df[df["wind_gust_kmh"] >= WIND_LAYER_MIN_GUST_KMH]
+    if df.empty:
+        return [], []
+    cmax = max(80.0, float(df["wind_gust_kmh"].max()))
+    text = ["<b>%s</b><br>Gust %.0f km/h%s<br>Observed %s" % (
+                _val(r, "name") or "AWS", r["wind_gust_kmh"],
+                (" · wind %s %.0f km/h" % (r["wind_direction"], r["wind_speed_kmh"]))
+                if _val(r, "wind_direction") and pd.notna(r.get("wind_speed_kmh"))
+                else "",
+                _val(r, "obs_time") or "—")
+            for _, r in df.iterrows()]
+    sizes = [max(8, min(26, 8 + (float(g) - WIND_LAYER_MIN_GUST_KMH) * 0.35))
+             for g in df["wind_gust_kmh"]]
+    return [go.Scattermapbox(
+        mode="markers", lat=df["latitude"], lon=df["longitude"],
+        name="Wind gust ≥ %d km/h" % WIND_LAYER_MIN_GUST_KMH,
+        legendgroup="wind",
+        marker=dict(size=sizes, color=df["wind_gust_kmh"], colorscale="YlOrRd",
+                    cmin=WIND_LAYER_MIN_GUST_KMH, cmax=cmax, showscale=False),
+        hoverinfo="text", text=text)], []
 
 
-def _map_figure(on, dark):
-    fig = go.Figure()
-    fills = []
-    for build in _BUILDERS:
-        traces, layer_fills = build(on)
-        for t in traces:
-            fig.add_trace(t)
+# Draw order (back to front) and the renderer for each layer.
+RENDERERS = {
+    "fire": render_fire,
+    "flood": render_flood,
+    "roads": render_roads,
+    "storm": render_storm,
+    "power": render_power,
+    "rain": render_rain,
+    "wind": render_wind,
+}
+LAYER_ORDER = ("fire", "flood", "roads", "storm", "power", "rain", "wind")
+
+# Where the LIVE map gets each layer's data. Replay passes its own provider
+# returning historical frames for the same keys.
+LIVE_SOURCES = {
+    "fire": fire_data.active_incidents,
+    "flood": flood_data.map_gauges,
+    "roads": roads_data.active_disruptions,
+    "storm": storm_data.active_cells,
+    "power": power_data.active_outages,
+    "rain": weather_data.latest_aws_rainfall,
+    "wind": weather_data.latest_aws_observations,
+}
+
+
+def live_source(key):
+    """Current data for one layer key."""
+    fetch = LIVE_SOURCES.get(key)
+    return fetch() if fetch else None
+
+
+def build_layers(on, source=live_source):
+    """(traces, fills) for the enabled layers, in draw order.
+
+    `source(key)` supplies each layer's DataFrame — current state for the live
+    map, `history.state_at(t)` for replay. Only enabled layers are fetched, and
+    one layer failing never costs the rest of the map.
+    """
+    traces, fills = [], []
+    for key in LAYER_ORDER:
+        if key not in on:
+            continue
+        try:
+            df = source(key)
+        except Exception:
+            log.exception("Unified map: %s layer data unavailable", key)
+            continue
+        try:
+            layer_traces, layer_fills = RENDERERS[key](df)
+        except Exception:
+            log.exception("Unified map: %s layer failed to render", key)
+            continue
+        traces += layer_traces
         fills += layer_fills
-    mapbox = dict(style="open-street-map", center=VIC_CENTER, zoom=5.4)
+    return traces, fills
+
+
+def map_figure(on, dark, source=live_source, center=None, zoom=5.4,
+               uirevision="unified-map"):
+    """The shared map figure. Live and replay differ only in `source`."""
+    fig = go.Figure()
+    traces, fills = build_layers(on, source)
+    for trace in traces:
+        fig.add_trace(trace)
+    if not traces:
+        # With no mapbox traces Plotly falls back to a cartesian plot and draws
+        # bare numbered axes where the map should be. One empty Scattermapbox
+        # keeps it a map — which is what "nothing was happening here" should
+        # look like, and Replay hits this on every quiet moment.
+        fig.add_trace(go.Scattermapbox(lat=[], lon=[], mode="markers",
+                                       showlegend=False, hoverinfo="skip"))
+    mapbox = dict(style="open-street-map", center=center or VIC_CENTER, zoom=zoom)
     if fills:
         mapbox["layers"] = fills
     fig.update_layout(
         mapbox=mapbox,
         legend=dict(orientation="h", y=1.02, font=dict(size=11)),
         # Pin the view across auto-refreshes so panning/zooming isn't reset.
-        uirevision="unified-map")
+        uirevision=uirevision)
     return ui.apply_theme(fig, dark)
 
 
@@ -337,4 +436,4 @@ def register_callbacks(app):
         summary = ("One map, live layers: %d fire/incident event(s), %d gauge(s) "
                    "at/above minor, %d road disruption(s), %d storm cell(s)." % (
                        fire_c["total"], flooding, roads_c["total"], storm_c["total"]))
-        return summary, kpis, _map_figure(on, dark)
+        return summary, kpis, map_figure(on, dark)

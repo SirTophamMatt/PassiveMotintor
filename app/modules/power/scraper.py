@@ -16,7 +16,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 
-from app import database
+from app import database, history
 
 log = logging.getLogger(__name__)
 
@@ -307,6 +307,34 @@ class PowerScraper:
             conn.commit()
         finally:
             conn.close()
+        PowerScraper._journal(now)
+
+    @staticmethod
+    def _journal(now):
+        """Record per-location outage state changes for Event Replay.
+
+        Reads back what the cycle touched (`last_seen = now`) so locations the
+        restore-sweep just closed get their tombstone in the same pass.
+        Coordinates come from the existing geocode cache — no new geocoding.
+
+        EM-COP publishes no per-outage source time, so the collection time IS
+        the effective time here; that is the honest stamp rather than inventing
+        a precision the source doesn't provide.
+        """
+        try:
+            df = database.read_df(
+                "SELECT o.location, o.customers_off, o.type, o.first_seen, "
+                "       o.restored, g.latitude, g.longitude "
+                "FROM power_outages o "
+                "LEFT JOIN geocode_cache g ON g.location = o.location "
+                "WHERE o.last_seen = ?", [now])
+            history.record_dataframe(
+                history.POWER, df, key_col="location",
+                state_cols=["location", "customers_off", "type", "first_seen"],
+                active_col="restored", active_value=0, effective_ts=now)
+        except Exception:
+            log.exception("Power: state journal write failed "
+                          "(collection unaffected)")
 
     def _geocode_new_locations(self, records):
         limit = self.cfg["power"].get("max_new_geocodes_per_cycle", 10)

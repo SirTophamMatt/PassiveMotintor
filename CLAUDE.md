@@ -13,6 +13,9 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - Web: `python run_web.py [--host H --port P]` (waitress)
 - Desktop: `python run_desktop.py` (pywebview window over a localhost server)
 - Setup: `python -m venv .venv` → activate → `pip install -r requirements.txt`
+- Tests: `pip install -r requirements-dev.txt` → `python -m pytest` (from `unified_monitor/`).
+  Tests redirect `UM_DATA_DIR` to a temp dir in `tests/conftest.py` **at import time**, so a run
+  can never touch the real `unified_monitor.db`.
 - Build .exe: `.\build_exe.ps1` (uses `PassiveMonitor.spec`) → `dist\PassiveMonitor\PassiveMonitor.exe`.
   When frozen, config/db/log are written next to the .exe.
 
@@ -24,8 +27,13 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/config.py` — `config.json` load/save
 - `app/importer.py` + `app/pages/importer_page.py` — legacy data import
 - `app/modules/{flood,power,emcop}/` — `scraper.py` + `data.py` per module
+- `app/briefing.py` — operational briefing model (UI-free; the `/briefing` page and the briefing
+  PDF both render from it)
+- `app/history.py` — generic entity state-change journal (what makes Event Replay possible)
+- `app/replay.py` — historical reconstruction for `/replay` (UI-free)
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
 - `assets/style.css` — light/dark theme
+- `tests/` — pytest suite + HTML fixtures (`tests/fixtures/`); not shipped in the Docker image
 
 ## Conventions
 - **Credentials** (EM-COP user/pass) live only in `config.json`, written via the Settings page.
@@ -242,10 +250,63 @@ warning-level lines, colour-matched to the map kinds.
 - **Dedicated `rainfall` collector** (15-min, `rainfall.autostart`; own start/stop/restart in
   `collector.py`, watchdog supervision, `/health` `rainfall_running`) + an Admin **"Fetch now"**
   button (`manager.fetch_rainfall_now`).
-- **Weather page** "AWS Rainfall Network" section: map coloured by rain-since-9am + table.
 - **Tagged like flood/power:** `rainfall_aws.timestamp` slices by `event_tags`; export
   (`app/export.py`, Admin Rainfall checkbox) adds **Rainfall Event Totals** (reset-proof) + **AWS
   Rainfall Readings** sheets.
+
+## AWS weather observations (Phase A, built 2026-08-10)
+Expanded the rain-only AWS collector into the full BoM observation set. **Same one statewide page
+fetch per cycle** — every new field came out of HTML already being downloaded, so BoM load is
+unchanged.
+- **Fields:** air temp, apparent temp, dew point, RH, delta-T, wind dir/speed/gust, MSL pressure,
+  rain since 9am, plus the daily highest gust (direction / km/h / time).
+- **Parsing by `headers` id suffix, not column position** (`FIELD_MAP` in `weather/aws.py`).
+  Each `<td>` lists the ids of the header cells it belongs to (`tMAL-wind-spd-kmh`); the `tMAL`
+  regional prefix varies so only the suffix is stable. The **leading `-` in each suffix is load-
+  bearing**: it's what stops `-tmp` matching `-apptmp`/`-lowtmp`/`-hightmp` and `-wind-dir`
+  matching `-highwind-dir`. Suffixes are matched longest-first. Reordered/added/removed columns
+  therefore cannot shift a value into the wrong field — covered by `vicall_reordered.html`.
+- **Deliberately not stored:** the `-kts` cells (unit duplicates of km/h) and `-lowtmp`/`-hightmp`
+  (daily temperature extremes).
+- **Combined value+time cells.** BoM prints the daily max gust as one string, `4602:40pm` = 46 km/h
+  at 02:40pm. Split by a regex anchored at BOTH ends requiring a **two-digit hour**, so the greedy
+  value backtracks to the only whole-valid split (4602 → 460 → 46). BoM always zero-pads the hour;
+  if that ever changes the match fails and the cell is read as a plain number, losing the time
+  rather than storing a wrong value.
+- **`-` means NULL, never 0.** A missing gust is not a calm night and a missing rain total is not a
+  dry day. `_MISSING` normalises BoM's blank markers to None; a malformed value drops only its own
+  field, and a station that throws mid-parse is skipped alone (`_parse_station_row` is wrapped) so
+  one bad station never costs the state's other ~103 observations.
+- **Storage: additive migration, table NOT renamed.** The 12 weather columns were added to
+  `rainfall_aws` via the existing `_ensure_column` pattern (canonical list =
+  `database.AWS_WEATHER_COLUMNS`). Every rainfall query, event total, export and Intelligence Feed
+  detection kept working untouched and **no historical row was rewritten** — pre-Phase-A rows have
+  NULL weather, which is the honest answer: it was never observed. `UNIQUE(wmo, obs_time)` holds.
+- **Data API** (`weather/data.py`): `latest_aws_observations()` (newest row per station + registry
+  coords), `aws_observation_history(wmo, start, end)`, `aws_weather_summary()`.
+  `latest_aws_rainfall()` is now the rainfall-shaped *view* of the same query — identical columns
+  and wettest-first order, so existing callers are unaffected.
+- **Staleness guard:** `aws_weather_summary` only considers stations reporting within
+  `AWS_STALE_HOURS` (6), so a dead station can't be published as the state's current warmest or
+  windiest; the excluded count is shown on the page. The *daily* max gust is a since-midnight
+  summary, so it deliberately still reads every station's latest row.
+- **Weather page** "AWS Weather Observations": KPI row (strongest gust / lowest RH / warmest /
+  wettest, each with its station), a **metric selector** (Rainfall · Wind Gust · Temperature · RH)
+  that recolours a fixed station set — non-reporting stations stay on the map in grey so coverage
+  is always visible — a full hover per station, ranked **Significant Observations**, and a table
+  (Station · Temp · RH · Wind · Gust · Rain · Pressure · Observed). Numeric columns stay numeric
+  with units in the header so native sort orders 9.0 below 10.1 instead of lexically.
+- **Observations, not warnings.** No severity is assigned and no threshold invented; the page
+  carries a standing caveat that these are raw, non-quality-controlled BoM observations.
+- **Unified map** gains an optional "Weather observations (gusts)" layer, **off by default**
+  (~104 stations would bury the hazard layers) and filtered to gusts ≥ 40 km/h. Reuses the
+  existing `aws_stations` coords — no new geocoding.
+- **Tests** (`tests/`, pytest — dev-only via `requirements-dev.txt`, excluded from the image):
+  parser fixtures for normal / missing pressure / missing gust / missing temperature / reordered
+  columns / malformed values / calm / no-obs-time, the value+time split, one-bad-station
+  isolation, the additive migration on a pre-migration database (columns added, history intact,
+  idempotent), de-dup, and the reset-proof event total re-checked against a migrated DB.
+  `python -m pytest` from `unified_monitor/`.
 
 ## Storm tracker module (built 2026-07-21)
 - **Ported from the standalone `../../storm Tracker` project**, reworked: NO Selenium. BoM
@@ -442,6 +503,141 @@ warning-level lines, colour-matched to the map kinds.
   (red/orange/yellow), below-level gauges as small blue dots for network context;
   a "Gauges ≥ Minor" KPI. Default on. To refresh coords, re-run the tool (on the
   server it fetches KiWIS live) and redeploy.
+
+## Event Replay — /replay + the state journal (Phase C, built 2026-08-11)
+Reconstructs what Passive Monitor knew at any past moment: *what did we know at 14:30, and how
+did this develop between 06:00 and 18:00*. Built for after-action review, training and event
+reconstruction.
+
+### The state-change journal (`app/history.py`, `entity_state_history`)
+The problem Replay could not have been built without solving first: **half the modules keep no
+history.** Flood readings, storm cells and AWS observations are one row per observation, so their
+past is a query. Fire incidents, road disruptions, per-location power outages and weather warnings
+are UPSERTs — one row per entity, overwritten in place — so their past was simply gone.
+- **A change journal, NOT a snapshot table.** A row is written only when an entity's material
+  state differs from its last recorded state (sha1 over canonical JSON, `active` included in the
+  hash so a resolution is always a change). At a 60-second poll a snapshot table would write
+  ~1,440 rows/entity/day; a real incident produces a handful over its whole life. Verified against
+  the live VicEmergency feed: cycle 1 wrote 82 rows, cycle 2 (105 features, all upserted) wrote
+  **0**.
+- **Canonicalisation matters more than it looks.** Keys are sorted and NaN is normalised to None —
+  NaN never equals itself, so an unnormalised float would make every comparison a change and
+  quietly turn the journal back into a snapshot table.
+- **Tombstones.** A resolved entity gets a final `active=0` row, so replay distinguishes *hadn't
+  happened yet* / *was happening* / *was over* — three answers a table of current rows collapses
+  into one.
+- **Effective vs recorded time.** `effective_ts` is the SOURCE's time (the feed's `updated`, BoM's
+  `issue_time`); `recorded_at` is when we noticed. The feed's update stamp is deliberately NOT in
+  the hash — it moves on every republish and would write a row every cycle.
+- **Reconstruction is SQL.** `state_at()` is a `ROW_NUMBER() OVER (PARTITION BY entity_key ORDER BY
+  effective_ts DESC)` filtered to `rn = 1`; batch de-dup lookups use one window-function query for
+  the whole cycle rather than N per-entity `ORDER BY … LIMIT 1` calls — the exact query shape that
+  took the VPS down in the 2026-08-09 projection incident.
+- **Collector hooks are change-only and never fatal.** Each scraper journals what the cycle touched
+  (`WHERE last_seen = now`, bookkeeping every source already maintains) so entities the
+  resolve-sweep just closed get their tombstone in the same pass. Every hook is wrapped: a journal
+  failure logs and never breaks collection.
+- **It never invents the past.** `history_availability` stamps when each source started journalling,
+  written once so the claimed window can never drift. Nothing is backdated.
+
+### What replays from where (`app/replay.py`)
+A deliberate split, not an accident: **KPIs reach further back than the map can.**
+- **Already-historical sources** — `flood_observations`, `storm_cells`, `rainfall_aws`, and every
+  module's per-cycle KPI timeseries — are read directly. They predate the journal, so KPIs and
+  flood/storm/AWS layers replay correctly for events from long before it existed. Duplicating them
+  into the journal would be pure waste.
+- **UPSERT sources** — fire, roads, power, weather warnings — come from the journal.
+- Stale-reading cutoffs (`STALE_READING_HOURS`, 24 h) stop a gauge that fell silent in March being
+  painted on an August replay; KPI lookups ignore rows older than 6 h so a dead collector reads as
+  **"—" not "0"** — *we weren't looking* is a different answer from *nothing was happening*.
+- `coverage_note()` states the limits verbatim for the selected event. An event starting before the
+  journal is described as **partial**, never as a full reconstruction.
+
+### The map refactor (the important one)
+`app/pages/unified.py` layer builders were `_fire_layer(on)` — fetching current state internally.
+They are now **pure renderers** `render_fire(df)` … `render_wind(df)`, plus a `RENDERERS` registry
+and `map_figure(on, dark, source=live_source, …)`. The live map passes `live_source`; Replay passes
+`replay.frame_source(t)`. **One renderer, two clocks** — no copied map code, and the two maps
+cannot drift apart. Storm impact polygons now come from the frame's own `impact_geojson` column
+rather than a fresh `impact_featurecollection()` call, so a replayed frame draws the polygons that
+existed *then*. `map_figure` also injects an empty `Scattermapbox` when a frame has no traces —
+without it Plotly falls back to bare numbered axes, and a quiet moment is the normal case in replay.
+
+### The page
+Event selector (from `event_tags`; ongoing events replay to now) · coverage banner · 5-minute
+slider with `updatemode="drag"` · `◀ 15m` / Play / Pause / `15m ▶` / 1×·2×·4× · historical KPI row ·
+replay map with the Unified Map's own layer toggles · Intelligence timeline as the narrative spine,
+click-to-seek, with the entry nearest the selected moment highlighted. Playback advances 5 min of
+event time per 1 s tick × speed, **auto-pauses at the end**, and the `dcc.Interval` is disabled
+whenever not playing so an idle page does no work. Timeline context lines are off: they would be
+resolved against *today's* layers, which is wrong for a historical moment.
+**Replay never fetches.** Everything comes from stored data — scrubbing and playback put zero load
+on BoM or VicEmergency.
+
+### Tests
+`tests/test_history.py` (31) + `tests/test_replay.py` (30): change-only suppression, key-order and
+NaN normalisation, the full appear→grow→escalate→resolve lifecycle, inclusive timestamp boundaries,
+resolved entities leaving the map at the right moment (and still being known to have existed),
+multiple entities reconstructed independently, source isolation, state keys never shadowing journal
+columns, the availability stamp never drifting, event/ongoing-event windows, historical KPIs moving
+with the slider, "—" vs "0", stale-gauge exclusion, coverage honesty, and a guard that a regression
+reaching for live data would leave the replay map empty.
+
+## Briefing Mode — /briefing (Phase B, built 2026-08-10)
+Answers the three questions actually asked at a briefing — *what matters now · what changed ·
+what should I be watching* — and is useful **on its own, before anyone generates a PDF**.
+- **One model, two surfaces.** `app/briefing.py` `build_briefing_snapshot()` returns plain
+  dataclasses (`Kpi`, `Change`, `Warning`, `Consequence`, `WatchPoint`, `SourceStatus`) with no
+  Dash components and no reportlab flowables. `app/pages/briefing.py` and
+  `reporting.build_briefing_pdf(snapshot)` BOTH render from it, so the printed pack can never
+  disagree with the screen it came from. The page passes its own snapshot to the PDF builder
+  rather than letting it rebuild.
+- **No LLM anywhere.** Every sentence is assembled from stored values by fixed rules — same data
+  in, same briefing out, every number traceable to a row.
+- **Derived ≠ observed.** `WatchPoint.kind` is `OBSERVED` or `PROJECTION`; projections carry
+  `flood_trend.DISCLAIMER` and render with a different badge in both surfaces. An extrapolated
+  ETA is never presentable as a BoM forecast.
+- **Sections:** current situation · significant changes · active warnings · emerging consequences ·
+  watch points · weather observations · data freshness. Window selector 30 m / 1 h / 3 h / 6 h /
+  12 h (default 1 h), Refresh, Export PDF, Copy briefing text (`dcc.Clipboard` over a hidden
+  `briefing_text()` render), and a standing "Generated at" stamp.
+- **Warning levels are never summed.** One Emergency Warning and two Advices need different
+  responses, so a combined total would let either misrepresent the other. Flood gauges likewise
+  report ≥ Minor / ≥ Moderate / ≥ Major as cumulative counts (`flood_data.flooding_breakdown`,
+  which uses the MAX(timestamp) GROUP BY rather than reading 1.4M observations into pandas).
+- **Advice cap.** During a widespread flood there are routinely 20+ Advices, all saying "Stay
+  Informed"; printing them all pushes the Emergency Warnings off the page. Capped at
+  `ADVICE_LIMIT` (5) with the omitted count stated explicitly.
+- **BoM `group_type` is deliberately not shown as a "level"** — it reads minor/moderate/major and
+  would be mistaken for the flood gauge classification (the Weather page omits it for the same
+  reason). VicEmergency splits by level; BoM splits by warning TYPE. group_type still sorts.
+- **Emerging Consequences is a geographic CLUSTER, not "a change plus its surroundings."** The
+  first cut deduped each change against its own context lines and could never fire — the feed
+  already appends that context to every entry. What it does now: cluster significant changes by
+  `intel.context_radius_km`, keep only clusters spanning **two or more hazards**, and add the
+  standing cross-layer context beneath. That is the thing the per-hazard views genuinely cannot
+  show. The briefing therefore reads the feed with `with_context=False`, so a change carries only
+  what it measured and no fact appears under two headings.
+- **`intel_feed.entries()` gained `since`/`until`** so the window is anchored to the briefing's own
+  reference time instead of a rolling "hours ago".
+- **Data freshness is a first-class section**, and the stale banner sits directly under the PDF
+  masthead: if a source is dead that must be known before anything below it is read. A source is
+  stale at `3 ×` its configured interval (floor 10 min) and reports `never` when it has never run —
+  silence is itself the finding. **A briefing must never let old data look current.**
+- **`as_of=None` means live.** The model takes a reference clock rather than calling
+  `datetime.now()` internally, which is what will let Phase C generate a briefing for a past
+  moment. Until the state journal exists, state sections are live and the snapshot says so
+  (`state_is_live=True`) instead of implying the KPIs are historical.
+- **Degrades per section.** Every section is wrapped: a module that throws contributes nothing and
+  is reported, rather than taking the briefing down.
+- **PDF** reuses `_masthead` / `_page_furniture` / the newly module-level `_simple_table` (lifted
+  out of `build_overview_pdf` so the reports can't drift into two table styles). Tables and text
+  only — **no kaleido**, so the briefing still builds where the chart renderer is broken.
+- **Tests:** `tests/test_briefing.py` (38) + `tests/test_briefing_pdf.py` (12) — no-data state,
+  per-window change filtering, severity-then-recency ordering, warning-level separation and the
+  Advice cap, cluster/no-cluster consequences, observed-vs-projection labelling, staleness, one
+  broken module not taking the briefing down, `as_of`, PDF with every section empty, `&`/`<` in
+  BoM titles, and an Overview-PDF regression guard for the `_simple_table` refactor.
 
 ## Intelligence Feed (built 2026-08-09)
 - **The "what changed" layer.** Every other page answers *what is happening*; `/feed`

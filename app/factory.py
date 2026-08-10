@@ -12,8 +12,10 @@ DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
 from app import auth, database
 from app.config import BASE_DIR, BUNDLE_DIR
-from app.pages import (admin, analytics as analytics_page, feed, fire, flood,
-                       importer_page, intel, overview, power, roads as roads_page,
+from app.pages import (admin, analytics as analytics_page,
+                       briefing as briefing_page, feed, fire, flood,
+                       importer_page, intel, overview, power,
+                       replay as replay_page, roads as roads_page,
                        settings, station, storm as storm_page,
                        unified as unified_page, weather)
 
@@ -25,7 +27,12 @@ PUBLIC_PAGES = [
     # Second in the nav on purpose: after the at-a-glance Overview, the next
     # question an operator asks is "what changed since I last looked?".
     ("/feed", "Intelligence Feed", feed),
+    # Third on purpose: Overview is the glance, the Feed is what changed, and
+    # this is the thing you actually stand up and deliver from.
+    ("/briefing", "Briefing", briefing_page),
     ("/map", "Unified Map", unified_page),
+    # After the live map: same layers, same renderers, moved back in time.
+    ("/replay", "Event Replay", replay_page),
     ("/flood", "Flood Monitor", flood),
     ("/fire", "Fire / Incidents", fire),
     ("/weather", "Weather Warnings", weather),

@@ -19,7 +19,7 @@ from datetime import datetime
 
 import requests
 
-from app import database
+from app import database, history
 
 log = logging.getLogger(__name__)
 
@@ -182,6 +182,40 @@ def _upsert(row, now):
     return "inserted"
 
 
+# The material state journalled for replay. `updated`/`last_seen` are excluded
+# on purpose: they move whenever the feed is republished, and hashing them would
+# write a row every cycle instead of every change. `updated` is used as the
+# effective time instead — when the state became true, which is what replay
+# needs. Burn areas are excluded entirely: static plan data, not live events.
+_HISTORY_FIELDS = [
+    "feed_type", "category1", "category2", "event", "warning_level", "severity",
+    "status", "size", "resources", "location", "source_org", "action",
+    "headline", "url", "geometry",
+]
+
+
+def _journal(now):
+    """Record this cycle's state changes for Event Replay.
+
+    Reads back what the cycle touched (`last_seen = now`) rather than the feed
+    rows, so incidents the resolve-sweep just closed get their tombstone in the
+    same pass. Never allowed to break collection: the journal is for
+    after-the-fact analysis, the live feed is the operational product.
+    """
+    try:
+        df = database.read_df(
+            "SELECT source_id, %s, latitude, longitude, updated, resolved "
+            "FROM fire_incidents "
+            "WHERE last_seen = ? AND feed_type != 'burn-area'"
+            % ", ".join(_HISTORY_FIELDS), [now])
+        history.record_dataframe(
+            history.FIRE, df, key_col="source_id",
+            state_cols=_HISTORY_FIELDS, active_col="resolved", active_value=0,
+            ts_col="updated", effective_ts=now)
+    except Exception:
+        log.exception("Fire: state journal write failed (collection unaffected)")
+
+
 def _count_levels(rows):
     counts = {lvl: 0 for lvl in _LEVELS}
     for r in rows:
@@ -223,6 +257,8 @@ def fetch_fire_data():
             f"UPDATE fire_incidents SET resolved=1, last_seen=? "
             f"WHERE resolved=0 AND source_id NOT IN ({placeholders})",
             [now] + seen)
+
+    _journal(now)
 
     active = [r for r in rows if r["feed_type"] != "burn-area"
               and not _is_resolved(r["status"])]

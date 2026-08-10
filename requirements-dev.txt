@@ -1,0 +1,9 @@
+# Test-only dependencies. Deliberately NOT in requirements.txt — the Docker
+# image installs that file and has no reason to carry a test runner.
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest
+-r requirements.txt
+pytest>=8.0
+# Reads generated PDFs back so the briefing report can be asserted on its
+# actual text rather than just "it produced some bytes".
+pypdf>=4.0

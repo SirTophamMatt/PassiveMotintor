@@ -174,19 +174,142 @@ def rainfall_summary():
     return len(df), top["name"], top["rain_since_9am_mm"]
 
 
-def latest_aws_rainfall():
-    """Latest rain-since-9am per AWS station, with coords from the registry."""
+# Numeric AWS observation columns (parsed to numbers on the way out of SQLite).
+AWS_NUMERIC = ("rain_since_9am_mm", "temperature_c", "apparent_temperature_c",
+               "dew_point_c", "relative_humidity_pct", "delta_t_c",
+               "wind_speed_kmh", "wind_gust_kmh", "pressure_msl_hpa",
+               "max_gust_kmh")
+# An AWS whose newest observation is older than this is treated as stale and
+# left out of the "current conditions" summary — otherwise a station that died
+# days ago could be reported as the state's warmest or windiest right now.
+AWS_STALE_HOURS = 6
+
+
+def latest_aws_observations():
+    """Latest full observation per AWS station, with coords from the registry.
+
+    One row per station, newest observation only. Weather columns are NULL for
+    rows collected before the observation fields existed, and for any field the
+    station itself doesn't report."""
     df = database.read_df(
-        "SELECT r.wmo, r.name, r.rain_since_9am_mm, r.obs_time, "
-        "       s.latitude, s.longitude "
+        "SELECT r.wmo, r.name, r.obs_time, r.timestamp, "
+        "       r.rain_since_9am_mm, r.temperature_c, r.apparent_temperature_c, "
+        "       r.dew_point_c, r.relative_humidity_pct, r.delta_t_c, "
+        "       r.wind_direction, r.wind_speed_kmh, r.wind_gust_kmh, "
+        "       r.pressure_msl_hpa, r.max_gust_direction, r.max_gust_kmh, "
+        "       r.max_gust_time, s.latitude, s.longitude "
         "FROM rainfall_aws r "
         "JOIN (SELECT wmo, MAX(obs_time) AS mt FROM rainfall_aws GROUP BY wmo) m "
         "  ON r.wmo = m.wmo AND r.obs_time = m.mt "
         "LEFT JOIN aws_stations s ON s.wmo = r.wmo")
+    if df.empty:
+        return df
+    for c in AWS_NUMERIC:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["obs_dt"] = pd.to_datetime(df["obs_time"], format="ISO8601", errors="coerce")
+    return df.sort_values("name", na_position="last").reset_index(drop=True)
+
+
+def latest_aws_rainfall():
+    """Latest rain-since-9am per AWS station, with coords from the registry.
+
+    The rainfall-shaped view of `latest_aws_observations` — same columns and
+    wettest-first ordering it has always returned, so existing rainfall
+    callers are unaffected by the observation fields added around it."""
+    df = latest_aws_observations()
+    if df.empty:
+        return df
+    cols = ["wmo", "name", "rain_since_9am_mm", "obs_time", "latitude", "longitude"]
+    return (df[cols].sort_values("rain_since_9am_mm", ascending=False,
+                                 na_position="last"))
+
+
+def aws_observation_history(wmo, start=None, end=None):
+    """Full observation time series for one AWS station (optionally within a
+    collection-timestamp range), oldest first — for charts and replay."""
+    query = ("SELECT obs_time, timestamp, rain_since_9am_mm, temperature_c, "
+             "       apparent_temperature_c, dew_point_c, relative_humidity_pct, "
+             "       delta_t_c, wind_direction, wind_speed_kmh, wind_gust_kmh, "
+             "       pressure_msl_hpa, max_gust_direction, max_gust_kmh, "
+             "       max_gust_time "
+             "FROM rainfall_aws WHERE wmo = ?")
+    params = [str(wmo)]
+    if start and end:
+        query += " AND timestamp BETWEEN ? AND ?"
+        params += [start, end]
+    df = database.read_df(query + " ORDER BY obs_time", params)
     if not df.empty:
-        df["rain_since_9am_mm"] = pd.to_numeric(df["rain_since_9am_mm"], errors="coerce")
-        df = df.sort_values("rain_since_9am_mm", ascending=False, na_position="last")
+        df["obs_time"] = pd.to_datetime(df["obs_time"], format="ISO8601",
+                                        errors="coerce")
+        for c in AWS_NUMERIC:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
+
+
+def _extreme(df, column, largest=True, extra=None):
+    """{value, station, obs_time[, extra...]} for the highest (or lowest)
+    reading of one column, or None when nothing reported it."""
+    if df.empty or column not in df:
+        return None
+    sub = df.dropna(subset=[column])
+    if sub.empty:
+        return None
+    row = sub.loc[sub[column].idxmax() if largest else sub[column].idxmin()]
+    out = {"value": float(row[column]), "station": row["name"],
+           "wmo": row["wmo"], "obs_time": row["obs_time"]}
+    for key in (extra or ()):
+        out[key] = None if pd.isna(row.get(key)) else row.get(key)
+    return out
+
+
+def aws_weather_summary(max_age_hours=AWS_STALE_HOURS):
+    """Headline operational values across the AWS network, for KPI rows, the
+    Significant Observations block and (later) the briefing.
+
+    Only stations reporting within `max_age_hours` are considered, so a dead
+    station can't be published as the state's current extreme. Every entry is
+    either a dict ({value, station, obs_time, ...}) or None when no station
+    reported that field.
+    """
+    df = latest_aws_observations()
+    total = len(df)
+    if df.empty:
+        return {"stations": 0, "reporting": 0, "stale": 0, "latest_obs": None,
+                "strongest_gust": None, "lowest_humidity": None, "warmest": None,
+                "coldest": None, "max_daily_gust": None, "wettest": None,
+                "top_gusts": [], "lowest_humidities": []}
+
+    fresh = df
+    if max_age_hours and df["obs_dt"].notna().any():
+        cutoff = df["obs_dt"].max() - pd.Timedelta(hours=max_age_hours)
+        fresh = df[df["obs_dt"] >= cutoff]
+
+    def _ranked(column, largest=True, limit=3):
+        sub = fresh.dropna(subset=[column])
+        if sub.empty:
+            return []
+        sub = sub.sort_values(column, ascending=not largest).head(limit)
+        return [{"station": r["name"], "wmo": r["wmo"],
+                 "value": float(r[column]), "obs_time": r["obs_time"]}
+                for _, r in sub.iterrows()]
+
+    return {
+        "stations": total,
+        "reporting": len(fresh),
+        "stale": total - len(fresh),
+        "latest_obs": (df["obs_dt"].max() if df["obs_dt"].notna().any() else None),
+        "strongest_gust": _extreme(fresh, "wind_gust_kmh", extra=("wind_direction",)),
+        "lowest_humidity": _extreme(fresh, "relative_humidity_pct", largest=False),
+        "warmest": _extreme(fresh, "temperature_c"),
+        "coldest": _extreme(fresh, "temperature_c", largest=False),
+        # Daily max gust is a since-midnight summary, so it is read from every
+        # station's latest row rather than only the freshly-reporting ones.
+        "max_daily_gust": _extreme(df, "max_gust_kmh",
+                                   extra=("max_gust_direction", "max_gust_time")),
+        "wettest": _extreme(fresh, "rain_since_9am_mm"),
+        "top_gusts": _ranked("wind_gust_kmh"),
+        "lowest_humidities": _ranked("relative_humidity_pct", largest=False),
+    }
 
 
 def aws_rainfall_history(wmo, start=None, end=None):
