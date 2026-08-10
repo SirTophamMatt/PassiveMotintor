@@ -135,10 +135,16 @@ def register_callbacks(app):
         kpis.append(ui.kpi_card(
             "Active Fires", str(fire_counts["active_fires"]),
             "#ff5722" if fire_counts["active_fires"] else "#2ca02c"))
-        emergencies = fire_counts["emergency"] + fire_counts["watch_act"]
+        # Kept as two cards, not one total: an Emergency Warning and a Watch &
+        # Act are different actions, so summing them lets either level speak for
+        # the other (5 Advice-adjacent Watch & Acts reading as an emergency, or
+        # a lone Emergency Warning hiding inside a bigger number).
         kpis.append(ui.kpi_card(
-            "Emergency / Watch & Act", str(emergencies),
-            "#d62728" if emergencies else "#2ca02c"))
+            "Emergency Warnings", str(fire_counts["emergency"]),
+            "#d62728" if fire_counts["emergency"] else "#2ca02c"))
+        kpis.append(ui.kpi_card(
+            "Watch & Act", str(fire_counts["watch_act"]),
+            "#ff7f0e" if fire_counts["watch_act"] else "#2ca02c"))
 
         wcounts = weather_data.warning_counts()
         kpis.append(ui.kpi_card(

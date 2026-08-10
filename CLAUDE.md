@@ -75,7 +75,11 @@ If a session drops, the scraper re-logs-in on the next cycle.
   is implicitly admin.
 - **Event tags = date ranges** (`event_tags` table, `app/tags.py`): a tag (name + start + end) slices
   flood+power by timestamp for viewing and export; old named events auto-migrate to tags on first
-  start. **Export** (`app/export.py`) → one XLSX per tag/range. **Overview briefing PDF**
+  start. Tags are **editable after the fact** on Admin (`tags.update_tag` / `end_tag_now`) — rename,
+  move the dates, clear the end date to reopen as ongoing, or **End now** to close an event that was
+  started while it was already running. The edit form carries optional `HH:MM` time boxes because
+  a date on its own normalises to whole-day bounds, which would otherwise round an exact end time
+  out to 23:59:59 on the next save. **Export** (`app/export.py`) → one XLSX per tag/range. **Overview briefing PDF**
   (`app/reporting.py`, kaleido+reportlab).
 - **Hosting:** Dockerfile (Chrome+Xvfb, `xvfb-run python run_web.py`) + docker-compose (app+Caddy,
   `./data:/data` volume) + Caddyfile (auto-HTTPS). `UM_DATA_DIR` points writable state at the volume.
@@ -126,7 +130,9 @@ If a session drops, the scraper re-logs-in on the next cycle.
   supervision + `fire_alert` notifications (new/escalated warnings and new fires in
   `fire_alerts.alert_categories`, default `["Fire"]`; `notify.on_fire_alert`), `/health` exposes
   `fire_running`/`fire_last_heartbeat`/`fire_last_error`, Overview gets Active-Fires /
-  Emergency-&-Watch-Act KPIs + a fire map + collector line.
+  Emergency-Warnings / Watch-&-Act KPIs + a fire map + collector line. The warning levels are
+  **never summed into one card** (2026-08-10) — the two levels ask for different actions, so a
+  combined figure lets either one over-represent the other.
 
 ## Fire module — polygon rendering + burn scars (built 2026-07-12)
 - **Geometry stored + rendered.** `fire_incidents.geometry` holds the raw GeoJSON (non-Point
@@ -183,10 +189,12 @@ If a session drops, the scraper re-logs-in on the next cycle.
   `rainfall_observations` (rain_since_9am + forecast per location, de-duped) tables exist but are
   not yet populated.
 
-## Overview briefing PDF (updated 2026-07-12)
+## Overview briefing PDF (updated 2026-08-10)
 `reporting.build_overview_pdf` now also includes fire + weather + rainfall: KPI rows for Active
-Fires / Emergency & Watch&Act / BoM Warnings / Flood Warnings / AWS Rain Stations + Wettest since
-9am; text tables of **Active BoM Warnings**, **Active Fire Warnings** (coloured level, separate
+Fires / Emergency Warnings / Watch & Act / Advice / BoM Warnings / Flood Warnings / AWS Rain
+Stations + Wettest since 9am (the warning levels are listed separately — same reasoning as the
+Overview cards; Advice is carried here so the level breakdown fills the label/value grid); text
+tables of **Active BoM Warnings**, **Active Fire Warnings** (coloured level, separate
 from) **Active Fire Incidents** (Met excluded), and **AWS Rainfall — wettest stations** (tables, so
 they render even where kaleido can't).
 

@@ -206,9 +206,13 @@ def build_overview_pdf():
          "Stations Flooding", str(flooding)],
         ["Planned", fmt(totals.get("planned")),
          "Unplanned", fmt(totals.get("unplanned"))],
+        # One row per warning level rather than a combined Emergency/Watch & Act
+        # figure — the two levels ask for different actions, so a total lets
+        # either one over-represent the other.
         ["Active Fires", str(fire_counts["active_fires"]),
-         "Emergency / Watch & Act",
-         str(fire_counts["emergency"] + fire_counts["watch_act"])],
+         "Emergency Warnings", str(fire_counts["emergency"])],
+        ["Watch & Act", str(fire_counts["watch_act"]),
+         "Advice", str(fire_counts["advice"])],
         ["BoM Warnings (VIC)", str(wcounts["total"]),
          "Flood Warnings", str(wcounts["flood"])],
         ["AWS Rain Stations", str(rain_n), "Wettest since 9am", wettest],

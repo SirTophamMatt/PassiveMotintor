@@ -190,7 +190,8 @@ def _panel():
         # --- Event tags ---------------------------------------------------- #
         html.H3("Event tags"),
         html.P("Tag a date range so its flood + power data can be viewed and "
-               "exported together. Leave the end date empty for an ongoing event.",
+               "exported together. Leave the end date empty for an ongoing "
+               "event, then close it off later under Edit tag.",
                className="muted"),
         html.Div([
             html.Div([
@@ -208,6 +209,49 @@ def _panel():
                 html.Button("Create tag", id="admin-tag-create",
                             className="btn btn-primary", style={"marginTop": "8px"}),
                 html.Div(id="admin-tag-create-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Edit tag"),
+                dcc.Dropdown(id="admin-tag-edit-select", options=_tag_dropdown(),
+                             placeholder="Select a tag to edit",
+                             className="dropdown"),
+                html.Div(id="admin-tag-edit-current", className="muted",
+                         style={"marginTop": "6px"}),
+                dcc.Input(id="admin-tag-edit-name", type="text",
+                          placeholder="Event name", className="text-input wide",
+                          style={"marginTop": "8px"}),
+                html.Div(dcc.DatePickerRange(
+                    id="admin-tag-edit-dates",
+                    display_format="YYYY-MM-DD",
+                    start_date_placeholder_text="Start",
+                    end_date_placeholder_text="End (empty = ongoing)"),
+                    style={"marginTop": "8px"}),
+                html.Div([
+                    dcc.Input(id="admin-tag-edit-start-time", type="text",
+                              placeholder="Start time HH:MM",
+                              className="text-input"),
+                    dcc.Input(id="admin-tag-edit-end-time", type="text",
+                              placeholder="End time HH:MM",
+                              className="text-input",
+                              style={"marginLeft": "8px"}),
+                ], style={"marginTop": "8px"}),
+                html.Div("Times are optional — a date on its own runs from "
+                         "00:00 to 23:59.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "4px"}),
+                dcc.Input(id="admin-tag-edit-notes", type="text",
+                          placeholder="Notes (optional)",
+                          className="text-input wide", style={"marginTop": "8px"}),
+                html.Div([
+                    html.Button("Save changes", id="admin-tag-edit-save",
+                                className="btn btn-primary"),
+                    html.Button("End now", id="admin-tag-edit-end-now",
+                                className="btn", style={"marginLeft": "8px"}),
+                ], style={"marginTop": "8px"}),
+                html.Div("“End now” closes an ongoing event at the current "
+                         "time.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "4px"}),
+                html.Div(id="admin-tag-edit-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -297,6 +341,34 @@ def _tag_list():
 def _tag_dropdown():
     return [{"label": t["name"], "value": str(t["id"])}
             for t in tag_store.list_tags()]
+
+
+def _split_ts(ts):
+    """'2026-08-01 09:14:00' -> ('2026-08-01', '09:14') for the edit form."""
+    if not ts:
+        return None, None
+    ts = str(ts)
+    return ts[:10], (ts[11:16] or None)
+
+
+def _combine(date, time):
+    """Recombine a date-picker value with an optional 'HH:MM' time. Returns the
+    date alone when no time is given, so tags._normalise applies its whole-day
+    bounds."""
+    if not date:
+        return None
+    date = str(date)[:10]
+    time = (time or "").strip()
+    if not time:
+        return date
+    parts = time.split(":")
+    if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
+        raise ValueError(f"Time '{time}' must be HH:MM.")
+    hh, mm = int(parts[0]), int(parts[1])
+    ss = int(parts[2]) if len(parts) == 3 else 0
+    if hh > 23 or mm > 59 or ss > 59:
+        raise ValueError(f"Time '{time}' is not a valid time.")
+    return f"{date} {hh:02d}:{mm:02d}:{ss:02d}"
 
 
 # --------------------------------------------------------------------------- #
@@ -532,6 +604,7 @@ def register_callbacks(app):
         Output("admin-tag-create-status", "children"),
         Output("admin-tag-list", "children"),
         Output("admin-tag-delete-select", "options"),
+        Output("admin-tag-edit-select", "options"),
         Output("admin-export-tag", "options"),
         Output("admin-tag-name", "value"),
         Input("admin-tag-create", "n_clicks"),
@@ -544,32 +617,112 @@ def register_callbacks(app):
         if not n_clicks:
             raise PreventUpdate
         if not auth.is_admin():
-            return "Not authorised.", no_update, no_update, no_update, no_update
+            return ("Not authorised.", no_update, no_update, no_update,
+                    no_update, no_update)
         try:
             tag_store.create_tag(name, start_date, end_date, notes)
             msg = f"✅ Created tag '{name}'."
             cleared = ""
         except ValueError as e:
-            return f"⚠ {e}", no_update, no_update, no_update, no_update
-        return (msg, _tag_list(), _tag_dropdown(), _tag_dropdown(), cleared)
+            return (f"⚠ {e}", no_update, no_update, no_update, no_update,
+                    no_update)
+        options = _tag_dropdown()
+        return (msg, _tag_list(), options, options, options, cleared)
 
     @app.callback(
         Output("admin-tag-delete-status", "children"),
         Output("admin-tag-list", "children", allow_duplicate=True),
         Output("admin-tag-delete-select", "options", allow_duplicate=True),
+        Output("admin-tag-edit-select", "options", allow_duplicate=True),
+        Output("admin-tag-edit-select", "value"),
         Output("admin-export-tag", "options", allow_duplicate=True),
         Input("admin-tag-delete", "n_clicks"),
         State("admin-tag-delete-select", "value"),
+        State("admin-tag-edit-select", "value"),
         prevent_initial_call=True)
-    def delete_tag(n_clicks, tag_id):
+    def delete_tag(n_clicks, tag_id, editing_id):
         if not n_clicks:
             raise PreventUpdate
         if not auth.is_admin():
-            return "Not authorised.", no_update, no_update, no_update
+            return ("Not authorised.", no_update, no_update, no_update,
+                    no_update, no_update)
         if not tag_id:
-            return "Select a tag to delete.", no_update, no_update, no_update
+            return ("Select a tag to delete.", no_update, no_update, no_update,
+                    no_update, no_update)
         tag_store.delete_tag(int(tag_id))
-        return ("🗑 Tag deleted.", _tag_list(), _tag_dropdown(), _tag_dropdown())
+        options = _tag_dropdown()
+        # Clear the edit form if it was holding the tag just deleted.
+        editing = None if editing_id == tag_id else no_update
+        return ("🗑 Tag deleted.", _tag_list(), options, options, editing,
+                options)
+
+    @app.callback(
+        Output("admin-tag-edit-current", "children"),
+        Output("admin-tag-edit-name", "value"),
+        Output("admin-tag-edit-dates", "start_date"),
+        Output("admin-tag-edit-dates", "end_date"),
+        Output("admin-tag-edit-start-time", "value"),
+        Output("admin-tag-edit-end-time", "value"),
+        Output("admin-tag-edit-notes", "value"),
+        Input("admin-tag-edit-select", "value"),
+        Input("admin-tag-list", "children"))
+    def load_tag_for_edit(tag_id, _list):
+        """Fill the edit form from the selected tag. Also re-runs when the tag
+        list changes, so the form reflects a save rather than the stale values
+        that were typed into it."""
+        if not tag_id:
+            return "", "", None, None, "", "", ""
+        tag = tag_store.get_tag(int(tag_id))
+        if tag is None:
+            return "Tag not found.", "", None, None, "", "", ""
+        start_date, start_time = _split_ts(tag["start_ts"])
+        end_date, end_time = _split_ts(tag.get("end_ts"))
+        current = "Currently: {} → {}".format(
+            str(tag["start_ts"])[:16],
+            str(tag["end_ts"])[:16] if tag.get("end_ts") else "ongoing")
+        return (current, tag["name"], start_date, end_date,
+                start_time or "", end_time or "", tag.get("notes") or "")
+
+    @app.callback(
+        Output("admin-tag-edit-status", "children"),
+        Output("admin-tag-list", "children", allow_duplicate=True),
+        Output("admin-tag-delete-select", "options", allow_duplicate=True),
+        Output("admin-tag-edit-select", "options", allow_duplicate=True),
+        Output("admin-export-tag", "options", allow_duplicate=True),
+        Input("admin-tag-edit-save", "n_clicks"),
+        Input("admin-tag-edit-end-now", "n_clicks"),
+        State("admin-tag-edit-select", "value"),
+        State("admin-tag-edit-name", "value"),
+        State("admin-tag-edit-dates", "start_date"),
+        State("admin-tag-edit-dates", "end_date"),
+        State("admin-tag-edit-start-time", "value"),
+        State("admin-tag-edit-end-time", "value"),
+        State("admin-tag-edit-notes", "value"),
+        prevent_initial_call=True)
+    def edit_tag(save_clicks, end_clicks, tag_id, name, start_date, end_date,
+                 start_time, end_time, notes):
+        if not (save_clicks or end_clicks):
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised.", no_update, no_update, no_update, no_update
+        if not tag_id:
+            return ("Select a tag to edit.", no_update, no_update, no_update,
+                    no_update)
+        try:
+            if ctx.triggered_id == "admin-tag-edit-end-now":
+                # Ends the stored tag as it is — no other form field applies.
+                ended = tag_store.end_tag_now(int(tag_id))
+                msg = f"✅ Ended at {ended[:16]}."
+            else:
+                tag_store.update_tag(
+                    int(tag_id), name,
+                    _combine(start_date, start_time),
+                    _combine(end_date, end_time), notes)
+                msg = "✅ Saved."
+        except ValueError as e:
+            return f"⚠ {e}", no_update, no_update, no_update, no_update
+        options = _tag_dropdown()
+        return msg, _tag_list(), options, options, options
 
     # --- export ----------------------------------------------------------- #
     @app.callback(

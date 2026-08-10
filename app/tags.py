@@ -26,12 +26,12 @@ def list_tags():
     df = database.read_df(
         "SELECT id, name, start_ts, end_ts, notes, created_at "
         "FROM event_tags ORDER BY start_ts DESC, id DESC")
-    return df.to_dict("records")
+    return [_clean(r) for r in df.to_dict("records")]
 
 
 def get_tag(tag_id):
     df = database.read_df("SELECT * FROM event_tags WHERE id = ?", [tag_id])
-    return None if df.empty else df.iloc[0].to_dict()
+    return None if df.empty else _clean(df.iloc[0].to_dict())
 
 
 def create_tag(name, start_ts, end_ts=None, notes=None):
@@ -53,6 +53,42 @@ def create_tag(name, start_ts, end_ts=None, notes=None):
     log.info("Created tag '%s' (%s -> %s)", name, start_ts, end_ts or "ongoing")
 
 
+def update_tag(tag_id, name, start_ts, end_ts=None, notes=None):
+    """Edit an existing tag in place. Same validation as create_tag; an empty
+    end_ts sets the tag back to ongoing."""
+    if get_tag(tag_id) is None:
+        raise ValueError("Tag not found.")
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Tag name is required.")
+    start_ts = _normalise(start_ts, end_of_day=False)
+    end_ts = _normalise(end_ts, end_of_day=True) if end_ts else None
+    if not start_ts:
+        raise ValueError("A valid start date is required.")
+    if end_ts and end_ts < start_ts:
+        raise ValueError("End must be after start.")
+    database.execute(
+        "UPDATE event_tags SET name = ?, start_ts = ?, end_ts = ?, notes = ? "
+        "WHERE id = ?",
+        [name, start_ts, end_ts, (notes or "").strip() or None, tag_id])
+    log.info("Updated tag %s '%s' (%s -> %s)", tag_id, name, start_ts,
+             end_ts or "ongoing")
+
+
+def end_tag_now(tag_id):
+    """Close an ongoing tag at the current time. Returns the end timestamp."""
+    tag = get_tag(tag_id)
+    if tag is None:
+        raise ValueError("Tag not found.")
+    end_ts = _now_str()
+    if end_ts < tag["start_ts"]:
+        raise ValueError("End must be after start.")
+    database.execute("UPDATE event_tags SET end_ts = ? WHERE id = ?",
+                     [end_ts, tag_id])
+    log.info("Ended tag %s '%s' at %s", tag_id, tag["name"], end_ts)
+    return end_ts
+
+
 def delete_tag(tag_id):
     database.execute("DELETE FROM event_tags WHERE id = ?", [tag_id])
 
@@ -63,6 +99,13 @@ def resolve_range(tag):
     start = tag["start_ts"]
     end = tag.get("end_ts") or _now_str()
     return start, end
+
+
+def _clean(row):
+    """A SQL NULL comes back from pandas as None or NaN; both mean 'unset', and
+    callers only ever test truthiness (NaN is truthy, which would read as a set
+    end date). Normalise every NaN in a tag row to None."""
+    return {k: (None if v is None or v != v else v) for k, v in row.items()}
 
 
 def _normalise(value, end_of_day):
