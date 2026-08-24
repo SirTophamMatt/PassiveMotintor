@@ -31,6 +31,9 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
   PDF both render from it)
 - `app/history.py` — generic entity state-change journal (what makes Event Replay possible)
 - `app/replay.py` — historical reconstruction for `/replay` (UI-free)
+- `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
+  bug reports and suggestions; `app/mailer.py` — SMTP sending; `app/geoip.py` — coarse
+  visitor geolocation from a truncated IP
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
 - `assets/style.css` — light/dark theme
 - `tests/` — pytest suite + HTML fixtures (`tests/fixtures/`); not shipped in the Docker image
@@ -211,14 +214,16 @@ they render even where kaleido can't).
 warnings) vs **Warnings** (= emergency+watch_act+advice) totals, plus Fires and the three
 warning-level lines, colour-matched to the map kinds.
 
-## Analytics (built 2026-07-12)
-- **Privacy-preserving, self-hosted, no third-party trackers.** `app/analytics.py` +
-  `page_views` table. Views are logged from the URL-change `route` callback (Dash is an SPA, so no
-  per-page GET) via `analytics.record_view`. A visitor is only a **daily salted hash of
-  IP+User-Agent** (`UM_SECRET_KEY` salt) — no raw IP/PII, rotates daily, so unique-visitor counts
-  work without identifying anyone. `/_dash*`, `/assets`, `/health` ignored.
+## Analytics (built 2026-07-12; visitor geolocation added 2026-08-24)
+- **Self-hosted, no third-party trackers.** `app/analytics.py` + `page_views` table. Views are
+  logged from the URL-change `route` callback (Dash is an SPA, so no per-page GET) via
+  `analytics.record_view`. A visitor is counted by a **daily salted hash of IP+User-Agent**
+  (`UM_SECRET_KEY` salt), which rotates daily. `/_dash*`, `/assets`, `/health` ignored.
 - **Admin page `/analytics`** (`app/pages/analytics.py`, in RESTRICTED): views/visitors KPIs
-  (24h/7d/30d), a daily views+visitors trend, and a top-pages bar (public views only).
+  (24h/7d/30d), a daily views+visitors trend, a top-pages bar (public views only), plus the
+  geography block below.
+- See **Visitor geolocation** for what is stored about where visitors are, and why the page copy
+  had to change when it landed.
 
 ## Weather module — rainfall (Phase 2b, built 2026-07-12)
 - **Locations derived from flood gauges.** `ensure_locations()` (one-time seed) extracts a town
@@ -779,6 +784,93 @@ what should I be watching* — and is useful **on its own, before anyone generat
   table — `EXPLAIN QUERY PLAN` showing `SCAN` on `flood_observations`, `rainfall_aws` or
   `storm_cells` is a wedged server waiting to happen, and the dev DB is far too small to
   reveal it.
+
+## Feedback form — bug reports & suggestions (built 2026-08-24)
+- **Shell-level, not a page.** `app/feedback_ui.py` mounts a floating **Feedback** button and its
+  modal in `factory._shell_layout`, so a bug is reported from wherever it was found and the form
+  records that page itself. Model is `app/feedback.py` (UI-free, like `briefing`/`replay`); the
+  Admin queue renders from the same module.
+- **Stored FIRST, emailed second.** `submit()` writes the `feedback_reports` row, then mails, then
+  writes `email_status` back (`sent` / `failed` / `skipped` + `email_error`). A report therefore
+  survives an unconfigured, throttled or dead SMTP server — the reporter still gets their
+  reference and Admin can **Resend**. Mail-then-store would lose submissions exactly when the
+  system is already unhealthy, which is when bug reports matter most.
+- **Reference IDs** look like `WD-BUG-260824-4XKQ` (`WD-SUG-…` for suggestions): kind, date, and
+  four random chars from an alphabet with **no I/O/0/1** — the characters people mistype when
+  reading a reference off a screen. No sequence number, so volume isn't leaked. Uniqueness is the
+  table's UNIQUE index; `submit()` retries the ref (only the ref) up to 5 times on collision.
+- **Email** goes out via `app/mailer.py` — **stdlib `smtplib`, no new dependency**. Settings under
+  `smtp` in config.json (Settings page); the password may instead come from `UM_SMTP_PASSWORD`,
+  which is what the container deployment should use so the mounted config.json holds no secret.
+  Security follows the port unless overridden (`auto` → SSL on 465, STARTTLS otherwise).
+  `mailer.send` returns `(ok, error)` and never raises. **Reply-To is the reporter**, so hitting
+  Reply answers them rather than the app.
+- **Public form, so it is bounded:** `feedback.max_per_hour` (5) per **truncated network**, which
+  throttles one abusive host while a whole office behind one NAT still gets a workable allowance;
+  0 disables it. Field lengths are capped at the model boundary, not just in the form, because the
+  values arrive from a public page.
+- **Admin queue** (`/admin`, "Feedback — N new, N open, N closed"): full message text (a bug report
+  exists to be read), status filters, Open/Close, Resend, and a standing pill saying whether a
+  report submitted *right now* would actually be emailed — that failure is otherwise silent, since
+  the form keeps accepting reports happily while none of them reach a mailbox.
+- **Dash gotchas this cost, worth remembering:**
+  - **A callback whose Input component does not exist never fires.** The receipt's Close button was
+    first built inside the dynamically-rendered receipt; with it missing at first render the entire
+    open/close/submit callback was inert and the button did nothing. Every control the callback
+    listens to now exists from the first render and is hidden with `style`.
+  - **One callback, not one per button.** Open / close / submit all write the same outputs, so
+    splitting them would need `allow_duplicate` on ten outputs; `ctx.triggered_id` dispatches.
+  - **NULL TEXT read back through pandas is NaN, which is TRUTHY**, so
+    `row.get("reporter_name") or "Anonymous"` rendered the literal string **"nan"** in the Admin
+    queue. `feedback.normalise()` (`v != v` catches NaN without importing pandas) is applied on
+    every read-back path, including `resend()` — otherwise a NULL reporter email becomes a
+    Reply-To of "nan". Same trap as the collectors' NaT normalisation.
+- **Tests:** `tests/test_feedback.py` (25) — reference shape/alphabet/uniqueness, validation, the
+  store-survives-email-failure guarantee, skipped-vs-failed, severity dropped for suggestions,
+  truncation not rejection, the per-network rate limit (and that a second network is unaffected),
+  Reply-To, message headers, status transitions, resend, and the NaN round-trip.
+
+## Visitor geolocation (built 2026-08-24)
+- **Truncate, then look up.** `app/geoip.truncate` removes the host part of every client address
+  before it is stored, sent to a provider, or used as a cache key: IPv4 → /24
+  (203.0.113.47 → 203.0.113.0), IPv6 → /48. That is where GA and Matomo anonymise: enough to
+  resolve a city and group traffic by network, not enough to identify a subscriber. **No full IP is
+  ever written to disk.** `page_views` gained `ip_prefix` + `country`/`country_code`/`region`/`city`
+  via `_ensure_column`, so existing rows keep NULLs and report as "Unknown" rather than vanishing.
+- **`truncate` is also the input validation.** `X-Forwarded-For` is attacker-controlled; anything
+  that is not a parseable address returns `""`, so no arbitrary text reaches the DB or a provider
+  URL.
+- **The lookup is never in the render path.** `resolve_async` returns whatever is cached and queues
+  a miss for a single daemon worker, so the FIRST view from a new network stores no location and
+  every later one carries it — the `/analytics` note says so explicitly rather than quietly
+  under-reporting. `ip_geo_cache` is keyed on the prefix (one lookup covers a whole /24); failures
+  are cached for `RETRY_AFTER_HOURS` (24) so a provider outage costs one request per network per
+  day, and private/loopback ranges are cached as `private` so a LAN or desktop deployment stops
+  asking. The queue is bounded (500); overflow is dropped and requeues on the next view.
+- **Provider is config, not code**: `geo.provider_url` with `{ip}` substituted, mapped through
+  `geoip.FIELD_MAP`. Default **ip-api.com** — no key, 45 req/min — whose free tier is **HTTP-only
+  and non-commercial**; point the URL elsewhere and adjust the map to change provider.
+  `geo.enabled=false` keeps view counts and resolves nothing.
+- **It signals a miss in the BODY with HTTP 200** (`{"status": "fail"}`), so an error-code-only
+  check would cache every miss as a success. Checked explicitly.
+- **`203.0.113.x` is never geolocated.** The RFC 5737 documentation range is `is_private` to
+  Python's `ipaddress`, so it short-circuits — fine for illustrating truncation in docs, wrong as a
+  test fixture for resolution (the tests use `81.2.69.0`). Same for every local run: localhost
+  truncates to `127.0.0.0` and caches as `private`, so **nothing resolves in development**.
+- **`/analytics` gained a geography block**: an OSM point map (no Mapbox token, like every other
+  map here), a by-country bar, a top-cities table, and a busiest-networks table with the ISP —
+  which is what answers the question the country chart cannot: *is this an audience or a crawler?*
+  Points are the network's city centre, never a visitor's position, and the page says so.
+- **The page's privacy copy was rewritten, not left alone.** It previously told visitors "no IP
+  addresses or personal data are stored", which stopped being true; the schema comment and
+  `app/analytics.py` docstring were corrected for the same reason. A dashboard that misstates what
+  it collects is a worse bug than a wrong chart.
+- **Tests:** `tests/test_geoip.py` (26) — truncation of v4/v6, rejection of spoofed/junk headers,
+  two hosts on one /24 being indistinguishable, public-vs-reserved classification, provider
+  mapping, body-level misses, network errors, failure expiry vs permanent successes, a guard that
+  `resolve_async` makes **no** blocking call, private-range caching, and the analytics wiring
+  (truncated-only storage, the full address appearing nowhere in the table, aggregates, and a
+  geolocation failure never breaking navigation).
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

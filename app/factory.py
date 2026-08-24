@@ -10,7 +10,7 @@ from dash import Dash, Input, Output, State, dcc, get_asset_url, html
 # (with window controls) instead of relying on the OS chrome.
 DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
-from app import auth, database
+from app import auth, database, feedback_ui
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
@@ -108,6 +108,10 @@ def _shell_layout():
         html.Div(id="page-content", className="content"),
     ], className="body-row"))
     children.append(html.Div(id="news-ticker", className="ticker ticker-hidden"))
+    # Feedback lives in the shell, not on a page: a bug is reported from
+    # wherever it was found, and the form records that page automatically.
+    children.append(feedback_ui.button())
+    children.append(feedback_ui.modal())
     root_class = "app dark has-titlebar" if DESKTOP else "app dark"
     return html.Div(children, id="app-root", className=root_class)
 
@@ -295,6 +299,7 @@ def create_app(autostart=False):
 
     from app import ticker
     ticker.register_callbacks(app)
+    feedback_ui.register_callbacks(app)
 
     if autostart:
         from app.collector import manager

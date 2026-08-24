@@ -232,9 +232,12 @@ CREATE TABLE IF NOT EXISTS weather_heartbeat (
 );
 CREATE INDEX IF NOT EXISTS idx_weather_hb_time ON weather_heartbeat (timestamp);
 
--- Lightweight, privacy-preserving page analytics. visitor_hash is a daily
--- salted hash of IP+User-Agent (no raw IP/PII stored); it lets us count unique
--- visitors per day without identifying anyone.
+-- Lightweight page analytics. visitor_hash is a daily salted hash of
+-- IP+User-Agent, letting us count unique visitors per day. ip_prefix and the
+-- country/region/city columns (added 2026-08-24) carry the visitor's coarse
+-- origin: the IP is TRUNCATED before storage (last octet zeroed for IPv4, the
+-- interface identifier dropped for IPv6), so location resolves to city level
+-- but no individual address is ever written to disk. See app/geoip.py.
 CREATE TABLE IF NOT EXISTS page_views (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -243,6 +246,50 @@ CREATE TABLE IF NOT EXISTS page_views (
     is_admin INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_page_views_time ON page_views (timestamp);
+
+-- Coarse visitor geolocation, resolved from the TRUNCATED client IP. Cached so
+-- each /24 (or IPv6 /48) network is looked up once, not once per page view --
+-- the free geolocation providers are rate-limited and a lookup must never sit
+-- in the render path. `status` records the outcome, so a private-range or
+-- unresolvable address is remembered instead of being retried on every hit.
+CREATE TABLE IF NOT EXISTS ip_geo_cache (
+    ip_prefix TEXT PRIMARY KEY,     -- truncated IP, e.g. 203.0.113.0
+    country TEXT,
+    country_code TEXT,
+    region TEXT,                    -- state / province
+    city TEXT,
+    latitude REAL,
+    longitude REAL,
+    org TEXT,                       -- ISP / carrier, useful for spotting bots
+    status TEXT,                    -- ok / private / failed
+    looked_up_at TEXT
+);
+
+-- Bug reports and suggestions submitted from the in-app feedback form. Every
+-- submission is stored here FIRST and emailed second, so an unconfigured or
+-- broken SMTP server loses nothing: `email_status` records whether the mail
+-- got out, and the Admin page can retry the ones that did not.
+CREATE TABLE IF NOT EXISTS feedback_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref TEXT UNIQUE NOT NULL,       -- human-facing ID, e.g. WD-BUG-260824-4XKQ
+    kind TEXT NOT NULL,             -- bug / suggestion
+    submitted_at TEXT NOT NULL,
+    subject TEXT,
+    message TEXT NOT NULL,
+    reporter_name TEXT,
+    reporter_email TEXT,
+    severity TEXT,                  -- bug reports only: low / medium / high
+    page_path TEXT,                 -- page the reporter was on when reporting
+    user_agent TEXT,
+    ip_prefix TEXT,                 -- truncated, same treatment as page_views
+    email_status TEXT,              -- sent / failed / skipped
+    email_error TEXT,
+    status TEXT NOT NULL DEFAULT 'new',   -- new / open / closed
+    admin_notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_submitted
+    ON feedback_reports (submitted_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback_reports (status);
 
 CREATE TABLE IF NOT EXISTS power_timeseries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -648,6 +695,11 @@ def init_db():
         _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
         _ensure_column(conn, "road_disruptions", "ses_region", "TEXT")
         _ensure_column(conn, "road_disruptions", "transport_region", "TEXT")
+        # Visitor geolocation (2026-08-24). page_views predates it, so the
+        # columns are added here rather than in SCHEMA -- existing rows keep
+        # NULLs and the analytics queries report those as "Unknown".
+        for _col in ("ip_prefix", "country", "country_code", "region", "city"):
+            _ensure_column(conn, "page_views", _col, "TEXT")
         # AWS observations grew from rain-only to the full BoM field set
         # (2026-08, Phase A). Purely additive: existing rows keep their rainfall
         # and get NULL weather, so rainfall history/exports are untouched.

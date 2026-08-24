@@ -210,6 +210,43 @@ DEFAULTS = {
         # button still works — it uses force=True). Toggled from the Admin page.
         "paused": False,
     },
+    "smtp": {
+        # Outbound email (app/mailer.py), used by the feedback form. Empty host
+        # = disabled: reports are still stored, just not emailed. The password
+        # may instead come from UM_SMTP_PASSWORD, which is preferred for a
+        # container deployment.
+        "host": "",
+        "port": 587,
+        # auto = implicit TLS on port 465, STARTTLS everywhere else.
+        # "ssl" / "starttls" force it; "none" is for a localhost relay only.
+        "security": "auto",
+        "username": "",
+        "password": "",
+        "from_address": "",
+        "from_name": "Watchdesk",
+        # Default recipient; feedback.recipient overrides it for reports.
+        "to_address": "",
+    },
+    "feedback": {
+        # Where bug reports and suggestions are emailed.
+        "recipient": "WatchdeskMonitor@mattlamont.me",
+        "email_enabled": True,
+        # Submissions allowed per truncated network per hour. The form sits on
+        # a public page with no login, so something has to bound it; 0 disables
+        # the limit.
+        "max_per_hour": 5,
+    },
+    "geo": {
+        # Coarse visitor geolocation (app/geoip.py). The client IP is TRUNCATED
+        # before it is stored or sent anywhere -- see that module for why.
+        # False = keep counting visitors, resolve no locations.
+        "enabled": True,
+        # {ip} is replaced with the truncated address. ip-api.com needs no key
+        # (45 req/min) but its free tier is HTTP-only and non-commercial; swap
+        # in a keyed provider here and adjust geoip.FIELD_MAP if that matters.
+        "provider_url": "http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,regionName,city,lat,lon,org",
+        "timeout_seconds": 5,
+    },
     "web": {
         # Admin password hash set from the Admin page. The UM_ADMIN_PASSWORD
         # environment variable, if set, takes precedence over this.

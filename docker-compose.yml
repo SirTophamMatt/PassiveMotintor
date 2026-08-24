@@ -12,6 +12,10 @@ services:
       # Stable secret so admin sessions survive restarts. Generate once:
       #   python -c "import secrets; print(secrets.token_hex(32))"
       UM_SECRET_KEY: ${UM_SECRET_KEY}
+      # SMTP password for the feedback form's report emails. Optional:
+      # blank just means reports are stored and not emailed. Every other
+      # mail setting is on the Settings page.
+      UM_SMTP_PASSWORD: ${UM_SMTP_PASSWORD:-}
       UM_DATA_DIR: /data
     volumes:
       # Persist the SQLite DB, config.json, log and backups across redeploys.

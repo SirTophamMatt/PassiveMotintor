@@ -533,3 +533,129 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     background: var(--bg-panel);
     border-left-color: var(--accent);
 }
+
+/* --- Feedback widget ---------------------------------------------------- */
+/* The launcher sits above the news ticker (z-index 900) and clear of its
+   36px bar, so the two never overlap on a page with an active ticker. */
+.fab {
+    position: fixed;
+    right: 22px;
+    bottom: 50px;
+    z-index: 950;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 24px;
+    padding: 11px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.fab:hover { filter: brightness(1.1); }
+.fab:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.fab-icon { font-size: 16px; line-height: 1; }
+
+.fb-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.55);
+    overflow-y: auto;
+}
+.fb-hidden { display: none; }
+.fb-panel {
+    background: var(--bg-panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px 22px;
+    width: 100%;
+    max-width: 540px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.fb-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.fb-title { margin: 0 0 4px; }
+.fb-x {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+.fb-x:hover { color: var(--text); }
+
+/* Kind picker reads as two choices, not a settings row, so it gets more space
+   than the shared `label` rule gives radio items elsewhere. */
+.fb-kind { margin: 6px 0 4px; }
+.fb-kind label { display: inline-flex; align-items: center; margin-right: 18px; }
+.fb-dropdown { max-width: 100%; margin-bottom: 4px; }
+.fb-textarea { min-height: 130px; resize: vertical; font-family: inherit; }
+.fb-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.fb-col { flex: 1; min-width: 200px; }
+.fb-note { margin: 12px 0 4px; font-size: 12px; }
+.fb-actions { margin-top: 8px; }
+.fb-error { margin-top: 10px; }
+
+/* Receipt. The reference is the one thing the reporter has to be able to read
+   back and retype, so it is set large, monospaced and selectable. */
+.fb-receipt { text-align: center; padding: 8px 0 4px; }
+.fb-tick {
+    font-size: 34px;
+    color: #2ecc71;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+.fb-ref {
+    font-family: Consolas, monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 6px auto 12px;
+    user-select: all;
+}
+
+/* Admin report queue */
+.fb-admin-row { border-top: 1px solid var(--border); padding: 10px 0; }
+.fb-admin-row:first-child { border-top: none; }
+.fb-admin-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fb-admin-ref { font-family: Consolas, monospace; font-weight: 600; }
+.fb-admin-body { white-space: pre-wrap; font-size: 13px; margin: 6px 0 4px; }
+.fb-tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    padding: 2px 7px;
+}
+.fb-tag-bug { background: rgba(214, 39, 40, 0.18); color: #ff8080; }
+.fb-tag-suggestion { background: rgba(78, 161, 255, 0.18); color: var(--accent); }
+.fb-tag-high { background: rgba(214, 39, 40, 0.18); color: #ff8080; }
+.fb-tag-medium { background: rgba(242, 169, 59, 0.18); color: #f2a93b; }
+.fb-tag-low { background: rgba(154, 160, 166, 0.18); color: var(--muted); }
+.app.light .fb-tag-bug, .app.light .fb-tag-high { color: #b3261e; }
+
+@media (max-width: 620px) {
+    /* Collapse to the icon so the launcher never covers page content on a
+       phone; the title attribute still names it for screen readers. */
+    .fab { padding: 12px 14px; }
+    .fab span:last-child { display: none; }
+}

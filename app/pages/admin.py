@@ -8,10 +8,10 @@ links to the (also gated) Settings and Import pages.
 Every state-changing callback re-checks auth.is_admin() server-side, so the
 gating does not rely on the UI merely hiding a button.
 """
-from dash import Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from app import auth, notify
+from app import auth, feedback, mailer, notify
 from app import tags as tag_store
 from app import ui
 from app.collector import manager
@@ -267,6 +267,54 @@ def _panel():
             ], className="panel"),
         ], className="panel-row"),
 
+        # --- Feedback ------------------------------------------------------ #
+        html.H3(id="admin-fb-heading"),
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.Label("Show"),
+                        dcc.Dropdown(
+                            [{"label": "New", "value": "new"},
+                             {"label": "Open", "value": "open"},
+                             {"label": "Closed", "value": "closed"},
+                             {"label": "All", "value": "all"}],
+                            "new", id="admin-fb-status-filter", clearable=False,
+                            className="dropdown"),
+                    ], className="fb-col"),
+                    html.Div([
+                        html.Label("Type"),
+                        dcc.Dropdown(
+                            [{"label": "All", "value": "all"},
+                             {"label": "Bug reports", "value": "bug"},
+                             {"label": "Suggestions", "value": "suggestion"}],
+                            "all", id="admin-fb-kind-filter", clearable=False,
+                            className="dropdown"),
+                    ], className="fb-col"),
+                ], className="fb-row"),
+                html.Div(id="admin-fb-list", style={"marginTop": "12px"}),
+                html.Div(id="admin-fb-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Report delivery"),
+                html.Div(id="admin-fb-mail-state", children=_fb_mail_state(),
+                         className="muted"),
+                html.Button("Send test email", id="admin-fb-mail-test",
+                            className="btn", style={"marginTop": "10px"}),
+                html.Div(id="admin-fb-mail-status", className="muted",
+                         style={"marginTop": "8px"}),
+                html.P("Reports are stored the moment they are submitted, so "
+                       "anything listed here exists whether or not the email got "
+                       "out. Use Resend on a report showing a failed delivery "
+                       "once the mail settings are fixed.",
+                       className="muted",
+                       style={"fontSize": "12px", "marginTop": "10px"}),
+                dcc.Link("Mail + feedback settings", href="/settings",
+                         className="nav-link"),
+            ], className="panel"),
+        ], className="panel-row"),
+
         # --- Export -------------------------------------------------------- #
         html.H3("Export data"),
         html.Div([
@@ -323,6 +371,75 @@ def _panel():
             ], className="panel"),
         ], className="panel-row"),
     ])
+
+
+def _fb_heading():
+    c = feedback.counts()
+    return "Feedback — %d new, %d open, %d closed" % (
+        c["new"], c["open"], c["closed"])
+
+
+def _fb_mail_state():
+    """Whether a report submitted right now would actually be emailed. Stated
+    up front because the failure is silent otherwise: the form keeps accepting
+    reports perfectly happily while none of them reach a mailbox."""
+    cfg = load_config()
+    to = feedback.recipient(cfg)
+    if not cfg.get("feedback", {}).get("email_enabled", True):
+        return ui.status_pill(False, text_off="Email delivery turned off")
+    if not mailer.configured(cfg):
+        return ui.status_pill(False, text_off="SMTP not configured")
+    if not to:
+        return ui.status_pill(False, text_off="No recipient address set")
+    return html.Div([ui.status_pill(True, text_on="Emailing reports to"),
+                     html.Span(" " + to)])
+
+
+def _fb_row(row):
+    """One report. The message is shown in full rather than truncated: a bug
+    report exists to be read, and a queue of 40-character previews just means
+    opening every one of them somewhere else."""
+    r = feedback.normalise(row.to_dict())
+    kind = str(r["kind"])
+    bits = [html.Span(str(r["ref"]), className="fb-admin-ref"),
+            html.Span(feedback.KINDS.get(kind, kind),
+                      className="fb-tag fb-tag-" + kind)]
+    if r.get("severity"):
+        bits.append(html.Span(str(r["severity"]),
+                              className="fb-tag fb-tag-" + str(r["severity"])))
+    bits.append(html.Span(str(r["submitted_at"])[:16], className="muted"))
+    if r.get("email_status") in ("failed", "skipped"):
+        bits.append(html.Span("not emailed", className="fb-tag fb-tag-high",
+                              title=str(r.get("email_error") or "")))
+
+    who = r.get("reporter_name") or "Anonymous"
+    if r.get("reporter_email"):
+        who = "%s <%s>" % (who, r["reporter_email"])
+
+    ref = str(r["ref"])
+    return html.Div([
+        html.Div(bits, className="fb-admin-head"),
+        html.Div(str(r.get("subject") or ""),
+                 style={"fontWeight": "600", "marginTop": "4px"}),
+        html.Div(str(r["message"]), className="fb-admin-body"),
+        html.Div("%s - from %s" % (who, r.get("page_path") or "unknown page"),
+                 className="muted", style={"fontSize": "12px"}),
+        html.Div([
+            html.Button("Open", id={"type": "fb-set", "ref": ref, "to": "open"},
+                        className="btn"),
+            html.Button("Close", id={"type": "fb-set", "ref": ref, "to": "closed"},
+                        className="btn"),
+            html.Button("Resend email", id={"type": "fb-resend", "ref": ref},
+                        className="btn"),
+        ], style={"marginTop": "4px"}),
+    ], className="fb-admin-row")
+
+
+def _fb_list(status="new", kind="all"):
+    df = feedback.recent(limit=40, status=status, kind=kind)
+    if df.empty:
+        return html.Div("No reports match that filter.", className="muted")
+    return html.Div([_fb_row(r) for _, r in df.iterrows()])
 
 
 def _tag_list():
@@ -765,6 +882,62 @@ def register_callbacks(app):
         except Exception as e:
             return no_update, f"⚠ Export failed: {e}"
         return dcc.send_bytes(data, filename), f"✅ Exported {filename}."
+
+    # --- feedback ---------------------------------------------------------- #
+    # The row buttons use pattern-matching ids because the list length is
+    # data-driven; one ALL callback serves every rendered row and re-renders the
+    # list afterwards, so an action and its result arrive together.
+    @app.callback(
+        Output("admin-fb-list", "children"),
+        Output("admin-fb-heading", "children"),
+        Output("admin-fb-status", "children"),
+        Input("admin-fb-status-filter", "value"),
+        Input("admin-fb-kind-filter", "value"),
+        Input({"type": "fb-set", "ref": ALL, "to": ALL}, "n_clicks"),
+        Input({"type": "fb-resend", "ref": ALL}, "n_clicks"))
+    def refresh_feedback(status, kind, _set_clicks, _resend_clicks):
+        message = ""
+        trigger = ctx.triggered_id
+        # Re-rendering the list fires this callback again with the new buttons
+        # at n_clicks None. Only a truthy value is a real press — without this
+        # guard, redrawing the list would replay the last action.
+        pressed = bool(ctx.triggered and ctx.triggered[0].get("value"))
+        if isinstance(trigger, dict) and pressed:
+            if not auth.is_admin():
+                message = "Not authorised."
+            elif trigger["type"] == "fb-set":
+                feedback.set_status(trigger["ref"], trigger["to"])
+                message = "%s marked %s." % (trigger["ref"], trigger["to"])
+            else:
+                ok, detail = feedback.resend(trigger["ref"])
+                message = ("OK - " if ok else "Failed - ") + detail
+        return _fb_list(status or "new", kind or "all"), _fb_heading(), message
+
+    @app.callback(
+        Output("admin-fb-mail-state", "children"),
+        Output("admin-fb-mail-status", "children"),
+        Input("admin-fb-mail-test", "n_clicks"),
+        prevent_initial_call=True)
+    def test_feedback_email(n_clicks):
+        if not n_clicks:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return _fb_mail_state(), "Not authorised."
+        cfg = load_config()
+        to = feedback.recipient(cfg)
+        if not mailer.configured(cfg) or not to:
+            return (_fb_mail_state(),
+                    "Set the SMTP host, from-address and recipient in Settings "
+                    "first.")
+        ok, err = mailer.send(
+            "[Watchdesk] Test email",
+            "This is a test from the Watchdesk admin page.\n\n"
+            "If you are reading it, bug reports and suggestions submitted from "
+            "the feedback form will reach this mailbox.",
+            to_address=to, cfg=cfg)
+        return (_fb_mail_state(),
+                ("Test email sent to %s." % to) if ok
+                else ("Send failed - %s" % err))
 
     # --- notifications ----------------------------------------------------- #
     @app.callback(

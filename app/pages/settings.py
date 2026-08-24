@@ -104,6 +104,84 @@ def layout():
                          className="muted", style={"fontSize": "12px"}),
             ], className="panel"),
         ], className="panel-row"),
+        html.Div([
+            html.Div([
+                html.H4("Outgoing Email (SMTP)"),
+                html.P("Used to deliver bug reports and suggestions from the "
+                       "feedback form. Leave the host blank to disable email — "
+                       "reports are still stored and listed on the Admin page. "
+                       "The password can instead be set in the UM_SMTP_PASSWORD "
+                       "environment variable, which is the better option for the "
+                       "container deployment.",
+                       className="muted", style={"fontSize": "12px"}),
+                _field("SMTP host", "set-smtp-host", cfg["smtp"]["host"],
+                       placeholder="smtp.example.com"),
+                _field("Port", "set-smtp-port", cfg["smtp"]["port"],
+                       input_type="number", min=1),
+                html.Label("Transport security"),
+                dcc.Dropdown(
+                    [{"label": "Auto (SSL on 465, STARTTLS otherwise)",
+                      "value": "auto"},
+                     {"label": "STARTTLS", "value": "starttls"},
+                     {"label": "Implicit TLS / SMTPS", "value": "ssl"},
+                     {"label": "None (localhost relay only)", "value": "none"}],
+                    cfg["smtp"].get("security", "auto"), id="set-smtp-security",
+                    clearable=False, style={"maxWidth": "560px"}),
+                _field("Username", "set-smtp-user", cfg["smtp"]["username"],
+                       placeholder="Leave blank for an unauthenticated relay"),
+                _field("Password", "set-smtp-password", cfg["smtp"]["password"],
+                       input_type="password"),
+                _field("From address", "set-smtp-from",
+                       cfg["smtp"]["from_address"],
+                       placeholder="watchdesk@example.com"),
+                _field("From name", "set-smtp-from-name",
+                       cfg["smtp"]["from_name"]),
+            ], className="panel"),
+            html.Div([
+                html.H4("Feedback Form"),
+                html.P("The Feedback button appears on every page. Every "
+                       "submission is stored first and emailed second, so an "
+                       "unreachable mail server never loses a report.",
+                       className="muted", style={"fontSize": "12px"}),
+                _field("Send reports to", "set-feedback-recipient",
+                       cfg["feedback"]["recipient"],
+                       placeholder="WatchdeskMonitor@mattlamont.me"),
+                _field("Max submissions per network per hour",
+                       "set-feedback-rate", cfg["feedback"]["max_per_hour"],
+                       input_type="number", min=0),
+                dcc.Checklist(
+                    id="set-feedback-toggles",
+                    options=[{"label": " Email reports as they arrive",
+                              "value": "email"}],
+                    value=(["email"] if cfg["feedback"].get("email_enabled", True)
+                           else [])),
+                html.Div("0 submissions/hour removes the rate limit. Send a test "
+                         "email from the Admin page after saving.",
+                         className="muted", style={"fontSize": "12px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("Visitor Geolocation"),
+                html.P("Resolves a rough location (country / state / city) for "
+                       "each visitor. The client IP is TRUNCATED before it is "
+                       "stored or sent to the provider — last octet zeroed for "
+                       "IPv4, interface identifier dropped for IPv6 — so traffic "
+                       "can be located to a city and grouped by network, but no "
+                       "individual address is ever written to disk. Turn this off "
+                       "to keep counting views and store no location at all.",
+                       className="muted", style={"fontSize": "12px"}),
+                dcc.Checklist(
+                    id="set-geo-toggles",
+                    options=[{"label": " Resolve visitor locations",
+                              "value": "enabled"}],
+                    value=["enabled"] if cfg["geo"].get("enabled", True) else []),
+                _field("Provider URL ({ip} is replaced)", "set-geo-provider",
+                       cfg["geo"]["provider_url"]),
+                html.Div("Default is ip-api.com: no key, 45 lookups/minute, and "
+                         "each network is looked up once and cached. Its free "
+                         "tier is HTTP-only and licensed for non-commercial use.",
+                         className="muted", style={"fontSize": "12px"}),
+            ], className="panel"),
+        ], className="panel-row"),
         html.Button("Save Settings", id="settings-save-btn", className="btn btn-primary"),
         html.Div(id="settings-status", className="muted", style={"marginTop": "8px"}),
         html.P("Note: interval changes apply the next time a collector is started.",
@@ -130,11 +208,26 @@ def register_callbacks(app):
         State("set-alert-low", "value"),
         State("set-notify-webhook", "value"),
         State("set-notify-toggles", "value"),
+        State("set-smtp-host", "value"),
+        State("set-smtp-port", "value"),
+        State("set-smtp-security", "value"),
+        State("set-smtp-user", "value"),
+        State("set-smtp-password", "value"),
+        State("set-smtp-from", "value"),
+        State("set-smtp-from-name", "value"),
+        State("set-feedback-recipient", "value"),
+        State("set-feedback-rate", "value"),
+        State("set-feedback-toggles", "value"),
+        State("set-geo-toggles", "value"),
+        State("set-geo-provider", "value"),
         prevent_initial_call=True)
     def save(_, username, password, login_url, power_url, after_url,
              flood_interval, power_interval, roads_url, roads_key,
              roads_interval, storm_radars, alert_high, alert_low,
-             notify_webhook, notify_toggles):
+             notify_webhook, notify_toggles, smtp_host, smtp_port,
+             smtp_security, smtp_user, smtp_password, smtp_from,
+             smtp_from_name, feedback_recipient, feedback_rate,
+             feedback_toggles, geo_toggles, geo_provider):
         if not auth.is_admin():
             return "Not authorised."
         cfg = load_config()
@@ -167,6 +260,21 @@ def register_callbacks(app):
         cfg["notify"]["on_flood_alert"] = "flood" in toggles
         cfg["notify"]["on_roads_alert"] = "roads" in toggles
         cfg["notify"]["on_watchdog"] = "watchdog" in toggles
+        cfg["smtp"]["host"] = (smtp_host or "").strip()
+        cfg["smtp"]["port"] = int(smtp_port or 587)
+        cfg["smtp"]["security"] = smtp_security or "auto"
+        cfg["smtp"]["username"] = (smtp_user or "").strip()
+        cfg["smtp"]["password"] = smtp_password or ""
+        cfg["smtp"]["from_address"] = (smtp_from or "").strip()
+        cfg["smtp"]["from_name"] = (smtp_from_name or "").strip()
+        cfg["feedback"]["recipient"] = (feedback_recipient or "").strip()
+        # 0 is meaningful here (no limit), so `or` would be wrong — only
+        # a genuinely empty box falls back to the default.
+        cfg["feedback"]["max_per_hour"] = (
+            int(feedback_rate) if feedback_rate not in (None, "") else 5)
+        cfg["feedback"]["email_enabled"] = "email" in (feedback_toggles or [])
+        cfg["geo"]["enabled"] = "enabled" in (geo_toggles or [])
+        cfg["geo"]["provider_url"] = (geo_provider or "").strip()
         try:
             save_config(cfg)
         except OSError as e:
