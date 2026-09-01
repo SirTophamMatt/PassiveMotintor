@@ -252,6 +252,13 @@ def create_app(autostart=False):
 
     _register_health(app)
 
+    # Read-only spatial API (GeoJSON) for external mapping clients — God's Eye
+    # View consumes it. A plain Flask route like /health, so it sits outside the
+    # Dash page router and its admin gating. There is no write path here: every
+    # route is a GET that only reads.
+    from app import api_intel
+    api_intel.register(app)
+
     @app.callback(Output("main-nav", "children"), Input("url", "pathname"))
     def render_nav(_pathname):
         items = [(path, label) for path, label, _ in PUBLIC_PAGES]
