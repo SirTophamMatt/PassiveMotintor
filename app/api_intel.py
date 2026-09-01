@@ -15,7 +15,7 @@ client swaps between them by changing a URL and nothing else. Every feature
 carries:
 
     name      display label
-    hazard    warning | flood-warning | incident | burn-area
+    hazard    warning | weather-warning | incident | burn-area
               | flood | storm | power | roads
     severity  3 critical / 2 major / 1 notable / 0 background
     status    short operational state ("Watch and Act", "Below flood level")
@@ -51,7 +51,7 @@ LAYERS = (
     "pm-warn-watch",
     "pm-warn-advice",
     "pm-warn-community",
-    "pm-flood-warning",
+    "pm-weather-warning",
     "pm-incident",
     "pm-burn",
     "pm-flood",
@@ -100,6 +100,42 @@ def _detail(parts):
         seen.add(text.lower())
         out.append(text)
     return " · ".join(out)
+
+
+def _headline_summary(headline):
+    """First meaningful line of a warning headline, clamped.
+
+    BoM products carry no event/size/resources, so their detail line came out
+    blank and the card showed a bare "Warning". The headline holds the real
+    content — sometimes a clean title ("Strong Wind Warning"), sometimes a
+    paragraph of warning text — so take its first line.
+    """
+    for line in _clean(headline).splitlines():
+        line = line.strip()
+        if line:
+            return line if len(line) <= 120 else line[:117] + "…"
+    return ""
+
+
+def _is_bureau(row):
+    """Is this a Bureau of Meteorology product?
+
+    The feed puts the issuing domain in a DIFFERENT column depending on record
+    type, which is easy to get wrong:
+
+        feed_type='warning'   category1 = escalation level ('Advice')
+                              category2 = domain ('Met' | 'Fire')
+        feed_type='incident'  category1 = domain or type ('Met' | 'Fire' |
+                              'Planned Burn' | 'Tree Down' | ...)
+
+    So BoM products arrive BOTH ways: riverine flood warnings as 'warning' with
+    category2='Met', and district wind/severe-weather warnings as 'incident'
+    with category1='Met'. Checking only category2 left the wind warnings in the
+    Incidents layer — a Damaging Wind warning over six districts is not an
+    incident.
+    """
+    return "met" in (_clean(row.get("category2")).lower(),
+                     _clean(row.get("category1")).lower())
 
 
 def _valid(lat, lon):
@@ -200,7 +236,7 @@ def _vic_emergency(include_resolved=False):
 
     groups = {key: [] for key in (
         "warn-emergency", "warn-watch", "warn-advice", "warn-community",
-        "warn-flood", "incident", "burn")}
+        "weather", "incident", "burn")}
 
     for row in df.to_dict("records"):
         if not _valid(row.get("latitude"), row.get("longitude")):
@@ -211,23 +247,24 @@ def _vic_emergency(include_resolved=False):
         level_key = warning.lower()
         resolved = bool(row.get("resolved"))
 
-        if feed_type == "warning":
-            bucket = None
-            severity = 1
-            for needle, key, sev in _WARNING_BUCKETS:
-                if needle in level_key:
-                    bucket, severity = key, sev
-                    break
-            # category2 == 'Met' marks the Bureau-issued products (riverine
-            # flood, severe weather, thunderstorm). They get their own layer so
-            # weather toggles independently of fire; severity still comes from
-            # the escalation level.
-            if _clean(row.get("category2")).lower() == "met":
-                bucket, hazard = "warn-flood", "flood-warning"
-            else:
-                # An unrecognised level parks with Advice — the lowest
-                # ACTIONABLE rung — rather than vanishing.
-                bucket, hazard = (bucket or "warn-advice"), "warning"
+        matched_bucket = None
+        matched_severity = 1
+        for needle, key, sev in _WARNING_BUCKETS:
+            if needle in level_key:
+                matched_bucket, matched_severity = key, sev
+                break
+
+        # Tested BEFORE feed_type: a Bureau product can arrive as either a
+        # 'warning' or an 'incident' and belongs in the weather layer either
+        # way. Severity still comes from the escalation level when the feed
+        # gives one; district weather warnings carry none.
+        if _is_bureau(row):
+            bucket, hazard, severity = "weather", "weather-warning", matched_severity
+        elif feed_type == "warning":
+            # An unrecognised level parks with Advice — the lowest ACTIONABLE
+            # rung — rather than vanishing.
+            bucket = matched_bucket or "warn-advice"
+            hazard, severity = "warning", matched_severity
         elif feed_type == "burn-area":
             bucket, severity, hazard = "burn", 0, "burn-area"
         else:
@@ -251,7 +288,7 @@ def _vic_emergency(include_resolved=False):
                 _clean(row.get("size")),
                 f"{int(resources)} resources" if resources else "",
                 _clean(row.get("action")),
-            ]),
+            ]) or _headline_summary(row.get("headline")),
             "headline": _clean(row.get("headline")),
             "category": _clean(row.get("category1")),
             "resolved": resolved,
@@ -504,7 +541,7 @@ def build_layers(include_resolved=False):
         "pm-warn-watch": vic["warn-watch"],
         "pm-warn-advice": vic["warn-advice"],
         "pm-warn-community": vic["warn-community"],
-        "pm-flood-warning": vic["warn-flood"],
+        "pm-weather-warning": vic["weather"],
         "pm-incident": vic["incident"],
         "pm-burn": vic["burn"],
         "pm-flood": _floods(),
