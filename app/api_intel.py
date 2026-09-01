@@ -117,25 +117,26 @@ def _headline_summary(headline):
     return ""
 
 
-def _is_bureau(row):
-    """Is this a Bureau of Meteorology product?
+def _is_bureau_weather(row):
+    """A Bureau product with NO escalation level — a district weather warning
+    rather than a declared VicEmergency warning.
 
-    The feed puts the issuing domain in a DIFFERENT column depending on record
-    type, which is easy to get wrong:
+    Only ever asked of feed_type='incident' records, which is what makes the
+    answer meaningful. The feed records the issuing domain in a different column
+    per record type:
 
         feed_type='warning'   category1 = escalation level ('Advice')
                               category2 = domain ('Met' | 'Fire')
         feed_type='incident'  category1 = domain or type ('Met' | 'Fire' |
                               'Planned Burn' | 'Tree Down' | ...)
 
-    So BoM products arrive BOTH ways: riverine flood warnings as 'warning' with
-    category2='Met', and district wind/severe-weather warnings as 'incident'
-    with category1='Met'. Checking only category2 left the wind warnings in the
-    Incidents layer — a Damaging Wind warning over six districts is not an
-    incident.
+    So a Bureau riverine flood warning arrives as a 'warning' WITH a level and
+    belongs on the ladder like any other declared warning. A Bureau wind or
+    severe-weather warning arrives as an 'incident' with NO level, and is
+    neither a ladder warning nor an operational incident — that is this record.
     """
-    return "met" in (_clean(row.get("category2")).lower(),
-                     _clean(row.get("category1")).lower())
+    return "met" in (_clean(row.get("category1")).lower(),
+                     _clean(row.get("category2")).lower())
 
 
 def _valid(lat, lon):
@@ -254,19 +255,25 @@ def _vic_emergency(include_resolved=False):
                 matched_bucket, matched_severity = key, sev
                 break
 
-        # Tested BEFORE feed_type: a Bureau product can arrive as either a
-        # 'warning' or an 'incident' and belongs in the weather layer either
-        # way. Severity still comes from the escalation level when the feed
-        # gives one; district weather warnings carry none.
-        if _is_bureau(row):
-            bucket, hazard, severity = "weather", "weather-warning", matched_severity
-        elif feed_type == "warning":
+        # The split is by ESCALATION LEVEL, not by issuing agency.
+        #
+        # A feed_type='warning' record carries a level, so it belongs on the
+        # ladder whoever issued it — a riverine flood Advice is an Advice, and
+        # burying it in a weather layer hides it from the level it was actually
+        # declared at. Only Bureau products carrying NO level (district wind and
+        # severe weather, which arrive as incidents) form the weather layer.
+        if feed_type == "warning":
             # An unrecognised level parks with Advice — the lowest ACTIONABLE
             # rung — rather than vanishing.
             bucket = matched_bucket or "warn-advice"
             hazard, severity = "warning", matched_severity
         elif feed_type == "burn-area":
             bucket, severity, hazard = "burn", 0, "burn-area"
+        elif _is_bureau_weather(row):
+            # An 'incident' from the Bureau is a district weather warning, not
+            # an operational incident: a Damaging Wind warning over six forecast
+            # districts is not the same kind of thing as a tree down.
+            bucket, hazard, severity = "weather", "weather-warning", 1
         else:
             bucket, hazard = "incident", "incident"
             severity = 2 if _clean(row.get("category1")).lower() == "fire" else 1
