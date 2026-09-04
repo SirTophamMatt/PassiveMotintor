@@ -298,12 +298,12 @@ def test_replay_and_the_live_map_use_the_same_renderers(event):
 
 
 def test_a_moment_with_nothing_happening_still_renders_a_map(event):
-    """Plotly falls back to bare numbered axes with no mapbox traces, and a
+    """Plotly falls back to bare numbered axes with no map traces, and a
     quiet moment is the normal case in replay."""
     figure = unified.map_figure(["fire"], dark=False,
                                 source=replay.frame_source(at(60)),
                                 uirevision="replay-map")
-    assert figure.layout.mapbox.style == "open-street-map"
+    assert figure.layout.map.style == "open-street-map"
     assert len(figure.data) == 1 and len(figure.data[0].lat) == 0
 
 

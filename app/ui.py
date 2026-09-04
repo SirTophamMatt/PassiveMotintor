@@ -2,7 +2,7 @@
 from dash import html
 
 # dcc.Graph `config` for map figures. Plotly disables mouse-wheel zoom on
-# mapbox maps by default (only the +/- buttons work); scrollZoom re-enables it.
+# map figures by default (only the +/- buttons work); scrollZoom re-enables it.
 # Use on MAP graphs only — enabling it on cartesian line charts would hijack
 # page scrolling. `displayModeBar: "hover"` keeps the toolbar out of the way.
 MAP_CONFIG = {"scrollZoom": True, "displayModeBar": "hover"}
@@ -15,7 +15,7 @@ def apply_theme(fig, dark):
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=40, r=20, t=50, b=40),
         # Give the legend an opaque panel + explicit font colour so it stays
-        # readable when it sits over map tiles (mapbox legends are otherwise
+        # readable when it sits over map tiles (map legends are otherwise
         # transparent and the basemap shows through the text). Merges with any
         # per-figure legend position/orientation set by the page.
         legend=dict(

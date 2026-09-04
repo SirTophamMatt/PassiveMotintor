@@ -204,10 +204,10 @@ def _aws_hover(r):
 
 
 def _empty_map(title, dark):
-    fig = px.scatter_mapbox(
+    fig = px.scatter_map(
         pd.DataFrame({"latitude": [], "longitude": []}),
         lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
-        mapbox_style="open-street-map", title=title)
+        map_style="open-street-map", title=title)
     return ui.apply_theme(fig, dark)
 
 
@@ -226,7 +226,7 @@ def _aws_map(df, metric_key, dark):
     fig = go.Figure()
     missing = plot[values.isna()]
     if not missing.empty:
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             mode="markers", lat=missing["latitude"], lon=missing["longitude"],
             name="Not reporting", marker=dict(size=6, color="#9aa0a6"),
             hoverinfo="text",
@@ -239,7 +239,7 @@ def _aws_map(df, metric_key, dark):
             sizes = [8 + 20 * (float(v) / span) for v in vals]
         else:
             sizes = 11
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             mode="markers", lat=reporting["latitude"], lon=reporting["longitude"],
             name=metric["label"],
             marker=dict(size=sizes, color=vals, colorscale=metric["scale"],
@@ -249,7 +249,7 @@ def _aws_map(df, metric_key, dark):
             text=[h for h, m in zip(hover, values.notna()) if m]))
     fig.update_layout(
         title=metric["title"], showlegend=False,
-        mapbox=dict(style="open-street-map", center=MELB_CENTER, zoom=5.2),
+        map=dict(style="open-street-map", center=MELB_CENTER, zoom=5.2),
         # Pinned so switching metric or auto-refreshing keeps the user's view.
         uirevision="aws-observations")
     return ui.apply_theme(fig, dark)
@@ -284,22 +284,22 @@ def _significant_observations(summary):
 
 def _rain_map(df, dark):
     if df.empty or df[["latitude", "longitude"]].dropna().empty:
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             pd.DataFrame({"latitude": [], "longitude": []}),
             lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
-            mapbox_style="open-street-map",
+            map_style="open-street-map",
             title="Rainfall (no locations resolved yet)")
         return ui.apply_theme(fig, dark)
     plot = df.dropna(subset=["latitude", "longitude"]).copy()
     plot["_size"] = plot["rain_since_9am_mm"].fillna(0).clip(lower=0) + 2
-    fig = px.scatter_mapbox(
+    fig = px.scatter_map(
         plot, lat="latitude", lon="longitude",
         color="rain_since_9am_mm", size="_size", size_max=24,
         color_continuous_scale="Blues", hover_name="name",
         hover_data={"catchment": True, "rain_since_9am_mm": True,
                     "forecast_max_mm": True, "forecast_chance": True,
                     "latitude": False, "longitude": False, "_size": False},
-        zoom=5.2, center=MELB_CENTER, mapbox_style="open-street-map",
+        zoom=5.2, center=MELB_CENTER, map_style="open-street-map",
         title="Rain since 9am (mm)")
     return ui.apply_theme(fig, dark)
 

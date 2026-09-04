@@ -197,7 +197,7 @@ def _polygons(geom):
 
 
 def _fill_layer(geometries, colour, opacity):
-    """A Plotly mapbox fill layer from a list of GeoJSON geometry strings, or
+    """A Plotly map fill layer from a list of GeoJSON geometry strings, or
     None if none contain a fillable polygon. Sits below the marker traces."""
     features = []
     for geom in geometries:
@@ -221,21 +221,21 @@ def _map_figure(df, dark, burn_df=None):
     events that have an area, plus an optional historical burn-area layer."""
     located = df.dropna(subset=["latitude", "longitude"]) if not df.empty else df
     if located is None or located.empty:
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             pd.DataFrame({"latitude": [], "longitude": []}),
             lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
-            mapbox_style="open-street-map", title="Active Incidents & Warnings")
+            map_style="open-street-map", title="Active Incidents & Warnings")
     else:
         plot = located.copy()
         plot["Kind"] = plot.apply(_kind, axis=1)
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             plot, lat="latitude", lon="longitude", color="Kind",
             color_discrete_map=KIND_COLOURS,
             category_orders={"Kind": WARNING_KINDS + INCIDENT_KINDS},
             hover_name="location",
             hover_data={"category1": True, "status": True, "size": True,
                         "latitude": False, "longitude": False, "Kind": False},
-            zoom=5.2, center=MELB_CENTER, mapbox_style="open-street-map",
+            zoom=5.2, center=MELB_CENTER, map_style="open-street-map",
             title="Active Incidents & Warnings")
         fig.update_traces(marker=dict(size=12))
     # The AWS HTML legend below the map is the key, so hide Plotly's.
@@ -257,7 +257,7 @@ def _map_figure(df, dark, burn_df=None):
             if layer:
                 layers.append(layer)
     if layers:
-        fig.update_layout(mapbox_layers=layers)  # magic-underscore: keeps style/zoom
+        fig.update_layout(map_layers=layers)  # magic-underscore: keeps style/zoom
     return ui.apply_theme(fig, dark)
 
 

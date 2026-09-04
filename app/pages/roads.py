@@ -132,7 +132,7 @@ def _map_figure(df, dark):
                     lons.append(None); lats.append(None); texts.append(None)
             has_lines = bool(lats)
             if has_lines:
-                fig.add_trace(go.Scattermapbox(
+                fig.add_trace(go.Scattermap(
                     mode="lines", lat=lats, lon=lons, name=kind,
                     legendgroup=kind, line=dict(color=colour,
                     width=5 if kind == "Closure" else 3),
@@ -142,7 +142,7 @@ def _map_figure(df, dark):
             pts = sub[sub["geometry"].isna() | (sub["geometry"] == "")]
             pts = pts.dropna(subset=["latitude", "longitude"])
             if not pts.empty:
-                fig.add_trace(go.Scattermapbox(
+                fig.add_trace(go.Scattermap(
                     mode="markers", lat=pts["latitude"], lon=pts["longitude"],
                     name=kind, legendgroup=kind, showlegend=not has_lines,
                     marker=dict(size=10, color=colour), hoverinfo="text",
@@ -150,7 +150,7 @@ def _map_figure(df, dark):
 
     fig.update_layout(
         title="Active Road Disruptions",
-        mapbox=dict(style="open-street-map", center=VIC_CENTER, zoom=5.2),
+        map=dict(style="open-street-map", center=VIC_CENTER, zoom=5.2),
         legend=dict(orientation="h", y=1.02))
     return ui.apply_theme(fig, dark)
 

@@ -140,10 +140,10 @@ def register_callbacks(app):
 
         points = analytics.located_points(days=30)
         if points.empty:
-            geo_fig = px.scatter_mapbox(lat=[], lon=[], zoom=1)
+            geo_fig = px.scatter_map(lat=[], lon=[], zoom=1)
         else:
             points = points.assign(place=points.apply(_place, axis=1))
-            geo_fig = px.scatter_mapbox(
+            geo_fig = px.scatter_map(
                 points, lat="latitude", lon="longitude", size="views",
                 color="visitors", hover_name="place",
                 hover_data={"visitors": True, "views": True,
@@ -151,7 +151,7 @@ def register_callbacks(app):
                 color_continuous_scale="Blues", size_max=28, zoom=2,
                 center={"lat": -30.0, "lon": 140.0})
         # open-street-map needs no Mapbox token, same as every other map here.
-        geo_fig.update_layout(mapbox_style="open-street-map", height=420,
+        geo_fig.update_layout(map_style="open-street-map", height=420,
                               margin=dict(l=0, r=0, t=10, b=0))
 
         countries = analytics.by_country(days=30)

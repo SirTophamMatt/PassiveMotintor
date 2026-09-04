@@ -59,7 +59,7 @@ def _val(row, col):
 
 
 # --- per-layer RENDERERS ------------------------------------------------------
-# Each takes a DataFrame and returns (list[Scattermapbox], list[fill layer]).
+# Each takes a DataFrame and returns (list[Scattermap], list[fill layer]).
 #
 # They deliberately do NOT fetch. That is what lets Event Replay draw the same
 # map from `history.state_at(t)` instead of from the current tables, without a
@@ -78,7 +78,7 @@ def render_fire(df):
         sub = located[located["Kind"] == kind]
         if sub.empty:
             continue
-        traces.append(go.Scattermapbox(
+        traces.append(go.Scattermap(
             mode="markers", lat=sub["latitude"], lon=sub["longitude"],
             name=kind, legendgroup="fire", marker=dict(size=11, color=colour),
             hoverinfo="text", text=[_fire_hover(r) for _, r in sub.iterrows()]))
@@ -112,7 +112,7 @@ def render_flood(df):
         sub = df[df["label"] == label]
         if sub.empty:
             continue
-        traces.append(go.Scattermapbox(
+        traces.append(go.Scattermap(
             mode="markers", lat=sub["latitude"], lon=sub["longitude"],
             name=legend, legendgroup="flood",
             marker=dict(size=size, color=colour),
@@ -155,7 +155,7 @@ def render_roads(df):
                 lons.append(None); lats.append(None); texts.append(None)
         has_lines = bool(lats)
         if has_lines:
-            traces.append(go.Scattermapbox(
+            traces.append(go.Scattermap(
                 mode="lines", lat=lats, lon=lons, name="Road: %s" % kind,
                 legendgroup="roads", line=dict(color=colour,
                 width=5 if kind == "Closure" else 3),
@@ -163,7 +163,7 @@ def render_roads(df):
         pts = sub[sub["geometry"].isna() | (sub["geometry"] == "")]
         pts = pts.dropna(subset=["latitude", "longitude"])
         if not pts.empty:
-            traces.append(go.Scattermapbox(
+            traces.append(go.Scattermap(
                 mode="markers", lat=pts["latitude"], lon=pts["longitude"],
                 name="Road: %s" % kind, legendgroup="roads",
                 showlegend=not has_lines, marker=dict(size=8, color=colour),
@@ -184,7 +184,7 @@ def render_storm(df):
             continue
         sizes = [max(10, min(30, (a ** 0.5) + 8)) if pd.notna(a) else 12
                  for a in sub["area_km2"]]
-        traces.append(go.Scattermapbox(
+        traces.append(go.Scattermap(
             mode="markers", lat=sub["latitude"], lon=sub["longitude"],
             name="Storm: %s" % cls, legendgroup="storm",
             marker=dict(size=sizes, color=colour),
@@ -234,7 +234,7 @@ def render_power(df):
                 "{:,}".format(int(r["customers_off"])) if pd.notna(r.get("customers_off")) else "?",
                 (" · " + _val(r, "type")) if _val(r, "type") else "")
             for _, r in df.iterrows()]
-    return [go.Scattermapbox(
+    return [go.Scattermap(
         mode="markers", lat=df["latitude"], lon=df["longitude"],
         name="Power outage", legendgroup="power",
         marker=dict(size=sizes, color="#7048e8"), hoverinfo="text",
@@ -252,7 +252,7 @@ def render_rain(df):
     text = ["<b>%s</b><br>%.1f mm since 9am" % (_val(r, "name") or "AWS",
                                                 r["rain_since_9am_mm"])
             for _, r in df.iterrows()]
-    return [go.Scattermapbox(
+    return [go.Scattermap(
         mode="markers", lat=df["latitude"], lon=df["longitude"],
         name="Rain since 9am", legendgroup="rain",
         marker=dict(size=9, color=df["rain_since_9am_mm"], colorscale="Blues",
@@ -280,7 +280,7 @@ def render_wind(df):
             for _, r in df.iterrows()]
     sizes = [max(8, min(26, 8 + (float(g) - WIND_LAYER_MIN_GUST_KMH) * 0.35))
              for g in df["wind_gust_kmh"]]
-    return [go.Scattermapbox(
+    return [go.Scattermap(
         mode="markers", lat=df["latitude"], lon=df["longitude"],
         name="Wind gust ≥ %d km/h" % WIND_LAYER_MIN_GUST_KMH,
         legendgroup="wind",
@@ -354,17 +354,17 @@ def map_figure(on, dark, source=live_source, center=None, zoom=5.4,
     for trace in traces:
         fig.add_trace(trace)
     if not traces:
-        # With no mapbox traces Plotly falls back to a cartesian plot and draws
-        # bare numbered axes where the map should be. One empty Scattermapbox
+        # With no map traces Plotly falls back to a cartesian plot and draws
+        # bare numbered axes where the map should be. One empty Scattermap
         # keeps it a map — which is what "nothing was happening here" should
         # look like, and Replay hits this on every quiet moment.
-        fig.add_trace(go.Scattermapbox(lat=[], lon=[], mode="markers",
+        fig.add_trace(go.Scattermap(lat=[], lon=[], mode="markers",
                                        showlegend=False, hoverinfo="skip"))
-    mapbox = dict(style="open-street-map", center=center or VIC_CENTER, zoom=zoom)
+    map_cfg = dict(style="open-street-map", center=center or VIC_CENTER, zoom=zoom)
     if fills:
-        mapbox["layers"] = fills
+        map_cfg["layers"] = fills
     fig.update_layout(
-        mapbox=mapbox,
+        map=map_cfg,
         legend=dict(orientation="h", y=1.02, font=dict(size=11)),
         # Pin the view across auto-refreshes so panning/zooming isn't reset.
         uirevision=uirevision)

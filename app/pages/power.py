@@ -86,16 +86,16 @@ def _trend_figure(df, title, dark):
 
 def _map_figure(outages, dark):
     if outages.empty or outages[["latitude", "longitude"]].dropna().empty:
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             pd.DataFrame({"latitude": [], "longitude": []}),
             lat="latitude", lon="longitude", zoom=6,
-            center={"lat": -37.8136, "lon": 144.9631}, mapbox_style="open-street-map",
+            center={"lat": -37.8136, "lon": 144.9631}, map_style="open-street-map",
             title="Active Outages (no geocoded locations yet)")
         return ui.apply_theme(fig, dark)
     df = outages.dropna(subset=["latitude", "longitude"]).copy()
     df["Duration"] = df["duration_mins"].apply(power_data.duration_bucket)
     df["customers_off"] = df["customers_off"].fillna(0).clip(lower=1)
-    fig = px.scatter_mapbox(
+    fig = px.scatter_map(
         df, lat="latitude", lon="longitude",
         size="customers_off", size_max=30,
         color="Duration", color_discrete_map=power_data.DURATION_COLOUR_MAP,
@@ -103,7 +103,7 @@ def _map_figure(outages, dark):
         hover_data={"customers_off": True, "duration_mins": True, "type": True,
                     "latitude": False, "longitude": False, "Duration": False},
         zoom=6, center={"lat": -37.8136, "lon": 144.9631},
-        mapbox_style="open-street-map",
+        map_style="open-street-map",
         title="Active Outages by Location")
     return ui.apply_theme(fig, dark)
 
