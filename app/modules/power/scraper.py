@@ -70,7 +70,10 @@ class PowerScraper:
         self.cfg = cfg
         self.driver = None
         self._geolocator = None
-        self._lock = threading.Lock()
+        # Reentrant: scrape_cycle() holds this lock and calls stop() on
+        # its error paths, which takes it again. A plain Lock deadlocks
+        # the collector thread there, leaving Chrome running forever.
+        self._lock = threading.RLock()
         # Window handles: the EM-COP session tab is kept open and untouched;
         # the dashboard is loaded in a separate tab so the session tab never
         # navigates away from EM-COP (which appears to drop authentication).

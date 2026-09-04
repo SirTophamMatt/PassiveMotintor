@@ -6,6 +6,12 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # Reap orphaned Chrome/ChromeDriver children. PID 1 here is the shell
+    # that starts Xvfb and the app, and it never reaps them, so failed
+    # scrape cycles leave zombies behind until the container hits its
+    # cgroup PID limit (~9.5k) and can no longer fork — Selenium then
+    # fails with 'Cannot fork' / 'ChromeDriver unexpectedly exited'.
+    init: true
     environment:
       # Admin login password (required before exposing publicly).
       UM_ADMIN_PASSWORD: ${UM_ADMIN_PASSWORD}
