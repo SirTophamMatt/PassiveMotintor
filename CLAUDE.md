@@ -29,6 +29,7 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/modules/{flood,power,emcop}/` — `scraper.py` + `data.py` per module
 - `app/briefing.py` — operational briefing model (UI-free; the `/briefing` page and the briefing
   PDF both render from it)
+- `app/chrome.py` — shared Chrome/ChromeDriver startup (power scraper + EM-COP launch)
 - `app/history.py` — generic entity state-change journal (what makes Event Replay possible)
 - `app/replay.py` — historical reconstruction for `/replay` (UI-free)
 - `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
@@ -92,7 +93,7 @@ If a session drops, the scraper re-logs-in on the next cycle.
   a date on its own normalises to whole-day bounds, which would otherwise round an exact end time
   out to 23:59:59 on the next save. **Export** (`app/export.py`) → one XLSX per tag/range. **Overview briefing PDF**
   (`app/reporting.py`, kaleido+reportlab).
-- **Hosting:** Dockerfile (Chrome+Xvfb, `xvfb-run python run_web.py`) + docker-compose (app+Caddy,
+- **Hosting:** Dockerfile (Chrome+Xvfb via `docker-entrypoint.sh`) + docker-compose (app+Caddy,
   `./data:/data` volume) + Caddyfile (auto-HTTPS). `UM_DATA_DIR` points writable state at the volume.
   `/health` returns JSON + 200/503 for uptime monitors.
 
@@ -871,6 +872,49 @@ what should I be watching* — and is useful **on its own, before anyone generat
   `resolve_async` makes **no** blocking call, private-range caching, and the analytics wiring
   (truncated-only storage, the full address appearing nowhere in the table, aggregates, and a
   geolocation failure never breaking navigation).
+
+## Power scraper — "Chrome instance exited" on the server (fixed 2026-09-20)
+- **Symptom.** Overview shows `Power — Last error: session not created: Chrome instance exited.
+  Examine ChromeDriver verbose log to determine the cause.` Every cycle fails; flood/fire/weather
+  are unaffected because they are pure `requests`.
+- **What that message means.** Chrome started and died before chromedriver could attach. The
+  reason is never in the Selenium traceback — it is in chromedriver's verbose log, which the old
+  code never asked for. Three causes fit this deployment, and the fix addresses all three:
+  1. **No X display.** The scraper runs a *visible* Chrome (EM-COP fingerprints headless), so it
+     needs Xvfb. The old inline `CMD` backgrounded Xvfb once and never watched it. A container
+     restart reuses the writable layer, so `/tmp/.X99-lock` from the previous boot was still
+     there and Xvfb refused to start — the app came up fine, Chrome had nowhere to draw.
+  2. **A profile still locked.** Every session used Chrome's default profile
+     (`/root/.config/google-chrome`). A Chrome left behind by a failed cycle keeps its
+     SingletonLock, and the next Chrome exits on startup until something clears it by hand.
+  3. **OOM.** Chrome killed by the cgroup limit mid-startup looks identical from the outside;
+     only the chromedriver log (now kept) and `dmesg` distinguish it.
+- **Fix.** `docker-entrypoint.sh` clears the stale lock, starts Xvfb, and restarts it if it dies
+  (`wait` reaps it, so a crashed Xvfb is not left as a zombie); the app only starts once the X
+  socket exists. `_init_driver` gives each session a throwaway `--user-data-dir` (removed in
+  `stop()`), refuses to start with a clear message when a visible Chrome has no `DISPLAY`, and
+  always runs chromedriver with `--verbose` into `$UM_DATA_DIR/chromedriver.log` (trimmed at
+  2 MB), whose tail is appended to the error the Overview shows.
+- **Diagnosing the next one:** `docker compose exec app cat /data/chromedriver.log`,
+  `docker compose exec app pgrep -a chrome | wc -l` (leftovers), `docker compose logs app | grep
+  entrypoint` (Xvfb restarts).
+- **The EM-COP quick-launch had the same root causes (fixed 2026-09-21).** It built its own
+  Chrome with no sandbox switch and no profile isolation, so on the server it could not start a
+  browser at all. Both callers now go through **`app/chrome.py`** (`start()` / `release()` /
+  `has_display()` / `log_tail()`), which owns the throwaway profile, the verbose driver log and
+  the sandbox decision — so the two cannot drift apart on the parts that actually break.
+- **`--no-sandbox` is now added only where it is forced** (posix + euid 0, i.e. the container).
+  Chrome refuses to sandbox as root and will not start; everywhere else — including the desktop
+  build, which previously passed the flag unconditionally — keeps its sandbox. `--disable-dev-shm-usage`
+  is gated the same way, being a container concern (compose already sets `shm_size: 1gb`).
+- **The launcher now tells the truth about where the window opened.** On the server the browser
+  lands inside Xvfb where nobody can see it, so the status says so instead of reporting success —
+  it is only useful there as a credentials check. With no display at all it declines up front
+  rather than dying inside Selenium. Closed browsers are pruned (`_prune_drivers`) so repeated
+  clicks stop leaking a Chrome and its profile per launch.
+- **Tests:** `tests/test_chrome.py` (9) — the DISPLAY guard, the log tail and its trim, per-run
+  profile isolation, a failed start cleaning up and carrying the log pointer, driver pruning, and
+  the launcher refusing rather than crashing with no display. No real browser is started.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

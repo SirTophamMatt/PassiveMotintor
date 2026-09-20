@@ -3,21 +3,28 @@
 This replaces the old '#Passive Monitor.py' tkinter tool. Runs in a
 background thread so the dashboard stays responsive; the browser window
 is left open for the user.
+
+It is a desktop-build feature: the window opens on whatever machine runs the
+app, so on the server it lands inside Xvfb where nobody can see it. That is
+worth saying out loud in the status rather than reporting success, and it is
+why Chrome is started through app.chrome — as root in the container the plain
+options would not start a browser at all.
 """
 import logging
+import os
 import threading
 import time
 
-from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
+
+from app import chrome
 
 log = logging.getLogger(__name__)
 
 # Keep references so launched browsers aren't garbage-collected (and closed).
+# Each entry is (driver, profile_dir) — the profile is this browser's alone.
 _drivers = []
 _status = {"message": "", "busy": False}
 _lock = threading.Lock()
@@ -34,16 +41,47 @@ def _set_status(message, busy):
         _status["busy"] = busy
 
 
+def _on_desktop():
+    """True in the desktop build, where the launched window appears in front of
+    the person who clicked. Set by run_desktop.py."""
+    return os.environ.get("UM_DESKTOP") == "1"
+
+
+def _prune_drivers():
+    """Forget browsers the user has closed, releasing their profile dirs.
+    Without this, every click leaks a Chrome for the life of the process."""
+    alive = []
+    for driver, profile_dir in _drivers:
+        try:
+            if driver.window_handles:
+                alive.append((driver, profile_dir))
+                continue
+        except Exception:
+            pass    # window gone, or the browser died — either way, clean up
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        chrome.release(profile_dir)
+    _drivers[:] = alive
+
+
 def _launch(cfg):
     emcop = cfg["emcop"]
     username = emcop["username"]
     try:
+        _prune_drivers()
+        if not chrome.has_display():
+            _set_status(
+                "Cannot launch: this host has no display for a browser window "
+                "(no DISPLAY — on the server that means Xvfb is not running). "
+                "Open EM-COP in your own browser instead.", False)
+            return
         _set_status(f"Launching browser (logging in as '{username}')...", True)
         options = Options()
         options.add_argument("--start-maximized")
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), options=options)
-        _drivers.append(driver)
+        driver, profile_dir = chrome.start(options, "um-emcop-profile-")
+        _drivers.append((driver, profile_dir))
 
         for attempt in range(1, 4):
             log.info("EM-COP quick-launch login as '%s' (attempt %d/3)",
@@ -68,7 +106,15 @@ def _launch(cfg):
         if emcop.get("after_login_url"):
             driver.execute_script(
                 f"window.open('{emcop['after_login_url']}', '_blank');")
-        _set_status(f"EM-COP opened and logged in as '{username}'.", False)
+        if _on_desktop():
+            _set_status(f"EM-COP opened and logged in as '{username}'.", False)
+        else:
+            # Saying "opened" here would send someone hunting for a window that
+            # only exists inside the server's virtual display.
+            _set_status(
+                f"Logged in as '{username}' in a browser ON THE SERVER — there "
+                "is no window on your machine to see. Use this only to check "
+                "the credentials work.", False)
         log.info("EM-COP quick-launch complete as '%s'", username)
     except Exception as e:
         log.exception("EM-COP quick-launch failed")

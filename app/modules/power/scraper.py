@@ -10,13 +10,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
 
-from app import database, history
+from app import chrome, database, history
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +76,8 @@ class PowerScraper:
         # navigates away from EM-COP (which appears to drop authentication).
         self._session_handle = None
         self._dashboard_handle = None
+        # Throwaway Chrome profile for the current session (see _init_driver).
+        self._profile_dir = None
 
     # --- session management -------------------------------------------------
     def _init_driver(self):
@@ -88,16 +87,24 @@ class PowerScraper:
         # if EM-COP later stops fingerprinting it.
         if self.cfg["power"].get("headless"):
             options.add_argument("--headless=new")
+        elif not chrome.has_display():
+            # A visible Chrome with nowhere to draw exits the instant it starts
+            # and chromedriver reports only "Chrome instance exited". On the
+            # server that means Xvfb died or never came up.
+            raise RuntimeError(
+                "Power scraping runs a visible Chrome but no DISPLAY is set — "
+                "Xvfb is not running. Restart the container (its entrypoint "
+                "starts and supervises Xvfb), or set power.headless=true.")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
         # reduce automation fingerprint (keeps the session alive)
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+        # Sandbox switches, the throwaway profile and the verbose driver
+        # log are chrome.start's job (shared with the EM-COP quick-launch).
+        self._clear_profile_dir()   # a previous session's, if stop() was skipped
+        driver, self._profile_dir = chrome.start(options, "um-power-profile-")
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": "Object.defineProperty(navigator, 'webdriver', "
@@ -173,6 +180,12 @@ class PowerScraper:
                 self.driver = None
                 self._session_handle = None
                 self._dashboard_handle = None
+            self._clear_profile_dir()
+
+    def _clear_profile_dir(self):
+        if self._profile_dir:
+            chrome.release(self._profile_dir)
+            self._profile_dir = None
 
     # --- scraping -----------------------------------------------------------
     def _dashboard_state(self):

@@ -1,0 +1,4 @@
+# The container entrypoint must keep LF endings: a CRLF shebang line makes the
+# kernel refuse to run it ("exec format error") when the image is built from a
+# checkout made on Windows.
+*.sh text eol=lf

@@ -39,8 +39,9 @@ VOLUME ["/data"]
 
 EXPOSE 8050
 
-# Xvfb gives the power scraper's Chrome a display to attach to. Started
-# directly in the background (NOT via xvfb-run, whose wrapper script has been
-# seen hanging without ever launching the app); flood-only deployments can
-# drop Xvfb and run `python run_web.py ...` directly.
-CMD ["/bin/sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & export DISPLAY=:99; exec python run_web.py --host 0.0.0.0 --port 8050"]
+# Xvfb gives the power scraper's Chrome a display to attach to. The entrypoint
+# starts and supervises it, then execs the app (NOT via xvfb-run, whose wrapper
+# script has been seen hanging without ever launching the app); flood-only
+# deployments can drop Xvfb and run `python run_web.py ...` directly.
+RUN chmod +x /app/docker-entrypoint.sh
+CMD ["/app/docker-entrypoint.sh"]
