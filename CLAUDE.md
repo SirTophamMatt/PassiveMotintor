@@ -388,6 +388,11 @@ unchanged.
   table (severity-first, georeferenced position + fitted motion), active impact areas
   (with lon/lat bounds; full polygons via the GeoJSON button), the latest annotated frame per
   radar (reads the on-disk PNGs, so NO kaleido needed), and the change-only alert log.
+- **Alerts table readability (2026-09-25):** the `/storm` Alerts table was the one DataTable never
+  given `ui.table_styles`, so it rendered light text on Dash's default white table. It is now
+  themed, and `storm.alert_rows` reshapes rows for reading — `Fri 25 Sep 05:29`, class in
+  capitals and colour (strong red + tinted row, moderate amber; darker amber in light mode),
+  `new_cell`/`escalation` as "New cell"/"Intensified", detail left-aligned and wrapping.
 - Not done: palette tuning against a live *severe* storm, storm cells on the fire/unified
   map (lat/lons now exist), storm cells in the XLSX export, impact-area history playback.
 
