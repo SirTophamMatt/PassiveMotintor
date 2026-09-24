@@ -2,23 +2,23 @@
 <html><head><title>CFA Pager</title><style>td{font-size:11px}</style>
 <script>var refresh = 60;</script></head>
 <body>
-<!-- HAND-BUILT fixture: the real page's markup could not be fetched when this
-     was written. It mimics a typical pager-log table (capcode / time / alias /
-     message) with realistic CFA message text. -->
+<!-- HAND-BUILT table around message text in the real Mazzanet format
+     (incident type after ALERT, map ref + grid, unit list, F-number,
+     [BRIGADE]). The page's own markup has still not been captured. -->
 <table>
 <tr><th>Capcode</th><th>Time</th><th>Alias</th><th>Message</th></tr>
-<tr><td>0240608</td><td>14:02:11 24-09-26</td><td>CFA: CRANBOURNE</td>
-    <td>@@ALERT F2609241234 CRAN1 G&amp;SC1 GRASS FIRE NEAR HOUSES THOMPSONS RD CRANBOURNE SVC 7654 B12 (123456) CCRAN PCRAN [CRAN]</td></tr>
-<tr><td>0240612</td><td>14:02:11 24-09-26</td><td>CFA: CRANBOURNE TANKER</td>
-    <td>@@ALERT F2609241234 CRAN1 G&amp;SC1 GRASS FIRE NEAR HOUSES THOMPSONS RD CRANBOURNE SVC 7654 B12 (123456) CCRAN PCRAN [CRAN]</td></tr>
-<tr><td>0240700</td><td>14:15:40 24-09-26</td><td>CFA: DISTRICT 8</td>
-    <td>@@ALERT F2609241234 MAKE TANKERS 5 PUMPERS 2</td></tr>
-<tr><td>0240710</td><td>14:16:02 24-09-26</td><td>CFA: TRAFALGAR</td>
-    <td>@@ALERT TRAF1 F2609241234 G&amp;SC1 TANKER TRAWT1 REQUIRED</td></tr>
+<tr><td>0240608</td><td>14:02:11 24-09-26</td><td>CFA: CORIO</td>
+    <td>@@ALERT 06233 NOSTC1 TRUCK TRAILER FIRE NORTH BOUND GEELONG RING RD LOVELY BANKS M 431 F8 (661823) * INFO: SUGGESTED ON RAMP ANAKIE RD OR COX RD * F CCORO P62A F2609241234 [CORO]</td></tr>
+<tr><td>0240612</td><td>14:02:11 24-09-26</td><td>CFA: CORIO TANKER</td>
+    <td>@@ALERT 06233 NOSTC1 TRUCK TRAILER FIRE NORTH BOUND GEELONG RING RD LOVELY BANKS M 431 F8 (661823) * INFO: SUGGESTED ON RAMP ANAKIE RD OR COX RD * F CCORO P62A F2609241234 [CORO]</td></tr>
+<tr><td>0240700</td><td>14:15:40 24-09-26</td><td>CFA: DISTRICT 7</td>
+    <td>@@ALERT F2609241234 MAKE TANKERS 5 PUMPERS 2 [CORO]</td></tr>
+<tr><td>0240710</td><td>14:16:02 24-09-26</td><td>CFA: LARA</td>
+    <td>@@ALERT 06233 NOSTC1 TRUCK TRAILER FIRE GEELONG RING RD LOVELY BANKS M 431 F8 (661823) F COROT1 LARAT1 F2609241234 [CORO]</td></tr>
 <tr><td>0240711</td><td>14:16:30 24-09-26</td><td>CFA: LANG LANG</td>
-    <td>@@ALERT LANG1 F2609241234 G&amp;SC1 ULTRALIGHT LANG1 REQUIRED</td></tr>
-<tr><td>0240720</td><td>14:20:05 24-09-26</td><td>CFA: BENALLA</td>
-    <td>HbALERT F2609241240 BENA1 ALARC1 FIRE ALARM OPERATING 1 BRIDGE ST BENALLA</td></tr>
+    <td>@@ALERT F2609241234 NOSTC1 ULTRALIGHT LANGULT1 REQUIRED [CORO]</td></tr>
+<tr><td>0240720</td><td>14:20:05 24-09-26</td><td>FRV: FS91</td>
+    <td>HbALERT 09107 STRUC1 UNIT FIRE 22 STANLEY ST FRANKSTON /STANLEY LANE //BURROW ST M 100A H5 (363769) F AP91 CFTON P90 F2609241240 [FS91_]</td></tr>
 <tr><td>0240730</td><td>14:21:00 24-09-26</td><td></td>
     <td>QD TEST PAGE PLEASE IGNORE</td></tr>
 </table></body></html>
