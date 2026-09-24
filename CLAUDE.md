@@ -1009,6 +1009,35 @@ what should I be watching* — and is useful **on its own, before anyone generat
   `.app:has(.ticker:not(.ticker-hidden)) .sidebar` now pads it clear while the ticker shows.
 - Not done: road closures (they churn too often to chime on). Tests: `tests/test_sound_alerts.py`.
 
+## Console layout, wall display + colour schemes (built 2026-09-24)
+- **Two shell layouts, per browser.** `app/shell.py`. **Classic** = the original sidebar;
+  **Console** = a top bar with grouped menus (Situation / Map / Hazards / Tools — `NAV_GROUPS`;
+  an unlisted path falls into Tools so a new page is never unreachable) + a statewide **status
+  strip** of clickable counts. Chosen from the **Display** panel (button beside Sounds), stored
+  via `persistence="local"` like the sound settings. Both layouts are ALWAYS in the DOM and CSS
+  shows one (`layout-classic` / `layout-console` on `#app-root`) — a callback whose Input is
+  missing never fires. Sounds / Display / theme are rendered ONCE (`shell.controls()`) and CSS
+  docks them into the sidebar foot or the top bar; rendering them twice would duplicate ids.
+- **Console Overview.** In the Console layout `/` renders `overview.console_layout()`: active
+  warnings (from `briefing._warnings`, so the Advice cap holds) + source freshness | the unified
+  map (`unified.map_figure`) | What changed. The route re-renders only `/` when the layout is
+  switched, and a layout switch is not recorded as a page view.
+- **`app/situation.py`** — the counts behind the strip and the wall. Cached for ALL viewers
+  (`CACHE_SECONDS` 45) because `flooding_breakdown` groups the whole of `flood_observations`;
+  classic viewers never compute it. Warning levels stay separate chips; an unreadable source is
+  "—", never 0.
+- **Wall display `/wall`** (`app/pages/wall.py`, public): no nav (`wall-mode` hides the sidebar,
+  console header and Feedback button; the ticker stays), big tiles, Melbourne clock, one-line
+  stale-source banner, the unified map, and a right panel rotating Latest changes → Active
+  warnings → Data sources every 15 s. Full-screen button. Sounds stay reachable, faded, bottom right.
+- **Colour schemes:** Watchdesk (default) · Midnight · Graphite · Night Ops (warm, low-blue for
+  night shifts) · High contrast — each a CSS-variable set for BOTH dark and light
+  (`.app.dark.scheme-x` / `.app.light.scheme-x`), so ☀/☾ works in every scheme. `--on-accent`
+  is the text colour on accent fills. **Warning colours never change with scheme.** DataTables
+  (`ui.table_styles`) now use the CSS variables, so they follow the scheme too. A test pins
+  `SCHEMES` to the stylesheet.
+- Tests: `tests/test_shell.py`.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the

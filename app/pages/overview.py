@@ -78,7 +78,163 @@ def layout():
     ])
 
 
+# --------------------------------------------------------------------------- #
+# Console layout Overview — one screen: warnings | map | what changed.
+# Rendered for "/" when the viewer picks the Console layout (app/shell.py).
+# --------------------------------------------------------------------------- #
+LEVEL_COLOURS = {
+    "Emergency Warning": "#e5484d",
+    "Watch and Act": "#f5a623",
+    "Advice": "#d9bb2b",
+}
+
+
+def warning_rows(limit=10):
+    """Active warnings from both authorities, most severe first, as compact
+    rows. Shared with the wall display. Built on `briefing._warnings`, so the
+    Advice cap and the no-BoM-"level" rule are the briefing's own."""
+    from app import briefing
+    warnings, omitted_advice = briefing._warnings()
+    rows = []
+    for w in warnings[:limit]:
+        if w.source == "VicEmergency":
+            colour = LEVEL_COLOURS.get(w.level, "var(--muted)")
+            heading = w.level
+        else:
+            colour = "var(--accent)"
+            heading = "BoM · " + str(w.kind)
+        meta = [str(w.kind)] if w.source == "VicEmergency" else []
+        if w.issued:
+            meta.append("issued " + w.issued.strftime("%H:%M"))
+        rows.append(html.Div([
+            html.Span(className="warn-diamond", style={"background": colour}),
+            html.Div([
+                html.Div(heading, className="warn-level", style={"color": colour}),
+                dcc.Link(w.title or "Warning", href=w.url or "/fire",
+                         className="warn-title"),
+                html.Div(" · ".join(meta), className="warn-meta") if meta else None,
+            ]),
+        ], className="warn-row"))
+    hidden = max(0, len(warnings) - limit) + omitted_advice
+    if not rows:
+        rows.append(html.Div("No active warnings.", className="muted"))
+    elif hidden:
+        rows.append(html.Div(f"+ {hidden} more — see Fire and Weather",
+                             className="muted warn-more"))
+    return rows
+
+
+def source_rows(snap):
+    from app import briefing
+    rows = []
+    for s in snap.sources:
+        ok = s.is_healthy
+        age = briefing.describe_age(s.age_minutes)
+        rows.append(html.Div([
+            html.Span("●", className="status-on" if ok else "status-off"),
+            html.Span(" " + s.name, className="source-name"),
+            html.Span(age, className="source-age"),
+        ], className="source-row" + ("" if ok else " source-stale")))
+    return rows or [html.Div("Source status unavailable.", className="muted")]
+
+
+def recent_changes(limit=8, hours=12):
+    """Newest feed entries trimmed to their delta lines (context skipped: it is
+    the expensive part and a compact card has no room for it)."""
+    from app import intel_feed
+    from app.pages import feed as feed_page
+    entries = intel_feed.entries(hours=hours, limit=limit, with_context=False)
+    if not entries:
+        return html.Div(f"No changes detected in the last {hours} hours.",
+                        className="muted")
+    for entry in entries:
+        entry["lines"] = entry["lines"][:2]
+    return [feed_page._entry_card(entry, is_new=False) for entry in entries]
+
+
+def console_layout():
+    return html.Div([
+        dcc.Interval(id="ops-interval", interval=30_000, n_intervals=0),
+        html.Div([
+            html.Div([
+                html.Div([html.H3("Active warnings"),
+                          dcc.Link("Fire →", href="/fire", className="ops-more")],
+                         className="ops-head"),
+                html.Div(id="ops-warnings", className="ops-scroll"),
+                html.Div([html.H3("Sources"),
+                          dcc.Link("Briefing →", href="/briefing",
+                                   className="ops-more")],
+                         className="ops-head"),
+                html.Div(id="ops-sources", className="ops-sources"),
+            ], className="ops-col"),
+            html.Div([
+                dcc.Graph(id="ops-map", config=ui.MAP_CONFIG,
+                          className="ops-map-graph", style={"height": "100%"}),
+                dcc.Link("Open full map →", href="/map", className="ops-map-link"),
+            ], className="ops-map"),
+            html.Div([
+                html.Div([html.H3("What changed"),
+                          dcc.Link("Feed →", href="/feed", className="ops-more")],
+                         className="ops-head"),
+                # Actions sit above the feed, not below it: the bottom-right
+                # corner belongs to the floating Feedback button.
+                html.Div([
+                    dcc.Link("Open briefing", href="/briefing",
+                             className="btn btn-primary"),
+                    html.Button("⤓ Briefing PDF", id="ops-pdf-btn", className="btn"),
+                ], className="ops-actions"),
+                html.Div(id="ops-pdf-status", className="muted"),
+                dcc.Download(id="ops-pdf-download"),
+                html.Div(id="ops-changes",
+                         className="feed feed-compact ops-scroll"),
+            ], className="ops-col"),
+        ], className="ops-grid"),
+    ], className="ops-page")
+
+
+def _pdf():
+    from dash import no_update
+
+    from app import reporting
+    try:
+        filename, pdf_bytes = reporting.build_overview_pdf()
+    except reporting.ReportingUnavailable as e:
+        return no_update, f"⚠ {e}"
+    except Exception as e:
+        return no_update, f"⚠ Could not build report: {e}"
+    return dcc.send_bytes(pdf_bytes, filename), "✅ Report generated."
+
+
 def register_callbacks(app):
+    @app.callback(
+        Output("ops-warnings", "children"),
+        Output("ops-sources", "children"),
+        Output("ops-changes", "children"),
+        Input("ops-interval", "n_intervals"))
+    def refresh_console(_):
+        from app import situation
+        return warning_rows(), source_rows(situation.current()), recent_changes()
+
+    @app.callback(
+        Output("ops-map", "figure"),
+        Input("ops-interval", "n_intervals"),
+        Input("theme-store", "data"))
+    def refresh_console_map(_, dark):
+        from app.pages import unified
+        fig = unified.map_figure(unified.DEFAULT_LAYERS, bool(dark),
+                                 uirevision="ops-map")
+        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
+                          legend=dict(y=0.01, yanchor="bottom", x=0.01))
+        return fig
+
+    @app.callback(
+        Output("ops-pdf-download", "data"),
+        Output("ops-pdf-status", "children"),
+        Input("ops-pdf-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def make_console_pdf(_):
+        return _pdf()
+
     @app.callback(
         Output("overview-whats-changed", "children"),
         Input("overview-interval", "n_intervals"))
@@ -86,15 +242,7 @@ def register_callbacks(app):
         """The five most recent changes, trimmed to the delta line — the full
         context lines live on /feed. Context lookups are skipped here because
         the compact card has no room for them and they are the expensive part."""
-        from app import intel_feed
-        from app.pages import feed as feed_page
-        entries = intel_feed.entries(hours=12, limit=5, with_context=False)
-        if not entries:
-            return html.Div("No changes detected in the last 12 hours.",
-                            className="muted")
-        for entry in entries:
-            entry["lines"] = entry["lines"][:2]
-        return [feed_page._entry_card(entry, is_new=False) for entry in entries]
+        return recent_changes(limit=5)
 
     @app.callback(
         Output("overview-kpis", "children"),
@@ -258,13 +406,4 @@ def register_callbacks(app):
         Input("overview-pdf-btn", "n_clicks"),
         prevent_initial_call=True)
     def make_pdf(_):
-        from dash import no_update
-
-        from app import reporting
-        try:
-            filename, pdf_bytes = reporting.build_overview_pdf()
-        except reporting.ReportingUnavailable as e:
-            return no_update, f"⚠ {e}"
-        except Exception as e:
-            return no_update, f"⚠ Could not build report: {e}"
-        return dcc.send_bytes(pdf_bytes, filename), "✅ Report generated."
+        return _pdf()

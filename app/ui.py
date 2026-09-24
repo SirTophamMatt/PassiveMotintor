@@ -46,14 +46,22 @@ def table_styles(dark):
             "textAlign": "left",
         },
     }
+    # CSS variables rather than hex, so tables follow the active colour scheme
+    # (app/shell.py SCHEMES) without the callback needing to know which it is.
     if dark:
-        base["style_header"] = {"backgroundColor": "#1f2733", "color": "#e8eaed",
-                                "fontWeight": "bold", "border": "1px solid #333d4d"}
-        base["style_data"] = {"backgroundColor": "#161c26", "color": "#e8eaed",
-                              "border": "1px solid #2a3340"}
-        base["style_filter"] = {"backgroundColor": "#1f2733", "color": "#e8eaed"}
+        base["style_header"] = {"backgroundColor": "var(--bg-sidebar)",
+                                "color": "var(--text)", "fontWeight": "bold",
+                                "border": "1px solid var(--border)"}
+        base["style_data"] = {"backgroundColor": "var(--bg-panel)",
+                              "color": "var(--text)",
+                              "border": "1px solid var(--border)"}
+        base["style_filter"] = {"backgroundColor": "var(--bg-sidebar)",
+                                "color": "var(--text)"}
     else:
-        base["style_header"] = {"backgroundColor": "#f1f3f4", "fontWeight": "bold"}
+        base["style_header"] = {"backgroundColor": "var(--bg-sidebar)",
+                                "color": "var(--text)", "fontWeight": "bold"}
+        base["style_data"] = {"backgroundColor": "var(--bg-panel)",
+                              "color": "var(--text)"}
     return base
 
 
