@@ -10,7 +10,7 @@ from dash import Dash, Input, Output, State, dcc, get_asset_url, html
 # (with window controls) instead of relying on the OS chrome.
 DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
-from app import auth, database, feedback_ui
+from app import auth, database, feedback_ui, sound_alerts
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
@@ -85,6 +85,8 @@ def _shell_layout():
         dcc.Store(id="theme-store", data=True, storage_type="local"),
         # One shell-wide tick drives the sidebar incident log + news ticker.
         dcc.Interval(id="live-tick", interval=20_000, n_intervals=0),
+        # Opt-in alert sounds (off by default, remembered per browser).
+        *sound_alerts.components(),
     ]
     if DESKTOP:
         children.append(_titlebar())
@@ -104,6 +106,7 @@ def _shell_layout():
                 html.Div("VicEmergency feed", className="side-log-title"),
                 html.Div(id="sidebar-live-log"),
             ], className="side-log"),
+            sound_alerts.toggle_button(),
             html.Button("☀ / ☾", id="theme-toggle", className="btn theme-btn",
                         title="Toggle light/dark mode"),
         ], className="sidebar"),
@@ -314,6 +317,7 @@ def create_app(autostart=False):
     from app import ticker
     ticker.register_callbacks(app)
     feedback_ui.register_callbacks(app)
+    sound_alerts.register_callbacks(app)
 
     if autostart:
         from app.collector import manager
