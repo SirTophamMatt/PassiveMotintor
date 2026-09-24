@@ -63,6 +63,17 @@ html, body { height: 100%; }
 }
 .nav-link:hover { background: var(--bg-panel); color: var(--accent); }
 .theme-btn { margin-top: auto; }
+/* Alert-sounds toggle (app/sound_alerts.py). Accent when on; while the
+   browser still blocks audio (fresh load, no click yet) it says so, because a
+   toggle that reads "on" but can't make a sound is worse than one reading off. */
+.sound-btn { margin-top: 10px; }
+.sound-btn.sound-on { border-color: var(--accent); color: var(--accent); }
+html.wd-audio-locked .sound-btn.sound-on::after {
+    content: "Click anywhere to activate";
+    display: block;
+    font-size: 11px;
+    opacity: 0.8;
+}
 .content { flex: 1; padding: 20px 28px; min-width: 0; }
 
 /* ---- panels & cards ---- */

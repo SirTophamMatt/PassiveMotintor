@@ -66,9 +66,23 @@
                 ctx = new AC();
                 buildBus();
             }
-            if (ctx.state === "suspended") { ctx.resume(); }
+            if (ctx.state === "suspended") {
+                ctx.resume().then(markLocked, markLocked);
+            }
+            markLocked();
         } catch (e) { /* audio unavailable: stay silent */ }
     }
+
+    function ready() { return !!ctx && ctx.state === "running"; }
+
+    // `wd-audio-locked` on <html> while the browser is still refusing audio,
+    // so the page can say "click to activate" without a Dash round trip.
+    // <html> rather than a Dash component, which React would re-render over.
+    function markLocked() {
+        document.documentElement.classList.toggle("wd-audio-locked", !ready());
+    }
+    markLocked();
+
     ["pointerdown", "keydown", "touchstart"].forEach(function (ev) {
         document.addEventListener(ev, unlock, { passive: true });
     });
@@ -250,6 +264,7 @@
             volume = Math.max(0, Math.min(1, Number(v) || 0));
             if (bus) { bus.master.gain.value = volume; }
         },
-        unlock: unlock
+        unlock: unlock,
+        ready: ready
     };
 })();
