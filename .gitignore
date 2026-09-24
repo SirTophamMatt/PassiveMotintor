@@ -18,3 +18,6 @@ venv/
 build/
 dist/
 # PassiveMonitor.spec is hand-maintained build config — keep it tracked.
+
+# Raw page saved by the pager scraper when it cannot parse the layout.
+pager_debug.html

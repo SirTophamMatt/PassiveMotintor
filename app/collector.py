@@ -14,6 +14,7 @@ from app.config import load_config, credentials_set
 from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
+from app.modules.pager import scraper as pager_scraper
 from app.modules.power.scraper import PowerScraper
 from app.modules.roads import scraper as roads_scraper
 from app.modules.storm import scraper as storm_scraper
@@ -71,6 +72,7 @@ class CollectorManager:
         self._rainfall = None
         self._storm = None
         self._roads = None
+        self._pager = None
         self._intel = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
@@ -82,6 +84,7 @@ class CollectorManager:
         self._rainfall_desired = None
         self._storm_desired = None
         self._roads_desired = None
+        self._pager_desired = None
         self._intel_desired = None
 
     # --- flood ---------------------------------------------------------------
@@ -259,6 +262,42 @@ class CollectorManager:
         self.stop_roads()
         return self.start_roads()
 
+    # --- pager (CFA pager messages, Mazzanet) ---------------------------------
+    def start_pager(self):
+        """Start always-on CFA pager message logging."""
+        with self._lock:
+            self._pager_desired = True
+            if self._pager and self._pager.is_alive():
+                return False, "Pager collection is already running."
+            cfg = load_config()
+            interval = max(1, cfg["pager"]["interval_minutes"]) * 60
+            self._pager = _Collector(
+                "pager-collector", interval, pager_scraper.fetch_pager_data)
+            self._pager.start()
+            return True, "Pager collection started."
+
+    def stop_pager(self):
+        with self._lock:
+            self._pager_desired = False
+            if self._pager:
+                self._pager.stop()
+                self._pager = None
+            return True, "Pager collection stopped."
+
+    def restart_pager(self):
+        """Stop-then-start, used by the watchdog on a stalled collector."""
+        self.stop_pager()
+        return self.start_pager()
+
+    def fetch_pager_now(self):
+        """Manual one-off pager fetch (Admin button). Runs inline."""
+        try:
+            n = pager_scraper.fetch_pager_data()
+            return True, f"Fetched pager — {n} new message(s)."
+        except Exception as e:
+            log.exception("Manual pager fetch failed")
+            return False, f"Pager fetch failed: {e}"
+
     # --- intel (Intelligence Feed change detector) ----------------------------
     def start_intel(self):
         """Start the Intelligence Feed detector. Unlike the others this fetches
@@ -361,6 +400,11 @@ class CollectorManager:
             return self._roads_desired
         return cfg["roads"].get("autostart", True)
 
+    def pager_wanted(self, cfg):
+        if self._pager_desired is not None:
+            return self._pager_desired
+        return cfg["pager"].get("autostart", True)
+
     def intel_wanted(self, cfg):
         if self._intel_desired is not None:
             return self._intel_desired
@@ -408,6 +452,12 @@ class CollectorManager:
                 log.info("Autostart roads: %s", msg)
             except Exception:
                 log.exception("Autostart roads failed")
+        if cfg["pager"].get("autostart", True):
+            try:
+                ok, msg = self.start_pager()
+                log.info("Autostart pager: %s", msg)
+            except Exception:
+                log.exception("Autostart pager failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -457,6 +507,10 @@ class CollectorManager:
             "roads": {
                 "running": self._roads is not None and self._roads.is_alive(),
                 **(self._roads.status if self._roads else {}),
+            },
+            "pager": {
+                "running": self._pager is not None and self._pager.is_alive(),
+                **(self._pager.status if self._pager else {}),
             },
             "intel": {
                 "running": self._intel is not None and self._intel.is_alive(),

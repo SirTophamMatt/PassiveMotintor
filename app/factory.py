@@ -14,7 +14,8 @@ from app import auth, database, feedback_ui
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
-                       importer_page, intel, overview, power,
+                       importer_page, intel, overview, pager as pager_page,
+                       power,
                        replay as replay_page, roads as roads_page,
                        settings, station, storm as storm_page,
                        unified as unified_page, weather)
@@ -38,6 +39,7 @@ PUBLIC_PAGES = [
     ("/weather", "Weather Warnings", weather),
     ("/storm", "Storm Tracker (Alpha)", storm_page),
     ("/roads", "Road Disruptions", roads_page),
+    ("/pager", "CFA Pager", pager_page),
     ("/power", "Power Outages", power),
     # Renders its own password gate (like /admin), so it is deliberately NOT in
     # RESTRICTED — that mechanism is for admin-only pages.
@@ -181,6 +183,8 @@ def _register_health(app):
         _, weather_last_hb = weather_data.heartbeat_summary()
         _, storm_last_hb = storm_data.heartbeat_summary()
         _, roads_last_hb = roads_data.heartbeat_summary()
+        from app.modules.pager import data as pager_data
+        _, pager_last_hb = pager_data.heartbeat_summary()
         intel_last_entry = intel_feed.last_entry_time()
         payload = {
             "status": "ok" if db_ok else "error",
@@ -192,12 +196,14 @@ def _register_health(app):
             "rainfall_running": status["rainfall"]["running"],
             "storm_running": status["storm"]["running"],
             "roads_running": status["roads"]["running"],
+            "pager_running": status["pager"]["running"],
             "intel_running": status["intel"]["running"],
             "flood_last_heartbeat": last_hb,
             "fire_last_heartbeat": fire_last_hb,
             "weather_last_heartbeat": weather_last_hb,
             "storm_last_heartbeat": storm_last_hb,
             "roads_last_heartbeat": roads_last_hb,
+            "pager_last_heartbeat": pager_last_hb,
             "intel_last_entry": (intel_last_entry.isoformat(
                 sep=" ", timespec="seconds") if intel_last_entry else None),
             "flood_last_error": status["flood"].get("last_error"),
@@ -206,6 +212,7 @@ def _register_health(app):
             "weather_last_error": status["weather"].get("last_error"),
             "storm_last_error": status["storm"].get("last_error"),
             "roads_last_error": status["roads"].get("last_error"),
+            "pager_last_error": status["pager"].get("last_error"),
             "intel_last_error": status["intel"].get("last_error"),
         }
         try:

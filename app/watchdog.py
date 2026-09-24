@@ -42,7 +42,8 @@ class Supervisor(threading.Thread):
         super().__init__(name="supervisor", daemon=True)
         self._stop_event = threading.Event()
         self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
-                          "rainfall": [], "storm": [], "roads": [], "intel": []}
+                          "rainfall": [], "storm": [], "roads": [], "pager": [],
+                          "intel": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -54,14 +55,16 @@ class Supervisor(threading.Thread):
         self._first_storm_check = True
         self._road_closures = {}           # source_id -> label
         self._first_roads_check = True
+        self._pager_last_id = None         # None until first evaluation
         self._last_errors = {"flood": None, "power": None, "fire": None,
                              "weather": None, "rainfall": None, "storm": None,
-                             "roads": None, "intel": None}
+                             "roads": None, "pager": None, "intel": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
                       "rainfall_restarts": 0, "storm_restarts": 0,
-                      "roads_restarts": 0, "intel_restarts": 0,
+                      "roads_restarts": 0, "pager_restarts": 0,
+                      "intel_restarts": 0,
                       "last_action": None}
 
     def ensure_started(self):
@@ -170,6 +173,13 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_roads()
                 self._record_restart("roads", reason, msg)
 
+        if manager.pager_wanted(cfg):
+            reason = self._stall_reason(status["pager"],
+                                        max(1, cfg["pager"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("pager"):
+                ok, msg = manager.restart_pager()
+                self._record_restart("pager", reason, msg)
+
         if manager.intel_wanted(cfg):
             reason = self._stall_reason(status["intel"],
                                         max(15, cfg["intel"]["interval_seconds"]))
@@ -180,7 +190,7 @@ class Supervisor(threading.Thread):
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
         for which in ("flood", "power", "fire", "weather", "rainfall", "storm",
-                      "roads", "intel"):
+                      "roads", "pager", "intel"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")
@@ -195,6 +205,7 @@ class Supervisor(threading.Thread):
         self._check_weather_alert(cfg)
         self._check_storm_alert(cfg)
         self._check_roads_alert(cfg)
+        self._check_pager_alert(cfg)
 
     def _check_power_alert(self, cfg):
         from app.modules.power import data as power_data
@@ -449,6 +460,30 @@ class Supervisor(threading.Thread):
                             kind="roads_alert", cfg=cfg)
         self._road_closures = current
         self._first_roads_check = False
+
+    def _check_pager_alert(self, cfg):
+        """CFA pager: notify on every NEW escalation message (MAKE TANKERS n,
+        or a tanker/pumper/ultralight requested by call sign). Messages are
+        append-only, so "new" is simply id > the last one seen; the first pass
+        after boot seeds silently rather than replaying the backlog."""
+        from app.modules.pager import data as pager_data
+        if self._pager_last_id is None:
+            self._pager_last_id = pager_data.max_id()
+            return
+        df = pager_data.escalations_after(self._pager_last_id)
+        if df.empty:
+            return
+        self._pager_last_id = int(df["id"].max())
+        # One line per job, however many capcodes carried the same page.
+        lines = []
+        for fnum, g in df.groupby(df["f_number"].fillna("(no F-number)"), sort=False):
+            esc = "; ".join(dict.fromkeys(g["escalation"].dropna()))
+            where = g["brigade"].dropna()
+            where = f" [{where.iloc[0]}]" if not where.empty else ""
+            lines.append(f"{fnum}{where}: {esc}")
+        notify.send("🚒 Pager escalation — " + " | ".join(lines[:8])
+                    + (f" (+{len(lines) - 8} more)" if len(lines) > 8 else ""),
+                    kind="pager_alert", cfg=cfg)
 
 
 supervisor = Supervisor()

@@ -468,6 +468,43 @@ CREATE TABLE IF NOT EXISTS road_timeseries (
 );
 CREATE INDEX IF NOT EXISTS idx_road_ts_time ON road_timeseries (timestamp);
 
+-- CFA pager messages scraped from mazzanet.net.au/cfa/pager-cfa.php. Append-
+-- only: a page never changes after it is sent, so there is nothing to upsert.
+-- msg_hash (capcode + sent time + text) makes re-reading the same page a no-op;
+-- the same text to two capcodes is two rows, which is what was actually paged.
+-- Parsed CFA fields sit beside the raw text so jobs collate by f_number without
+-- re-parsing; `make_json`/`required_json` hold the escalation detail.
+CREATE TABLE IF NOT EXISTS pager_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    msg_hash TEXT NOT NULL UNIQUE,
+    capcode TEXT,
+    alias TEXT,
+    sent_at TEXT,                -- the page's own time (local), else first seen
+    received_at TEXT NOT NULL,   -- when this monitor first saw it
+    message TEXT NOT NULL,
+    f_number TEXT,
+    brigade TEXT,
+    incident_type TEXT,
+    priority TEXT,               -- Emergency (@@) / Non-emergency (Hb) / Admin (QD)
+    is_escalation INTEGER NOT NULL DEFAULT 0,
+    make_json TEXT,              -- {"Tanker": 5} from MAKE TANKERS 5
+    required_json TEXT,          -- [["Tanker", "TRAWT1"]] from ... REQUIRED
+    escalation TEXT              -- human summary for tables and alerts
+);
+CREATE INDEX IF NOT EXISTS idx_pager_sent ON pager_messages (sent_at);
+CREATE INDEX IF NOT EXISTS idx_pager_fnum ON pager_messages (f_number, sent_at);
+CREATE INDEX IF NOT EXISTS idx_pager_esc ON pager_messages (is_escalation, sent_at);
+
+-- One row per pager collection cycle (continuity heartbeat).
+CREATE TABLE IF NOT EXISTS pager_heartbeat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    rows_seen INTEGER,
+    new_rows INTEGER,
+    new_escalations INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_pager_hb_time ON pager_heartbeat (timestamp);
+
 -- Event tags: named date ranges applied over the always-on data stream. An
 -- event is no longer a collection-time label but a (name, start, end) window
 -- used to slice flood + power data for viewing and export. NULL end = ongoing.
