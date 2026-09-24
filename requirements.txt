@@ -10,10 +10,11 @@ selenium
 webdriver-manager
 pywebview
 waitress
-# Overview briefing PDF: kaleido renders Plotly figures to PNG (0.2.x bundles
-# its own chromium, so no system Chrome needed just for reports); reportlab
-# assembles the PDF (pure Python, no system libraries).
-kaleido==0.2.1
+# Overview briefing PDF: kaleido renders Plotly figures to PNG; reportlab
+# assembles the PDF (pure Python, no system libraries). plotly>=6 requires
+# kaleido>=1, which no longer bundles Chromium — it drives the system Chrome
+# the app already needs for the power scraper (installed in the Dockerfile).
+kaleido>=1,<2
 reportlab>=4.0
 # Storm tracker: OpenCV (headless — no GUI libs needed in Docker) for radar
 # echo detection + annotation; numpy comes with it but is used directly too.

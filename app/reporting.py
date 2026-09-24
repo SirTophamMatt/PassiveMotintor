@@ -262,8 +262,21 @@ def build_overview_pdf():
     story.append(kpi_table)
     story.append(Spacer(1, 6 * mm))
 
-    def add_fig(fig, caption):
-        png = _fig_png(fig)
+    def add_fig(fig, caption, optional=False):
+        # Maps are best-effort, as on the fire sitrep: they need map tiles
+        # fetched over the network at render time, and a report missing its
+        # map beats no report at all. Line charts stay mandatory.
+        try:
+            png = _fig_png(fig)
+        except ReportingUnavailable as e:
+            if not optional:
+                raise
+            log.info("Overview PDF: %s skipped (%s)", caption, e)
+            story.append(Paragraph(caption, styles["Heading3"]))
+            story.append(Paragraph("Map could not be rendered for this report.",
+                                   styles["Normal"]))
+            story.append(Spacer(1, 5 * mm))
+            return
         story.append(Paragraph(caption, styles["Heading3"]))
         story.append(Image(io.BytesIO(png), width=180 * mm, height=75 * mm))
         story.append(Spacer(1, 5 * mm))
@@ -279,7 +292,8 @@ def build_overview_pdf():
                 "Power Outage Trend")
 
     outages = power_data.active_outages(include_planned=True)
-    add_fig(power_page._map_figure(outages, dark=False), "Active Outages Map")
+    add_fig(power_page._map_figure(outages, dark=False), "Active Outages Map",
+            optional=True)
 
     # --- Flooding stations ----------------------------------------------------
     flooding_stations = flood_data.current_flooding_stations(max_stations=6)
