@@ -489,7 +489,9 @@ CREATE TABLE IF NOT EXISTS pager_messages (
     is_escalation INTEGER NOT NULL DEFAULT 0,
     make_json TEXT,              -- {"Tanker": 5} from MAKE TANKERS 5
     required_json TEXT,          -- [["Tanker", "TRAWT1"]] from ... REQUIRED
-    escalation TEXT              -- human summary for tables and alerts
+    escalation TEXT,             -- human summary for tables and alerts
+    units_json TEXT,             -- units paged: [{"code": "COROT1", ...}]
+    parser_version INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_pager_sent ON pager_messages (sent_at);
 CREATE INDEX IF NOT EXISTS idx_pager_fnum ON pager_messages (f_number, sent_at);
@@ -732,6 +734,11 @@ def init_db():
         _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
         _ensure_column(conn, "road_disruptions", "ses_region", "TEXT")
         _ensure_column(conn, "road_disruptions", "transport_region", "TEXT")
+        # Pager parser v2 (2026-09-24): appliances + a version so stored rows
+        # are re-parsed when the parser improves (scraper.reparse_stale).
+        _ensure_column(conn, "pager_messages", "units_json", "TEXT")
+        _ensure_column(conn, "pager_messages", "parser_version",
+                       "INTEGER NOT NULL DEFAULT 0")
         # Visitor geolocation (2026-08-24). page_views predates it, so the
         # columns are added here rather than in SCHEMA -- existing rows keep
         # NULLs and the analytics queries report those as "Unknown".

@@ -56,11 +56,7 @@ _PAIR_RE = re.compile(
     re.I)
 _REQUIRED_RE = re.compile(r"\b(?:REQUIRED|REQ'?D|REQ|REQUESTED)\b", re.I)
 _REQ_ITEM_RE = re.compile(
-    rf"\b(?:{_TYPE_ALT})\b(?:\s+(?P<unit>[A-Z]{{3,6}}\d{{1,2}})\b)?", re.I)
-# Brigade / appliance call signs: letters then a digit or two (CRAN1, TRAWT1).
-_CALLSIGN_RE = re.compile(r"^[A-Z]{3,6}\d{1,2}$")
-# Incident type codes follow the F-number: STRUC1, G&SC1, ALARC1, NOSTC1 ...
-_INCIDENT_RE = re.compile(r"^[A-Z&]{3,7}\d{1,2}$")
+    rf"\b(?:{_TYPE_ALT})\b(?:\s+(?P<unit>[A-Z]{{3,8}}\d{{1,2}}[A-Z]?)\b)?", re.I)
 
 PRIORITY_PREFIXES = [("@@", "Emergency"), ("HB", "Non-emergency"),
                      ("QD", "Admin")]
@@ -244,8 +240,79 @@ def parse_escalation(text):
     return {"make": make, "required": required}
 
 
+# --- units / appliances ------------------------------------------------------
+# Bump when parse_message changes what it extracts: the scraper re-parses
+# stored rows with an older version, so a parser fix reaches history too.
+PARSER_VERSION = 2
+
+# Appliance type codes, longest first so PT is not read as P + T. Types not
+# listed here still parse (any 1-3 letter code) and are labelled by their code.
+UNIT_TYPES = {"ULT": "Ultralight", "FCV": "FCV", "PT": "Pumper Tanker",
+              "P": "Pumper", "T": "Tanker"}
+_UNIT_CODE_ALT = "ULT|FCV|PT|P|T|[A-Z]{1,3}?"
+# CFA: 4-letter brigade code + type + number (COROT1 = Corio Tanker 1).
+_CFA_UNIT_RE = re.compile(rf"^(?P<brigade>[A-Z]{{4}})(?P<type>{_UNIT_CODE_ALT})(?P<num>\d{{1,2}})$")
+# FRV: type + station number + optional letter (P1A, P94, PT31, AP91, P62A).
+_FRV_UNIT_RE = re.compile(rf"^(?P<type>{_UNIT_CODE_ALT})(?P<station>\d{{1,3}})(?P<letter>[A-Z])?$")
+# A CFA brigade paged as a whole: C + brigade code (CMTEL, CCORO, CGLBU).
+_BRIGADE_PAGE_RE = re.compile(r"^C(?P<brigade>[A-Z]{4})$")
+# Trailing brigade/station in square brackets: [MTEL], [CORO], [FS91_].
+_BRACKET_RE = re.compile(r"\[\s*([A-Z0-9_]+?)_*\s*\]\s*$")
+# Incident type right after ALERT: ALARC1, NOSTC1, RESCC1, STRUC1, G&SC1.
+_INCIDENT_RE = re.compile(r"^[A-Z&]{2,6}C\d$")
+# Token that can sit in the unit list before the F-number.
+_UNIT_TOKEN_RE = re.compile(r"^[A-Z]{1,6}\d{0,3}[A-Z]{0,2}$")
+
+
+def classify_unit(token):
+    """One unit-list token -> dict, or None if it is not a unit.
+
+    ``kind`` is ``appliance`` (with ``type`` and ``service`` CFA/FRV),
+    ``brigade`` (a whole brigade paged, C + code) or ``other``."""
+    tok = token.strip(",;:")
+    m = _CFA_UNIT_RE.match(tok)
+    if m:
+        t = m.group("type")
+        return {"code": tok, "kind": "appliance", "service": "CFA",
+                "type": UNIT_TYPES.get(t, t), "brigade": m.group("brigade")}
+    m = _FRV_UNIT_RE.match(tok)
+    if m:
+        t = m.group("type")
+        return {"code": tok, "kind": "appliance", "service": "FRV",
+                "type": UNIT_TYPES.get(t, t), "brigade": f"FS{int(m.group('station')):02d}"}
+    m = _BRIGADE_PAGE_RE.match(tok)
+    if m:
+        return {"code": tok, "kind": "brigade", "brigade": m.group("brigade")}
+    if _UNIT_TOKEN_RE.match(tok) and len(tok) > 1:
+        return {"code": tok, "kind": "other"}
+    return None
+
+
+def parse_units(upper, f_start):
+    """The unit list: tokens directly before the F-number, back to the map
+    grid reference ``(354767)``, a ``*`` separator, or the ``F`` marker that
+    opens the list (``... (354767) F CMTEL P94 PT31 F260926603 [MTEL]``)."""
+    tokens = upper[:f_start].split()
+    units = []
+    for tok in reversed(tokens[-25:]):
+        if tok == "F":
+            break
+        unit = classify_unit(tok)
+        if unit is None:
+            break
+        units.append(unit)
+    units.reverse()
+    return units
+
+
 def parse_message(text):
-    """CFA fields read out of one message's text. Missing parts are None."""
+    """CFA fields read out of one message's text. Missing parts are None.
+
+    Real format (Mazzanet):
+    ``@@ALERT 09124 ALARC1 <description> M 100A C6 (354767) F CMTEL P94 PT31
+    F260926603 [MTEL]`` -- incident type after ALERT, then the job text and
+    map reference, the units paged, the F-number and the brigade/station in
+    square brackets."""
     text = _clean(text)
     upper = text.upper()
     priority = None
@@ -255,24 +322,37 @@ def parse_message(text):
             break
     f_match = F_NUMBER_RE.search(upper)
     f_number = f_match.group(0) if f_match else None
-    brigade = incident_type = None
-    if f_match:
-        before = upper[:f_match.start()].replace("@@", " ").split()
-        after = upper[f_match.end():].split()
-        if before and _CALLSIGN_RE.match(before[-1]):
-            brigade = before[-1]
-        if after and _INCIDENT_RE.match(after[0]):
-            incident_type = after[0]
-            # "@@ALERT F2609... CRAN1 STRUC1": brigade after the F-number.
-            if brigade is None and len(after) > 1 and _INCIDENT_RE.match(after[1]) \
-                    and _CALLSIGN_RE.match(after[0]):
-                brigade, incident_type = after[0], after[1]
+
+    brigade = None
+    b = _BRACKET_RE.search(upper)
+    if b:
+        brigade = b.group(1).rstrip("_") or None
+
+    head = upper.replace("@@", " ").split()
+    incident_type = None
+    if head and head[0].endswith("ALERT"):
+        # First few tokens after ALERT: "09124 ALARC1" or "GLBU1 RESCC1".
+        for i, tok in enumerate(head[1:5], start=1):
+            if _INCIDENT_RE.match(tok):
+                incident_type = tok
+                if brigade is None and i > 1:
+                    m = re.match(r"^([A-Z]{4})\d$", head[i - 1])
+                    brigade = m.group(1) if m else None
+                break
+    if incident_type is None:
+        for tok in head[:6]:
+            if _INCIDENT_RE.match(tok):
+                incident_type = tok
+                break
+
+    units = parse_units(upper, f_match.start()) if f_match else []
     esc = parse_escalation(upper)
     return {
         "f_number": f_number,
         "brigade": brigade,
         "incident_type": incident_type,
         "priority": priority,
+        "units": units,
         "make": esc["make"],
         "required": esc["required"],
         "is_escalation": bool(esc["make"] or esc["required"]),
