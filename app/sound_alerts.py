@@ -144,8 +144,21 @@ def current_events():
 # Shell components + callbacks
 # --------------------------------------------------------------------------
 
+# Per-category switches, in urgency order. Values are sound names — a category
+# IS its sound, so the browser can filter on ``event["sound"]`` directly.
+CATEGORIES = [
+    ("emergency", "Emergency Warnings & SEWS"),
+    ("escalation", "Watch and Act & flood gauges"),
+    ("pager", "CFA pager escalations"),
+    ("advice", "Advice & new BoM warnings"),
+    ("system", "Data / collector problems"),
+    ("resolved", "Warnings clearing"),
+]
+DEFAULT_VOLUME = 80
+
+
 def components():
-    """Stores + the sidebar toggle, mounted by ``factory._shell_layout``."""
+    """Stores mounted at the shell root by ``factory._shell_layout``."""
     return [
         dcc.Store(id="sound-enabled", data=False, storage_type="local"),
         dcc.Store(id="sound-events"),
@@ -154,10 +167,36 @@ def components():
 
 
 def toggle_button():
-    return html.Button("🔇 Sounds off", id="sound-toggle", n_clicks=0,
-                       className="btn sound-btn",
-                       title="Play a sound when a new warning, flood crossing "
-                             "or pager escalation arrives (this browser only)")
+    """The sidebar control: on/off toggle, a settings button, and the
+    (collapsed) settings panel. Volume and categories use Dash's own
+    ``persistence`` into localStorage, so like the on/off choice they belong
+    to this browser and survive a reload."""
+    return html.Div([
+        html.Div([
+            html.Button("🔇 Sounds off", id="sound-toggle", n_clicks=0,
+                        className="btn sound-btn",
+                        title="Play a sound when a new warning, flood crossing "
+                              "or pager escalation arrives (this browser only)"),
+            html.Button("⚙", id="sound-settings-btn", n_clicks=0,
+                        className="btn sound-gear", title="Sound settings"),
+        ], className="sound-row"),
+        html.Div([
+            html.Div(f"Volume {DEFAULT_VOLUME}%", id="sound-volume-label",
+                     className="sound-panel-label"),
+            # No floating tooltip: in a 210 px sidebar it covers the checklist.
+            # The label above carries the value instead.
+            dcc.Slider(id="sound-volume", min=0, max=100, step=5,
+                       value=DEFAULT_VOLUME, marks=None,
+                       persistence=True, persistence_type="local"),
+            html.Div("Play sounds for", className="sound-panel-label"),
+            dcc.Checklist(id="sound-categories",
+                          options=[{"label": label, "value": value}
+                                   for value, label in CATEGORIES],
+                          value=[value for value, _ in CATEGORIES],
+                          className="sound-cats",
+                          persistence=True, persistence_type="local"),
+        ], id="sound-panel", className="sound-panel sound-panel-hidden"),
+    ], className="sound-ctl")
 
 
 def register_callbacks(app):
@@ -174,6 +213,16 @@ def register_callbacks(app):
         Output("sound-toggle", "children"),
         Output("sound-toggle", "className"),
         Input("sound-enabled", "data"))
+    app.clientside_callback(
+        ClientsideFunction("wdsound", "panel"),
+        Output("sound-panel", "className"),
+        Input("sound-settings-btn", "n_clicks"),
+        State("sound-panel", "className"),
+        prevent_initial_call=True)
+    app.clientside_callback(
+        ClientsideFunction("wdsound", "volume"),
+        Output("sound-volume-label", "children"),
+        Input("sound-volume", "value"))
 
     @app.callback(
         Output("sound-events", "data"),
@@ -184,7 +233,10 @@ def register_callbacks(app):
         # and switching back on seeds silently instead of replaying.
         return current_events() if enabled else None
 
+    # Categories are a State, not an Input: changing them affects the next
+    # sound, it is not itself a reason to play one.
     app.clientside_callback(
         ClientsideFunction("wdsound", "onEvents"),
         Output("sound-played", "data"),
-        Input("sound-events", "data"))
+        Input("sound-events", "data"),
+        State("sound-categories", "value"))

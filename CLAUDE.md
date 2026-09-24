@@ -993,8 +993,20 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - **Browser autoplay rule:** audio needs a user gesture after every page load. `alert_sounds.js`
   puts `wd-audio-locked` on `<html>` until it is allowed, and the CSS adds "Click anywhere to
   activate" under an enabled toggle, so "on but silent" is visible.
-- Not done: road closures (they churn too often to chime on), per-category toggles, volume slider
-  in the UI (`WDSounds.setVolume` exists). Tests: `tests/test_sound_alerts.py`.
+- **Settings panel** (⚙ beside the toggle, added 2026-09-24): a volume slider (0-100, plays a
+  preview on release; the label carries the value because a tooltip covers the checklist in a
+  210 px sidebar) and per-category switches (`sound_alerts.CATEGORIES` — a category IS its sound
+  name, so the browser filters on `event.sound`). Both use Dash `persistence` into localStorage,
+  i.e. per browser like the toggle. A switched-off category's events are still marked SEEN, so
+  switching it back on never replays what arrived meanwhile. The panel is a popover beside the
+  sidebar (upward on phones), not in-flow: the sidebar is a fixed-height column already full.
+  A test pins `CATEGORIES` to the `SOUNDS` keys in `alert_sounds.js`.
+- **Dash version:** `requirements.txt` says `dash>=2.17`, which currently installs **4.x**
+  (Radix-based `dcc.Slider`, no `.rc-slider` classes) — target the slider by `[role=slider]` in
+  browser tests.
+- The fixed ticker used to cover the bottom of the sticky sidebar (theme button included);
+  `.app:has(.ticker:not(.ticker-hidden)) .sidebar` now pads it clear while the ticker shows.
+- Not done: road closures (they churn too often to chime on). Tests: `tests/test_sound_alerts.py`.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

@@ -108,3 +108,17 @@ def test_one_broken_source_does_not_silence_the_rest(db, monkeypatch):
     monkeypatch.setattr(sound_alerts, "SOURCES", (broken, sound_alerts._vicemergency))
     (ev,) = sound_alerts.current_events()
     assert ev["sound"] == "emergency"
+
+
+def test_every_category_is_a_real_sound_in_the_js_engine():
+    """The Settings checklist filters on sound names; a category that does not
+    match a key of SOUNDS in alert_sounds.js could never play."""
+    import os
+    import re
+    path = os.path.join(os.path.dirname(__file__), "..", "assets", "alert_sounds.js")
+    with open(path, encoding="utf-8") as fh:
+        js = fh.read()
+    block = js[js.index("var SOUNDS = {"):js.index("window.WDSounds = {")]
+    js_sounds = set(re.findall(r"^\s{8}(\w+): function", block, re.M))
+    categories = {value for value, _ in sound_alerts.CATEGORIES}
+    assert categories == js_sounds
