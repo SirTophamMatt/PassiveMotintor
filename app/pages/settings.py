@@ -93,11 +93,13 @@ def layout():
                         {"label": " Power threshold alerts", "value": "power"},
                         {"label": " Flood level alerts", "value": "flood"},
                         {"label": " Road closure alerts", "value": "roads"},
+                        {"label": " CFA pager escalations", "value": "pager"},
                         {"label": " Watchdog / collector issues", "value": "watchdog"},
                     ],
                     value=[v for v, key in (("power", "on_power_alert"),
                                             ("flood", "on_flood_alert"),
                                             ("roads", "on_roads_alert"),
+                                            ("pager", "on_pager_alert"),
                                             ("watchdog", "on_watchdog"))
                            if cfg["notify"].get(key, True)]),
                 html.Div("Send a test from the Admin page after saving.",
@@ -259,6 +261,7 @@ def register_callbacks(app):
         cfg["notify"]["on_power_alert"] = "power" in toggles
         cfg["notify"]["on_flood_alert"] = "flood" in toggles
         cfg["notify"]["on_roads_alert"] = "roads" in toggles
+        cfg["notify"]["on_pager_alert"] = "pager" in toggles
         cfg["notify"]["on_watchdog"] = "watchdog" in toggles
         cfg["smtp"]["host"] = (smtp_host or "").strip()
         cfg["smtp"]["port"] = int(smtp_port or 587)

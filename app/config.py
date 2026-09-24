@@ -129,6 +129,14 @@ DEFAULTS = {
         "page_limit": 0,
         "max_pages": 20,
     },
+    "pager": {
+        # CFA pager messages from Mazzanet (scraped with the site owner's
+        # permission). One GET per cycle; overlap between reads is de-duped.
+        "url": "https://mazzanet.net.au/cfa/pager-cfa.php",
+        "interval_minutes": 4,
+        "timeout_seconds": 30,
+        "autostart": True,
+    },
     "power": {
         "interval_seconds": 60,
         "max_new_geocodes_per_cycle": 10,
@@ -205,6 +213,7 @@ DEFAULTS = {
         "on_weather_alert": True,
         "on_storm_alert": True,
         "on_roads_alert": True,
+        "on_pager_alert": True,
         "on_watchdog": True,
         # Master pause: when true, suppress ALL notifications (the admin test
         # button still works — it uses force=True). Toggled from the Admin page.

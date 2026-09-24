@@ -29,6 +29,7 @@ KIND_TOGGLES = {
     "weather_alert": "on_weather_alert",
     "storm_alert": "on_storm_alert",
     "roads_alert": "on_roads_alert",
+    "pager_alert": "on_pager_alert",
     "watchdog": "on_watchdog",
 }
 

@@ -67,6 +67,7 @@ def _panel():
     rainfall_auto = cfg["rainfall"].get("autostart", True)
     storm_auto = cfg["storm"].get("autostart", True)
     intel_auto = cfg["intel"].get("autostart", True)
+    pager_auto = cfg["pager"].get("autostart", True)
     headless = cfg["power"].get("headless", False)
     return html.Div([
         html.Div([
@@ -146,6 +147,22 @@ def _panel():
                          className="muted",
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-storm-status", className="muted",
+                         style={"marginTop": "8px"}),
+            ], className="panel"),
+            html.Div([
+                html.H4("CFA pager (Mazzanet)"),
+                html.Button("Start", id="admin-pager-start", className="btn btn-primary"),
+                html.Button("Stop", id="admin-pager-stop", className="btn"),
+                html.Button("Fetch now", id="admin-pager-fetch", className="btn",
+                            style={"marginLeft": "4px"}),
+                dcc.Checklist(
+                    id="admin-pager-autostart",
+                    options=[{"label": " Auto-start on server boot", "value": "on"}],
+                    value=["on"] if pager_auto else [], style={"marginTop": "8px"}),
+                html.Div(f"One page read every {cfg['pager']['interval_minutes']} "
+                         "min; messages de-duped and kept.", className="muted",
+                         style={"fontSize": "12px", "marginTop": "6px"}),
+                html.Div(id="admin-pager-status", className="muted",
                          style={"marginTop": "8px"}),
             ], className="panel"),
             html.Div([
@@ -630,6 +647,29 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-pager-status", "children"),
+        Input("admin-pager-start", "n_clicks"),
+        Input("admin-pager-stop", "n_clicks"),
+        Input("admin-pager-fetch", "n_clicks"),
+        State("admin-pager-autostart", "value"),
+        prevent_initial_call=True)
+    def pager_control(_s, _t, _f, autostart):
+        if not _s and not _t and not _f:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return "Not authorised."
+        if ctx.triggered_id == "admin-pager-fetch":
+            return manager.fetch_pager_now()[1]
+        cfg = load_config()
+        cfg["pager"]["autostart"] = "on" in (autostart or [])
+        save_config(cfg)
+        if ctx.triggered_id == "admin-pager-start":
+            _, msg = manager.start_pager()
+        else:
+            _, msg = manager.stop_pager()
+        return msg
+
+    @app.callback(
         Output("admin-intel-status", "children"),
         Input("admin-intel-start", "n_clicks"),
         Input("admin-intel-stop", "n_clicks"),
@@ -713,6 +753,7 @@ def register_callbacks(app):
                          line("Weather", s["weather"]),
                          line("Rainfall", s["rainfall"]), line("Storm", s["storm"]),
                          line("Power", s["power"]),
+                         line("CFA pager", s["pager"]),
                          line("Intel feed", s["intel"]),
                          html.Div(watchdog_bits)])
 

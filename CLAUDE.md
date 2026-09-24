@@ -916,6 +916,43 @@ what should I be watching* — and is useful **on its own, before anyone generat
   profile isolation, a failed start cleaning up and carrying the log pointer, driver pruning, and
   the launcher refusing rather than crashing with no display. No real browser is started.
 
+## CFA Pager module (built 2026-09-24)
+- **Source:** `mazzanet.net.au/cfa/pager-cfa.php`, scraped **with the site owner's permission**. One
+  plain GET per cycle (`pager.interval_minutes`=4, `pager.autostart`=true), identifying User-Agent,
+  nothing else on the site fetched. `app/modules/pager/{parse,scraper,data}.py`, page
+  `app/pages/pager.py`, route `/pager` (public).
+- **Layout-agnostic parser.** The page markup could NOT be seen when this was built (the dev sandbox
+  blocks the host), so `parse.parse_page` identifies each table cell by CONTENT, not position: a
+  capcode is 6-9 digits alone, a time cell holds a clock time, the message is the longest remaining
+  text, the rest is the alias. It falls back to `capcode time message` text lines when there is no
+  table. **If a non-empty page yields 0 messages, the raw HTML is saved to `pager_debug.html` (next
+  to the DB, gitignored) and the cycle errors**, so a layout change is visible, not a "quiet night".
+  The test fixture `tests/fixtures/pager_sample.html` is HAND-BUILT — replace it with a real capture
+  once one is available.
+- **Times** are read day-first (Australian) unless the date leads with a 4-digit year; time-only
+  cells are today, or yesterday if that would be >1 h in the future.
+- **Storage:** `pager_messages` is append-only, de-duped on `msg_hash` = sha1(capcode | sent time |
+  text). The same text to two capcodes is two rows (that is what was paged); an undated message is
+  keyed to the day first seen. Parsed fields stored beside the text: `f_number` (`F\d{9,10}`),
+  `brigade`, `incident_type`, `priority` (@@ / Hb / QD), `is_escalation`, `make_json`,
+  `required_json`, `escalation` (summary). `pager_heartbeat` row per cycle.
+- **Escalations** (`parse.parse_escalation`, types in `APPLIANCE_TYPES` — add a row to track more):
+  `MAKE TANKERS 5` / `MAKE 5 TANKERS` / `MAKE PUMPERS 2 TANKERS 4` / `MAKE UP TANKERS TO 6` are
+  make-up requests; `TANKER TRAWT1 REQUIRED` (also REQ/REQD/REQUESTED) is a specific appliance
+  request. Types: Tanker, Pumper, Ultralight, Pumper Tanker (two-word types matched first). A MAKE
+  segment is stripped before looking for REQUIRED so it is never double-counted; an appliance merely
+  mentioned (TANKER ROLLOVER) is not an escalation.
+- **Jobs by F-number** (`data.jobs`): any job with a message in the window is shown with ALL its
+  messages summarised. The make-up figure is the LATEST per type (MAKE 5 then MAKE 8 → 8); "MAKE +
+  paged" names the types where a MAKE request and individual appliance requests coincide on the
+  same job. Clicking a job (Escalations or Jobs table) shows its full message history.
+- **Wiring:** collector + watchdog supervision, `pager_alert` webhook per NEW escalation message
+  (grouped per job; first pass after boot seeds silently), Settings notify toggle, Admin
+  Start/Stop/Fetch now/autostart, `/health` `pager_running`/`pager_last_heartbeat`/`pager_last_error`.
+  Tests: `tests/test_pager.py`.
+- Not done: Overview KPI / Unified Map / Intelligence Feed / Briefing integration (no coordinates in
+  the messages yet — would need the SVC grid ref or address geocoded), XLSX export, event-tag slicing.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
