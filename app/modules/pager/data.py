@@ -9,7 +9,7 @@ from app import database
 _TS = "%Y-%m-%d %H:%M:%S"
 _COLS = ("id, capcode, alias, sent_at, received_at, message, f_number, "
          "brigade, incident_type, priority, is_escalation, make_json, "
-         "required_json, escalation")
+         "required_json, escalation, units_json")
 
 
 def _since(hours, now=None):
@@ -41,38 +41,71 @@ def _loads(value, default):
         return default
 
 
+def job_units(msgs):
+    """Every unit paged to a job across its messages, first-paged first:
+    ``(appliances_by_type, brigades_paged, other_codes)``. Appliances are
+    ``{type: [codes]}`` merged from the unit lists AND call signs named in
+    REQUIRED requests, so a tanker is counted once however it was paged."""
+    by_type, brigades, other, seen = {}, [], [], set()
+
+    def add_appliance(t, code):
+        if code in seen:
+            return
+        seen.add(code)
+        by_type.setdefault(t, []).append(code)
+
+    for _, m in msgs.sort_values(["sent_at", "id"]).iterrows():
+        for u in _loads(m.get("units_json"), []):
+            code = u.get("code")
+            if u.get("kind") == "appliance":
+                add_appliance(u.get("type") or code, code)
+            elif u.get("kind") == "brigade":
+                if u.get("brigade") not in brigades:
+                    brigades.append(u.get("brigade"))
+            elif code not in other:
+                other.append(code)
+        for t, unit in _loads(m.get("required_json"), []):
+            add_appliance(t, unit or f"{t} (unnamed)")
+    return by_type, brigades, other
+
+
 def summarise_escalation(msgs):
-    """Collapse a job's escalation messages into one picture.
+    """Collapse a job's messages into its escalation picture.
 
     ``make`` is the LATEST make-up figure per appliance type (a job that went
-    MAKE TANKERS 5 then MAKE TANKERS 8 stands at 8). ``required`` lists each
-    specifically-requested appliance once per type. ``matched`` holds the types
-    with both a make-up request and individual requests, i.e. where the paged
-    appliances can be read against the make-up target."""
-    make, required = {}, {}
+    MAKE TANKERS 5 then MAKE TANKERS 8 stands at 8). ``attached`` is every
+    appliance paged to the job, by type (see ``job_units``). ``matched`` holds
+    the types with both a make-up request and appliances attached, i.e. where
+    the paged appliances can be read against the make-up target."""
+    make = {}
     for _, m in msgs.sort_values(["sent_at", "id"]).iterrows():
         for t, n in _loads(m.get("make_json"), {}).items():
             if n is not None or t not in make:
                 make[t] = n
-        for t, unit in _loads(m.get("required_json"), []):
-            units = required.setdefault(t, [])
-            key = unit or f"(unnamed #{len(units) + 1})"
-            if key not in units:
-                units.append(key)
-    matched = sorted(set(make) & set(required))
-    return {"make": make, "required": required, "matched": matched}
+    attached = job_units(msgs)[0]
+    requested = set()
+    for v in msgs["required_json"]:
+        requested.update(t for t, _ in _loads(v, []))
+    matched = sorted(t for t in make if attached.get(t))
+    return {"make": make, "attached": attached, "requested": requested,
+            "matched": matched}
 
 
 def escalation_text(summary):
     parts = []
     for t, n in summary["make"].items():
-        paged = len(summary["required"].get(t, []))
+        paged = len(summary["attached"].get(t, []))
         target = f"MAKE {t}s {n}" if n is not None else f"MAKE {t}s"
         parts.append(f"{target} ({paged} paged)" if paged else target)
-    for t, units in summary["required"].items():
-        if t not in summary["make"]:
-            parts.append(f"{t} req ×{len(units)}")
+    for t in sorted(summary["requested"] - set(summary["make"])):
+        parts.append(f"{t} req ×{len(summary['attached'].get(t, []))}")
     return " · ".join(parts)
+
+
+def appliance_text(by_type):
+    """'Pumper ×2 (P94, P62A) · Tanker ×1 (COROT1)'."""
+    return " · ".join(f"{t} ×{len(codes)} ({', '.join(codes)})"
+                      for t, codes in by_type.items())
 
 
 def jobs(hours=24, escalated_only=False, now=None):
@@ -89,7 +122,7 @@ def jobs(hours=24, escalated_only=False, now=None):
         [since])
     cols = ["f_number", "first_sent", "last_sent", "messages", "capcodes",
             "brigade", "incident_type", "priority", "escalated", "escalation",
-            "make_matched", "first_message"]
+            "make_matched", "appliances", "brigades_paged", "first_message"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     rows = []
@@ -101,8 +134,9 @@ def jobs(hours=24, escalated_only=False, now=None):
             s = s[s != ""]
             return s.iloc[0] if not s.empty else None
 
-        esc = g[g["is_escalation"] == 1]
-        summary = summarise_escalation(esc) if not esc.empty else None
+        escalated = bool((g["is_escalation"] == 1).any())
+        summary = summarise_escalation(g) if escalated else None
+        by_type, brigades, _ = job_units(g)
         rows.append({
             "f_number": fnum,
             "first_sent": first["sent_at"],
@@ -112,9 +146,11 @@ def jobs(hours=24, escalated_only=False, now=None):
             "brigade": first_valid("brigade"),
             "incident_type": first_valid("incident_type"),
             "priority": first_valid("priority"),
-            "escalated": summary is not None,
+            "escalated": escalated,
             "escalation": escalation_text(summary) if summary else "",
             "make_matched": ", ".join(summary["matched"]) if summary else "",
+            "appliances": appliance_text(by_type),
+            "brigades_paged": ", ".join(brigades),
             "first_message": first["message"],
         })
     out = pd.DataFrame(rows, columns=cols)

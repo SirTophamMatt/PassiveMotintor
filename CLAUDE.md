@@ -927,8 +927,8 @@ what should I be watching* — and is useful **on its own, before anyone generat
   text, the rest is the alias. It falls back to `capcode time message` text lines when there is no
   table. **If a non-empty page yields 0 messages, the raw HTML is saved to `pager_debug.html` (next
   to the DB, gitignored) and the cycle errors**, so a layout change is visible, not a "quiet night".
-  The test fixture `tests/fixtures/pager_sample.html` is HAND-BUILT — replace it with a real capture
-  once one is available.
+  The fixture's TABLE markup is still hand-built (message text is real-format) — replace it with a
+  saved copy of the page once one is available.
 - **Times** are read day-first (Australian) unless the date leads with a 4-digit year; time-only
   cells are today, or yesterday if that would be >1 h in the future.
 - **Storage:** `pager_messages` is append-only, de-duped on `msg_hash` = sha1(capcode | sent time |
@@ -936,6 +936,22 @@ what should I be watching* — and is useful **on its own, before anyone generat
   keyed to the day first seen. Parsed fields stored beside the text: `f_number` (`F\d{9,10}`),
   `brigade`, `incident_type`, `priority` (@@ / Hb / QD), `is_escalation`, `make_json`,
   `required_json`, `escalation` (summary). `pager_heartbeat` row per cycle.
+- **Real message format** (confirmed from live pages 2026-09-26):
+  `@@ALERT 09124 ALARC1 <job text> M 100A C6 (354767) F CMTEL P94 PT31 F260926603 [MTEL]` —
+  incident type straight after ALERT (sometimes after a number or an alarm-group token like
+  `GLBU1`), job text, map ref + `(grid)`, the **unit list**, the F-number, then the brigade/station
+  in **square brackets** (`[FS91_]` = FRV station 91; trailing `_` dropped). Brigade comes from the
+  brackets, falling back to the alarm-group token.
+- **Units** (`parse.parse_units` / `classify_unit`): tokens walked BACKWARDS from the F-number,
+  stopping at the grid ref, a `*` separator or the `F` marker that opens the list, so job text is
+  never read as units. CFA appliance = 4-letter brigade + type + number (`COROT1` Corio Tanker 1);
+  FRV appliance = type + station + optional letter (`P1A`, `P94`, `PT31`, `AP91`); `C`+brigade
+  (`CMTEL`) = a whole brigade paged; anything else unit-shaped is kept as "other" (`AFPR`).
+  Types in `UNIT_TYPES`: P Pumper, T Tanker, PT Pumper Tanker, ULT Ultralight, FCV; unknown codes
+  keep their code as the label. Stored as `units_json`.
+- **Re-parsing:** `parse.PARSER_VERSION` is stored per row (`parser_version`); every cycle
+  `scraper.reparse_stale()` re-parses older rows (bounded 5000), so a parser fix corrects history.
+  Bump the version whenever `parse_message` output changes.
 - **Escalations** (`parse.parse_escalation`, types in `APPLIANCE_TYPES` — add a row to track more):
   `MAKE TANKERS 5` / `MAKE 5 TANKERS` / `MAKE PUMPERS 2 TANKERS 4` / `MAKE UP TANKERS TO 6` are
   make-up requests; `TANKER TRAWT1 REQUIRED` (also REQ/REQD/REQUESTED) is a specific appliance
@@ -945,7 +961,9 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - **Jobs by F-number** (`data.jobs`): any job with a message in the window is shown with ALL its
   messages summarised. The make-up figure is the LATEST per type (MAKE 5 then MAKE 8 → 8); "MAKE +
   paged" names the types where a MAKE request and individual appliance requests coincide on the
-  same job. Clicking a job (Escalations or Jobs table) shows its full message history.
+  same job; "paged" counts appliances ATTACHED to the job (unit lists + REQUIRED call signs, each
+  code once). Jobs show an Appliances column (`Tanker ×2 (COROT1, LARAT1)`); clicking a job
+  (Escalations or Jobs table) shows its appliances, brigades paged and full message history.
 - **Wiring:** collector + watchdog supervision, `pager_alert` webhook per NEW escalation message
   (grouped per job; first pass after boot seeds silently), Settings notify toggle, Admin
   Start/Stop/Fetch now/autostart, `/health` `pager_running`/`pager_last_heartbeat`/`pager_last_error`.

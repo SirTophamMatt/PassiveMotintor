@@ -46,11 +46,29 @@ def _hash(capcode, sent_at, message, received):
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
+def parsed_fields(message):
+    """The columns derived from a message's text (everything but its identity
+    and times), so a fresh insert and a re-parse can never disagree."""
+    info = parse.parse_message(message)
+    return {
+        "f_number": info["f_number"],
+        "brigade": info["brigade"],
+        "incident_type": info["incident_type"],
+        "priority": info["priority"],
+        "is_escalation": int(info["is_escalation"]),
+        "make_json": json.dumps(info["make"]) if info["make"] else None,
+        "required_json": (json.dumps(info["required"])
+                          if info["required"] else None),
+        "escalation": parse.escalation_summary(info["make"], info["required"]),
+        "units_json": json.dumps(info["units"]) if info["units"] else None,
+        "parser_version": parse.PARSER_VERSION,
+    }
+
+
 def build_rows(page_rows, received):
     """Parsed page rows -> pager_messages dicts (pure; no I/O)."""
     out = []
     for r in page_rows:
-        info = parse.parse_message(r["message"])
         sent = r.get("sent_at")
         out.append({
             "msg_hash": _hash(r.get("capcode"), sent, r["message"], received),
@@ -59,18 +77,33 @@ def build_rows(page_rows, received):
             "sent_at": sent.strftime(_TS) if sent else received,
             "received_at": received,
             "message": r["message"],
-            "f_number": info["f_number"],
-            "brigade": info["brigade"],
-            "incident_type": info["incident_type"],
-            "priority": info["priority"],
-            "is_escalation": int(info["is_escalation"]),
-            "make_json": json.dumps(info["make"]) if info["make"] else None,
-            "required_json": (json.dumps(info["required"])
-                              if info["required"] else None),
-            "escalation": parse.escalation_summary(info["make"],
-                                                   info["required"]),
+            **parsed_fields(r["message"]),
         })
     return out
+
+
+def reparse_stale(limit=5000):
+    """Re-parse stored messages written by an older parser version, so a
+    parser fix also corrects history. Bounded per call; returns rows updated."""
+    df = database.read_df(
+        "SELECT id, message FROM pager_messages WHERE parser_version < ? "
+        "ORDER BY id LIMIT ?", [parse.PARSER_VERSION, int(limit)])
+    if df.empty:
+        return 0
+    rows = [(i, parsed_fields(m)) for i, m in zip(df["id"], df["message"])]
+    cols = list(rows[0][1])
+    conn = database.get_connection()
+    try:
+        conn.executemany(
+            "UPDATE pager_messages SET %s WHERE id = ?"
+            % ", ".join(f"{c} = ?" for c in cols),
+            [[f[c] for c in cols] + [int(i)] for i, f in rows])
+        conn.commit()
+    finally:
+        conn.close()
+    log.info("Pager: re-parsed %d stored message(s) with parser v%d",
+             len(rows), parse.PARSER_VERSION)
+    return len(rows)
 
 
 def store(rows):
@@ -100,6 +133,10 @@ def store(rows):
 def fetch_pager_data():
     """One collection cycle. Returns the number of new messages stored."""
     cfg = load_config()["pager"]
+    try:
+        reparse_stale()
+    except Exception:
+        log.exception("Pager: re-parse of stored messages failed")
     url = (cfg.get("url") or "").strip()
     if not url:
         log.info("Pager: no URL configured — skipping")

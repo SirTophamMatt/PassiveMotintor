@@ -22,12 +22,13 @@ ESC_COLOUR = "#d62728"
 
 ESC_COLUMNS = [("f_number", "F-number"), ("brigade", "Brigade"),
                ("incident_type", "Type"), ("escalation", "Escalation"),
-               ("make_matched", "MAKE + paged"), ("first_sent", "Started"),
+               ("make_matched", "MAKE + paged"), ("appliances", "Appliances"),
+               ("first_sent", "Started"),
                ("last_sent", "Last page")]
 JOB_COLUMNS = [("f_number", "F-number"), ("brigade", "Brigade"),
                ("incident_type", "Type"), ("priority", "Priority"),
                ("messages", "Msgs"), ("escalation", "Escalation"),
-               ("first_sent", "Started"), ("last_sent", "Last page"),
+               ("appliances", "Appliances"), ("first_sent", "Started"), ("last_sent", "Last page"),
                ("first_message", "First message")]
 LOG_COLUMNS = [("sent_at", "Time"), ("capcode", "Capcode"), ("alias", "Alias"),
                ("f_number", "F-number"), ("message", "Message"),
@@ -43,7 +44,9 @@ def _table(id_, page_size=15):
         sort_action="native",
         style_cell_conditional=[{"if": {"column_id": c},
                                  "whiteSpace": "normal", "minWidth": "260px"}
-                                for c in ("message", "first_message")])
+                                for c in ("message", "first_message")]
+        + [{"if": {"column_id": "appliances"}, "whiteSpace": "normal",
+            "minWidth": "200px"}])
 
 
 def layout():
@@ -231,9 +234,20 @@ def register_callbacks(app):
                          f"{_fmt_ts(msgs['sent_at']).iloc[0]} → "
                          f"{_fmt_ts(msgs['sent_at']).iloc[-1]}.",
                          className="muted")]
+        by_type, brigades, other = pager_data.job_units(msgs)
+        if by_type:
+            head.append(html.Div([html.Strong("Appliances: "),
+                                  pager_data.appliance_text(by_type)],
+                                 style={"margin": "6px 0"}))
+        if brigades:
+            head.append(html.Div([html.Strong("Brigades paged: "),
+                                  ", ".join(brigades)]))
+        if other:
+            head.append(html.Div([html.Strong("Other units: "),
+                                  ", ".join(other)], className="muted"))
         if not esc.empty:
             text = pager_data.escalation_text(
-                pager_data.summarise_escalation(esc))
+                pager_data.summarise_escalation(msgs))
             head.append(html.Div(f"Escalation: {text}",
                                  style={"color": ESC_COLOUR,
                                         "fontWeight": "bold",
