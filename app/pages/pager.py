@@ -240,7 +240,7 @@ def register_callbacks(app):
                                   pager_data.appliance_text(by_type)],
                                  style={"margin": "6px 0"}))
         if brigades:
-            head.append(html.Div([html.Strong("Brigades paged: "),
+            head.append(html.Div([html.Strong("Brigades: "),
                                   ", ".join(brigades)]))
         if other:
             head.append(html.Div([html.Strong("Other units: "),

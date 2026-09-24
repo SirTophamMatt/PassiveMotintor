@@ -210,19 +210,20 @@ def test_jobs_collate_by_f_number(db):
     # The same text to two capcodes is one message for the job.
     assert truck["messages"] == 4
     assert truck["capcodes"] == 5
-    assert truck["brigade"] == "CORO"
+    # [CORO], CCORO paged, COROT1 -> CORO, LARAT1 -> LARA, LANGULT1 -> LANG.
+    assert truck["brigade"] == "CORO, FS62, LARA, LANG"
     assert truck["incident_type"] == "NOSTC1"
     assert truck["escalated"]
     # Appliances from the unit lists AND the ULTRALIGHT LANGULT1 request.
     assert truck["appliances"] == ("Pumper ×1 (P62A) · Tanker ×2 (COROT1, LARAT1)"
                                    " · Ultralight ×1 (LANGULT1)")
-    assert truck["brigades_paged"] == "CORO"
     assert truck["escalation"] == ("MAKE Tankers 5 (2 paged) · MAKE Pumpers 2 "
                                    "(1 paged) · Ultralight req ×1")
     assert truck["make_matched"] == "Pumper, Tanker"
     frv = jobs.loc["F2609241240"]
     assert not frv["escalated"]
-    assert (frv["brigade"], frv["incident_type"]) == ("FS91", "STRUC1")
+    # [FS91_], AP91 -> FS91, CFTON paged, P90 -> FS90.
+    assert (frv["brigade"], frv["incident_type"]) == ("FS91, FTON, FS90", "STRUC1")
     assert frv["appliances"] == "AP ×1 (AP91) · Pumper ×1 (P90)"
 
 

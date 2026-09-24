@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from app import database
+from app.modules.pager import parse
 
 _TS = "%Y-%m-%d %H:%M:%S"
 _COLS = ("id, capcode, alias, sent_at, received_at, message, f_number, "
@@ -43,10 +44,18 @@ def _loads(value, default):
 
 def job_units(msgs):
     """Every unit paged to a job across its messages, first-paged first:
-    ``(appliances_by_type, brigades_paged, other_codes)``. Appliances are
+    ``(appliances_by_type, brigades, other_codes)``. Appliances are
     ``{type: [codes]}`` merged from the unit lists AND call signs named in
-    REQUIRED requests, so a tanker is counted once however it was paged."""
+    REQUIRED requests, so a tanker is counted once however it was paged.
+
+    ``brigades`` is every brigade/station involved: each message's own
+    ``[XXXX]`` brigade, whole brigades paged (CMTEL -> MTEL) and the home
+    brigade/station of every appliance (COROT1 -> CORO, P94 -> FS94)."""
     by_type, brigades, other, seen = {}, [], [], set()
+
+    def add_brigade(b):
+        if b and b == b and b not in brigades:       # b == b drops NaN
+            brigades.append(b)
 
     def add_appliance(t, code):
         if code in seen:
@@ -55,17 +64,21 @@ def job_units(msgs):
         by_type.setdefault(t, []).append(code)
 
     for _, m in msgs.sort_values(["sent_at", "id"]).iterrows():
+        add_brigade(m.get("brigade"))
         for u in _loads(m.get("units_json"), []):
             code = u.get("code")
             if u.get("kind") == "appliance":
                 add_appliance(u.get("type") or code, code)
+                add_brigade(u.get("brigade"))
             elif u.get("kind") == "brigade":
-                if u.get("brigade") not in brigades:
-                    brigades.append(u.get("brigade"))
+                add_brigade(u.get("brigade"))
             elif code not in other:
                 other.append(code)
         for t, unit in _loads(m.get("required_json"), []):
             add_appliance(t, unit or f"{t} (unnamed)")
+            called = parse.classify_unit(unit) if unit else None
+            if called and called["kind"] == "appliance":
+                add_brigade(called["brigade"])
     return by_type, brigades, other
 
 
@@ -122,7 +135,7 @@ def jobs(hours=24, escalated_only=False, now=None):
         [since])
     cols = ["f_number", "first_sent", "last_sent", "messages", "capcodes",
             "brigade", "incident_type", "priority", "escalated", "escalation",
-            "make_matched", "appliances", "brigades_paged", "first_message"]
+            "make_matched", "appliances", "first_message"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     rows = []
@@ -143,14 +156,14 @@ def jobs(hours=24, escalated_only=False, now=None):
             "last_sent": g["sent_at"].max(),
             "messages": int(g["message"].nunique()),
             "capcodes": int(g["capcode"].nunique()),
-            "brigade": first_valid("brigade"),
+            # Every brigade on the job, the one in [..] on the first page first.
+            "brigade": ", ".join(brigades),
             "incident_type": first_valid("incident_type"),
             "priority": first_valid("priority"),
             "escalated": escalated,
             "escalation": escalation_text(summary) if summary else "",
             "make_matched": ", ".join(summary["matched"]) if summary else "",
             "appliances": appliance_text(by_type),
-            "brigades_paged": ", ".join(brigades),
             "first_message": first["message"],
         })
     out = pd.DataFrame(rows, columns=cols)
