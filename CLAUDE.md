@@ -962,7 +962,8 @@ what should I be watching* — and is useful **on its own, before anyone generat
   messages summarised. The make-up figure is the LATEST per type (MAKE 5 then MAKE 8 → 8); "MAKE +
   paged" names the types where a MAKE request and individual appliance requests coincide on the
   same job; "paged" counts appliances ATTACHED to the job (unit lists + REQUIRED call signs, each
-  code once). Jobs show an Appliances column (`Tanker ×2 (COROT1, LARAT1)`); clicking a job
+  code once). The Brigade column lists EVERY brigade/station on the job (the [..] brigade first, then
+  brigades paged and each appliance's home brigade/FRV station). Jobs show an Appliances column (`Tanker ×2 (COROT1, LARAT1)`); clicking a job
   (Escalations or Jobs table) shows its appliances, brigades paged and full message history.
 - **Wiring:** collector + watchdog supervision, `pager_alert` webhook per NEW escalation message
   (grouped per job; first pass after boot seeds silently), Settings notify toggle, Admin
