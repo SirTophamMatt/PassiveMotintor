@@ -33,6 +33,62 @@ ALERT_COLUMNS = [
     ("timestamp", "Time"), ("classification", "Class"),
     ("alert_type", "Type"), ("message", "Detail"),
 ]
+# Stored alert_type codes -> words an operator reads at a glance.
+ALERT_TYPE_LABELS = {"new_cell": "New cell", "escalation": "Intensified"}
+# Class colours: the map/annotation palette (strong red, moderate amber), with
+# a darker amber on light backgrounds where #f5a623 on white is unreadable.
+CLASS_COLOURS = {
+    True: {"strong": "#ff6b6b", "moderate": "#f5a623"},
+    False: {"strong": "#c62828", "moderate": "#a15c00"},
+}
+
+
+def alert_rows(alerts):
+    """Alert records shaped for reading: a short day+time stamp, the class in
+    capitals, the type in words. Pure, so it is testable without Dash."""
+    rows = []
+    for raw in alerts.to_dict("records"):
+        # NULLs come back from pandas as NaN, which is truthy ("nan" in a cell).
+        rec = {k: (None if v is None or (isinstance(v, float) and v != v) else v)
+               for k, v in raw.items()}
+        ts = pd.to_datetime(rec.get("timestamp"), errors="coerce")
+        cls = str(rec.get("classification") or "").strip().lower()
+        code = str(rec.get("alert_type") or "")
+        rows.append({
+            "timestamp": ts.strftime("%a %d %b %H:%M") if pd.notna(ts)
+            else str(rec.get("timestamp") or "—"),
+            "classification": cls.upper() or "—",
+            "class_key": cls,
+            "alert_type": ALERT_TYPE_LABELS.get(code, code.replace("_", " ").capitalize()),
+            "message": rec.get("message") or "",
+        })
+    return rows
+
+
+def alert_table_styles(dark):
+    """Theme styles for the alerts table plus the readability fixes: detail
+    wraps instead of stretching the page, fixed narrow columns for the short
+    fields, and the class coloured by severity."""
+    styles = ui.table_styles(dark)
+    colours = CLASS_COLOURS[bool(dark)]
+    conditional = [
+        {"if": {"filter_query": "{class_key} = %s" % cls,
+                "column_id": "classification"},
+         "color": colour, "fontWeight": "bold"}
+        for cls, colour in colours.items()
+    ]
+    # A strong cell's whole row is tinted so it stands out in a long list.
+    conditional.append({"if": {"filter_query": "{class_key} = strong"},
+                        "backgroundColor": "rgba(229, 72, 77, 0.12)"})
+    cell = dict(styles["style_cell"], whiteSpace="normal", height="auto",
+                lineHeight="1.4")
+    widths = [
+        {"if": {"column_id": "timestamp"}, "width": "150px", "whiteSpace": "nowrap"},
+        {"if": {"column_id": "classification"}, "width": "100px"},
+        {"if": {"column_id": "alert_type"}, "width": "110px"},
+    ]
+    return (styles["style_table"], cell, styles.get("style_header", {}),
+            styles.get("style_data", {}), conditional, widths)
 
 
 def layout():
@@ -166,6 +222,12 @@ def register_callbacks(app):
         Output("storm-cells-table", "style_data"),
         Output("storm-alerts-table", "data"),
         Output("storm-alerts-table", "columns"),
+        Output("storm-alerts-table", "style_table"),
+        Output("storm-alerts-table", "style_cell"),
+        Output("storm-alerts-table", "style_header"),
+        Output("storm-alerts-table", "style_data"),
+        Output("storm-alerts-table", "style_data_conditional"),
+        Output("storm-alerts-table", "style_cell_conditional"),
         Output("storm-trend", "figure"),
         Input("storm-interval", "n_intervals"),
         Input("theme-store", "data"))
@@ -213,13 +275,14 @@ def register_callbacks(app):
         cell_columns = [{"name": name, "id": col} for col, name in CELL_COLUMNS]
 
         alerts = storm_data.recent_alerts()
-        alert_data = ([] if alerts.empty
-                      else alerts[[c for c, _ in ALERT_COLUMNS]].to_dict("records"))
+        alert_data = [] if alerts.empty else alert_rows(alerts)
+        # class_key stays in the data (the colour rules filter on it) but is
+        # not a column, so it is never shown.
         alert_columns = [{"name": name, "id": col} for col, name in ALERT_COLUMNS]
 
         trend = _trend_figure(storm_data.cell_history(), dark)
         return (summary, kpis, table_data, cell_columns, *style_out,
-                alert_data, alert_columns, trend)
+                alert_data, alert_columns, *alert_table_styles(dark), trend)
 
     @app.callback(
         Output("storm-geojson-download", "data"),

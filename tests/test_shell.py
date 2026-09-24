@@ -189,3 +189,33 @@ def test_page_layouts_build(builder):
     Dash(__name__)   # get_asset_url (the brand lockups) needs a current app
     module = wall if builder == "layout" else overview
     assert getattr(module, builder)() is not None
+
+
+# --------------------------------------------------------------------------- #
+# Storm alerts table readability
+# --------------------------------------------------------------------------- #
+def test_storm_alert_rows_are_humanised():
+    import pandas as pd
+
+    from app.pages import storm
+    rows = storm.alert_rows(pd.DataFrame([
+        {"timestamp": "2026-09-25 05:29:00", "classification": "moderate",
+         "alert_type": "new_cell", "message": "CELL-A92C7C MODERATE"},
+        {"timestamp": None, "classification": "Strong",
+         "alert_type": "escalation", "message": None},
+    ]))
+    assert rows[0]["timestamp"] == "Fri 25 Sep 05:29"
+    assert rows[0]["classification"] == "MODERATE"
+    assert rows[0]["alert_type"] == "New cell"
+    assert rows[1]["class_key"] == "strong" and rows[1]["alert_type"] == "Intensified"
+    assert rows[1]["timestamp"] == "—" and rows[1]["message"] == ""
+
+
+@pytest.mark.parametrize("dark", [True, False])
+def test_storm_alert_table_is_themed_and_left_aligned(dark):
+    from app.pages import storm
+    table, cell, header, data, conditional, widths = storm.alert_table_styles(dark)
+    # The bug: no theme styles at all, so light text sat on a white table.
+    assert data.get("backgroundColor") and data.get("color")
+    assert cell["textAlign"] == "left" and cell["whiteSpace"] == "normal"
+    assert any(r["if"].get("column_id") == "classification" for r in conditional)
