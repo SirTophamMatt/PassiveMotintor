@@ -13,6 +13,7 @@ html, body { height: 100%; }
     --muted: #9aa0a6;
     --border: #2a3340;
     --accent: #4ea1ff;
+    --on-accent: #ffffff;
 }
 .app.light {
     --bg: #f5f6f8;
@@ -22,9 +23,11 @@ html, body { height: 100%; }
     --muted: #5f6368;
     --border: #d8dce2;
     --accent: #1a73e8;
+    --on-accent: #ffffff;
 }
 
 .app {
+    accent-color: var(--accent);   /* native checkboxes/radios follow the scheme */
     background: var(--bg);
     color: var(--text);
     font-family: "Segoe UI", system-ui, sans-serif;
@@ -62,11 +65,10 @@ html, body { height: 100%; }
     font-size: 14px;
 }
 .nav-link:hover { background: var(--bg-panel); color: var(--accent); }
-.theme-btn { margin-top: auto; }
 /* Alert-sounds toggle (app/sound_alerts.py). Accent when on; while the
    browser still blocks audio (fresh load, no click yet) it says so, because a
    toggle that reads "on" but can't make a sound is worse than one reading off. */
-.sound-row { display: flex; gap: 6px; margin-top: 10px; }
+.sound-row { display: flex; gap: 6px; }
 .sound-row .btn { margin: 0; }
 .sound-row .sound-btn { flex: 1; }
 .sound-gear { padding: 8px 11px; }
@@ -153,8 +155,8 @@ html.wd-audio-locked .sound-btn.sound-on::after {
     font-size: 14px;
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { opacity: 0.9; color: #fff; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn-primary:hover { opacity: 0.9; color: var(--on-accent); }
 
 .text-input {
     background: var(--bg);
@@ -364,8 +366,9 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 }
 .ticker-hidden { display: none; }
 /* The fixed ticker overlays the bottom of the sticky sidebar; while it is
-   showing, keep the sidebar's last controls (sounds, theme) clear of it. */
-.app:has(.ticker:not(.ticker-hidden)) .sidebar { padding-bottom: 48px; }
+   showing, lift the docked controls (sounds, display, theme) clear of it. */
+.app:has(.ticker:not(.ticker-hidden)) .sidebar { padding-bottom: 150px; }
+.app.layout-classic:has(.ticker:not(.ticker-hidden)) .shell-controls { bottom: 54px; }
 .ticker-emergency {
     background: #a11212;
     border-top-color: #ff5a5a;
@@ -584,7 +587,7 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     align-items: center;
     gap: 8px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border: none;
     border-radius: 24px;
     padding: 11px 20px;
@@ -699,4 +702,289 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     /* No room beside the sidebar on a phone: open the sound panel upward,
        over the sidebar, instead of off the right edge of the screen. */
     .sound-panel { left: 0; bottom: calc(100% + 6px); width: auto; min-width: 186px; }
+}
+
+/* ======================================================================
+   Colour schemes (app/shell.py SCHEMES). Each overrides the theme tokens
+   for BOTH light and dark, so the ☀/☾ button keeps working in every scheme.
+   Three classes (.app.dark.scheme-x) out-rank the two-class defaults above.
+   ====================================================================== */
+.app.dark.scheme-midnight {
+    --bg: #0a0f1f; --bg-panel: #111a33; --bg-sidebar: #0d152b;
+    --text: #e6ecff; --muted: #97a3c4; --border: #22305a;
+    --accent: #5cc8ff; --on-accent: #041526;
+}
+.app.light.scheme-midnight {
+    --bg: #eef2fb; --bg-panel: #ffffff; --bg-sidebar: #e3e9f7;
+    --text: #111a33; --muted: #4f5b7a; --border: #c9d3ea;
+    --accent: #2456d6; --on-accent: #ffffff;
+}
+.app.dark.scheme-graphite {
+    --bg: #121212; --bg-panel: #1c1c1c; --bg-sidebar: #171717;
+    --text: #ececec; --muted: #a3a3a3; --border: #333333;
+    --accent: #2dd4bf; --on-accent: #06201d;
+}
+.app.light.scheme-graphite {
+    --bg: #f4f4f4; --bg-panel: #ffffff; --bg-sidebar: #eaeaea;
+    --text: #1a1a1a; --muted: #5c5c5c; --border: #d4d4d4;
+    --accent: #0f766e; --on-accent: #ffffff;
+}
+/* Night Ops: warm, low-blue palette for a dark room on a night shift.
+   Warning colours are NOT changed by any scheme — red/orange/yellow keep
+   their meaning everywhere. */
+.app.dark.scheme-nightops {
+    --bg: #120d0a; --bg-panel: #1b1410; --bg-sidebar: #160f0c;
+    --text: #f0dcc8; --muted: #b39a84; --border: #3a2a20;
+    --accent: #ff9f43; --on-accent: #1b1000;
+}
+.app.light.scheme-nightops {
+    --bg: #f7f1ea; --bg-panel: #fffaf4; --bg-sidebar: #efe5d8;
+    --text: #2a1d12; --muted: #6b5646; --border: #dccbb8;
+    --accent: #b4500a; --on-accent: #ffffff;
+}
+.app.dark.scheme-contrast {
+    --bg: #000000; --bg-panel: #0b0b0b; --bg-sidebar: #050505;
+    --text: #ffffff; --muted: #d0d0d0; --border: #6b6b6b;
+    --accent: #4db8ff; --on-accent: #000000;
+}
+.app.light.scheme-contrast {
+    --bg: #ffffff; --bg-panel: #ffffff; --bg-sidebar: #f2f2f2;
+    --text: #000000; --muted: #2e2e2e; --border: #1a1a1a;
+    --accent: #0040a8; --on-accent: #ffffff;
+}
+.scheme-swatch {
+    display: inline-block; width: 26px; height: 12px; margin-right: 8px;
+    border-radius: 3px; border: 1px solid var(--border); vertical-align: -1px;
+}
+.swatch-watchdesk { background: linear-gradient(90deg, #0f141b 55%, #4ea1ff 55%); }
+.swatch-midnight  { background: linear-gradient(90deg, #0a0f1f 55%, #5cc8ff 55%); }
+.swatch-graphite  { background: linear-gradient(90deg, #121212 55%, #2dd4bf 55%); }
+.swatch-nightops  { background: linear-gradient(90deg, #120d0a 55%, #ff9f43 55%); }
+.swatch-contrast  { background: linear-gradient(90deg, #000000 55%, #ffffff 55%); }
+
+/* ======================================================================
+   Shared shell controls — rendered once (shell.controls), docked by layout.
+   ====================================================================== */
+.shell-controls { position: fixed; z-index: 880; display: flex; gap: 6px; }
+.shell-controls .btn { margin: 0; }
+.display-row { display: flex; gap: 6px; }
+.app.layout-classic .shell-controls {
+    left: 12px; bottom: 16px; width: 186px; flex-direction: column;
+}
+.app.layout-classic .display-btn { flex: 1; }
+.app.layout-classic .sidebar { padding-bottom: 110px; }
+.app.layout-console .shell-controls { top: 10px; right: 16px; align-items: center; }
+.app.has-titlebar.layout-console .shell-controls { top: 46px; }
+.app.layout-console .shell-controls .btn { padding: 7px 11px; font-size: 13px; }
+/* Popovers: beside the sidebar in classic, dropping down in console. */
+.display-panel {
+    position: absolute; z-index: 60; width: 270px;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg-panel); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    font-size: 13px;
+}
+.app.layout-classic .display-panel { left: calc(100% + 14px); bottom: 0; }
+.app.layout-console .display-panel { right: 0; top: calc(100% + 8px); }
+.app.layout-console .sound-panel { left: auto; right: 0; bottom: auto; top: calc(100% + 8px); }
+.display-panel-hidden { display: none; }
+.display-panel-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--muted); margin: 6px 0 2px;
+}
+.display-options label { display: flex; align-items: center; gap: 6px; margin-top: 5px; cursor: pointer; }
+.display-panel-note { font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+.display-panel-link { color: var(--accent); text-decoration: none; font-size: 13px; }
+.display-panel-link:hover { text-decoration: underline; }
+
+/* ======================================================================
+   Console layout — top bar with grouped menus + statewide status strip.
+   ====================================================================== */
+.console-head { display: none; }
+.app.layout-console .console-head { display: block; position: sticky; top: 0; z-index: 800; }
+.app.layout-console .sidebar { display: none; }
+.console-topbar {
+    height: 56px; display: flex; align-items: center; gap: 22px;
+    padding: 0 400px 0 20px;   /* right: room for the docked controls */
+    background: var(--bg-sidebar); border-bottom: 1px solid var(--border);
+}
+.console-brand { display: flex; align-items: center; }
+.console-brand .brand-mark.brand-compact { height: 28px; width: auto; max-width: none; }
+.console-nav { display: flex; gap: 2px; }
+.cnav-group { position: relative; }
+.cnav-btn {
+    background: transparent; border: 0; color: var(--text); cursor: pointer;
+    font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 8px;
+}
+.cnav-btn:hover, .cnav-group:focus-within .cnav-btn { background: var(--bg-panel); }
+.cnav-btn.cnav-active { color: var(--accent); font-weight: 600; }
+.cnav-menu {
+    display: none; position: absolute; top: 100%; left: 0; z-index: 850;
+    flex-direction: column; min-width: 220px; padding: 6px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.cnav-group:hover .cnav-menu, .cnav-group:focus-within .cnav-menu { display: flex; }
+.cnav-link {
+    padding: 8px 10px; border-radius: 6px; font-size: 14px;
+    color: var(--text); text-decoration: none;
+}
+.cnav-link:hover, .cnav-link:focus-visible { background: var(--bg); color: var(--accent); }
+.cnav-link-active { color: var(--accent); font-weight: 600; }
+.console-spacer { flex: 1; }
+.console-sources {
+    font-size: 12px; padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+    text-decoration: none; border: 1px solid var(--border); color: var(--muted);
+    max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+}
+.console-sources.sources-ok { color: #2ecc71; border-color: rgba(46, 204, 113, 0.45); }
+.console-sources.sources-stale { color: #f5a623; border-color: rgba(245, 166, 35, 0.6); }
+.console-strip {
+    display: flex; align-items: center; gap: 10px; padding: 8px 20px;
+    background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto;
+}
+.strip-now {
+    font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--muted); flex-shrink: 0;
+}
+.strip-chips { display: flex; gap: 8px; }
+.strip-chip {
+    display: flex; align-items: baseline; gap: 7px; white-space: nowrap;
+    padding: 5px 11px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg-panel); color: var(--text); text-decoration: none; font-size: 13px;
+}
+.strip-chip:hover { border-color: var(--accent); }
+.chip-value { font-size: 16px; }
+.chip-label { color: var(--muted); }
+.strip-clock {
+    margin-left: auto; flex-shrink: 0; color: var(--muted);
+    font-family: Consolas, monospace; font-size: 13px;
+}
+/* Severity tones (strip chips + wall tiles). Only applied while the count is
+   above zero. Fixed colours: warning meaning must not change with scheme. */
+.chip-emergency { background: rgba(229, 72, 77, 0.16); border-color: #e5484d; }
+.chip-watch { background: rgba(245, 166, 35, 0.14); border-color: #f5a623; }
+.chip-advice { background: rgba(217, 187, 43, 0.14); border-color: #d9bb2b; }
+.chip-alert { border-color: #ff7a45; }
+.chip-emergency .chip-label, .chip-watch .chip-label, .chip-advice .chip-label { color: var(--text); }
+
+/* ---- console Overview (/ in the Console layout) ---- */
+.ops-grid {
+    display: grid; grid-template-columns: 330px minmax(0, 1fr) 370px; gap: 14px;
+    height: calc(100vh - 186px); min-height: 520px;
+}
+.app.has-titlebar .ops-grid { height: calc(100vh - 222px); }
+.ops-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.ops-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ops-head h3 { margin: 4px 0 0; font-size: 15px; }
+.ops-more { font-size: 12px; color: var(--accent); text-decoration: none; }
+.ops-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.ops-map {
+    position: relative; min-height: 0; border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; background: var(--bg-panel);
+}
+.ops-map-graph { height: 100%; }
+.ops-map-link {
+    position: absolute; top: 10px; right: 10px; z-index: 5; font-size: 12px;
+    padding: 6px 10px; border-radius: 8px; text-decoration: none; color: var(--text);
+    background: var(--bg-panel); border: 1px solid var(--border);
+}
+.ops-actions { display: flex; gap: 8px; }
+.ops-actions .btn { flex: 1; margin: 0; text-align: center; text-decoration: none; }
+.ops-sources {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px;
+}
+.source-row { display: flex; gap: 4px; font-size: 12px; white-space: nowrap; }
+.source-age { margin-left: auto; color: var(--muted); }
+.source-stale .source-name { color: #f5a623; }
+.warn-row {
+    display: flex; gap: 10px; padding: 10px 12px; margin-bottom: 8px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+}
+.warn-diamond { width: 10px; height: 10px; margin-top: 5px; flex-shrink: 0; transform: rotate(45deg); }
+.warn-level { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+.warn-title { font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; }
+.warn-title:hover { color: var(--accent); text-decoration: underline; }
+.warn-meta { font-size: 12px; color: var(--muted); }
+.warn-more { padding: 2px 4px; }
+@media (max-width: 1100px) {
+    .ops-grid { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .ops-map { height: 60vh; }
+    .console-topbar { padding-right: 20px; flex-wrap: wrap; height: auto; padding-top: 8px; padding-bottom: 8px; }
+    .app.layout-console .shell-controls { position: static; padding: 6px 20px; background: var(--bg-sidebar); }
+}
+
+/* ======================================================================
+   Wall display (/wall). The shell hides its own chrome on this path.
+   ====================================================================== */
+.app.wall-mode .sidebar, .app.wall-mode .console-head, .app.wall-mode .fab,
+.app.wall-mode .display-row, .app.wall-mode .display-panel { display: none; }
+.app.wall-mode .content { padding: 0; }
+/* Sounds stay reachable (a wall screen is where they are most useful) but
+   recede until pointed at. */
+.app.wall-mode .shell-controls {
+    top: auto; left: auto; right: 40px; bottom: 30px; width: auto;
+    flex-direction: row; opacity: 0.35; transition: opacity 0.2s;
+}
+.app.wall-mode .shell-controls:hover, .app.wall-mode .shell-controls:focus-within { opacity: 1; }
+.app.wall-mode:has(.ticker:not(.ticker-hidden)) .shell-controls { bottom: 52px; }
+.app.wall-mode .sound-panel { left: auto; right: 0; top: auto; bottom: calc(100% + 8px); }
+.wall-page {
+    height: 100vh; box-sizing: border-box; padding: 20px 26px;
+    display: flex; flex-direction: column; gap: 16px;
+}
+.app:has(.ticker:not(.ticker-hidden)) .wall-page { height: calc(100vh - 36px); }
+.app.has-titlebar .wall-page { height: calc(100vh - 36px); }
+.wall-head { display: flex; align-items: center; gap: 14px; }
+.wall-head .btn { margin: 0; text-decoration: none; white-space: nowrap; }
+.wall-brand .brand-mark { max-width: 190px; }
+.wall-stale:empty { display: none; }
+.wall-stale {
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 16px; color: #f5a623; padding: 6px 12px; border-radius: 8px;
+    background: rgba(245, 166, 35, 0.12); border: 1px solid rgba(245, 166, 35, 0.55);
+}
+.wall-clock { font-family: Consolas, monospace; font-size: 44px; font-weight: 600; line-height: 1; }
+.wall-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.wall-tile {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 18px;
+}
+.wall-tile.chip-emergency { background: rgba(229, 72, 77, 0.16); border: 2px solid #e5484d; }
+.wall-tile.chip-watch { background: rgba(245, 166, 35, 0.14); border: 2px solid #f5a623; }
+.wall-tile.chip-advice { background: rgba(217, 187, 43, 0.14); border: 2px solid #d9bb2b; }
+.wall-tile.chip-alert { border-color: #ff7a45; }
+.wall-tile.chip-emergency .wall-tile-label, .wall-tile.chip-watch .wall-tile-label,
+.wall-tile.chip-advice .wall-tile-label { color: var(--text); }
+.wall-tile-label { font-size: clamp(13px, 1.15vw, 22px); color: var(--muted); }
+.wall-tile-value { font-size: clamp(34px, 4.2vw, 88px); font-weight: 700; line-height: 1.1; }
+.wall-body {
+    flex: 1; min-height: 0; display: grid; gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 31%);
+}
+.wall-map { min-height: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.wall-map-graph { height: 100%; }
+.wall-panel {
+    min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 18px 22px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.wall-panel-title {
+    font-size: 15px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted);
+}
+.wall-panel-body { flex: 1; min-height: 0; overflow: hidden; }
+.wall-panel .feed-headline, .wall-panel .warn-title { font-size: 19px; }
+.wall-panel .feed-time { font-size: 17px; }
+.wall-panel .feed-line { font-size: 15px; }
+.wall-panel .source-row { font-size: 17px; margin-bottom: 6px; }
+.wall-panel .warn-meta, .wall-panel .warn-level { font-size: 13px; }
+.wall-dots { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.wall-dot { width: 28px; height: 4px; border-radius: 2px; background: var(--border); }
+.wall-dot-on { background: var(--accent); }
+.wall-next { margin-left: 8px; }
+@media (max-width: 1000px) {
+    .wall-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .wall-body { grid-template-columns: minmax(0, 1fr); }
+    .wall-page { height: auto; }
+    .wall-map { height: 55vh; }
 }

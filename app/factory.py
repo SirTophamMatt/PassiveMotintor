@@ -10,7 +10,7 @@ from dash import Dash, Input, Output, State, dcc, get_asset_url, html
 # (with window controls) instead of relying on the OS chrome.
 DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 
-from app import auth, database, feedback_ui, sound_alerts
+from app import auth, database, feedback_ui, shell, sound_alerts
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
@@ -18,7 +18,7 @@ from app.pages import (admin, analytics as analytics_page,
                        power,
                        replay as replay_page, roads as roads_page,
                        settings, station, storm as storm_page,
-                       unified as unified_page, weather)
+                       unified as unified_page, wall as wall_page, weather)
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,8 @@ PUBLIC_PAGES = [
     # Third on purpose: Overview is the glance, the Feed is what changed, and
     # this is the thing you actually stand up and deliver from.
     ("/briefing", "Briefing", briefing_page),
+    # Full-screen, navigation-free view for an operations-room screen.
+    (shell.WALL_PATH, "Wall Display", wall_page),
     ("/map", "Unified Map", unified_page),
     # After the live map: same layers, same renderers, moved back in time.
     ("/replay", "Event Replay", replay_page),
@@ -90,6 +92,8 @@ def _shell_layout():
     ]
     if DESKTOP:
         children.append(_titlebar())
+    # Console layout header; hidden by CSS unless that layout is chosen.
+    children.append(shell.console_header())
     children.append(html.Div([
         html.Div([
             html.Div([
@@ -106,18 +110,19 @@ def _shell_layout():
                 html.Div("VicEmergency feed", className="side-log-title"),
                 html.Div(id="sidebar-live-log"),
             ], className="side-log"),
-            sound_alerts.toggle_button(),
-            html.Button("☀ / ☾", id="theme-toggle", className="btn theme-btn",
-                        title="Toggle light/dark mode"),
         ], className="sidebar"),
         html.Div(id="page-content", className="content"),
     ], className="body-row"))
+    # Sounds / Display / theme: rendered once, docked by CSS into whichever
+    # layout is showing (sidebar foot or console top bar).
+    children.append(shell.controls())
     children.append(html.Div(id="news-ticker", className="ticker ticker-hidden"))
     # Feedback lives in the shell, not on a page: a bug is reported from
     # wherever it was found, and the form records that page automatically.
     children.append(feedback_ui.button())
     children.append(feedback_ui.modal())
-    root_class = "app dark has-titlebar" if DESKTOP else "app dark"
+    root_class = shell.root_class(True, shell.LAYOUT_CLASSIC,
+                                  shell.DEFAULT_SCHEME, None, desktop=DESKTOP)
     return html.Div(children, id="app-root", className=root_class)
 
 
@@ -269,20 +274,36 @@ def create_app(autostart=False):
     from app import api_intel
     api_intel.register(app)
 
-    @app.callback(Output("main-nav", "children"), Input("url", "pathname"))
-    def render_nav(_pathname):
+    @app.callback(Output("main-nav", "children"),
+                  Output("console-nav", "children"),
+                  Input("url", "pathname"))
+    def render_nav(pathname):
         items = [(path, label) for path, label, _ in PUBLIC_PAGES]
         if auth.is_admin():
             items += [(path, label) for path, label, _ in ADMIN_PAGES]
         else:
             items.append(("/admin", "Admin"))
-        return [dcc.Link(label, href=path, className="nav-link",
-                         id=f"nav-{label}") for path, label in items]
+        sidebar = [dcc.Link(label, href=path, className="nav-link",
+                            id=f"nav-{label}") for path, label in items]
+        return sidebar, shell.render_console_nav(items, pathname)
 
-    @app.callback(Output("page-content", "children"), Input("url", "pathname"))
-    def route(pathname):
+    @app.callback(Output("page-content", "children"),
+                  Input("url", "pathname"),
+                  Input("display-layout", "value"))
+    def route(pathname, layout):
+        from dash import ctx, no_update
+
         from app import analytics
-        analytics.record_view(pathname, is_admin=auth.is_admin())
+        if ctx.triggered_id == "display-layout":
+            # Switching layout only changes what "/" renders; re-rendering any
+            # other page would throw away its filters for nothing, and it is
+            # not a page view.
+            if pathname != "/":
+                return no_update
+        else:
+            analytics.record_view(pathname, is_admin=auth.is_admin())
+        if pathname == "/" and layout == shell.LAYOUT_CONSOLE:
+            return overview.console_layout()
         # Dynamic station detail pages: /flood/station/<station_key>
         if pathname and pathname.startswith("/flood/station/"):
             return station.layout(station.key_from_path(pathname))
@@ -305,10 +326,13 @@ def create_app(autostart=False):
     def toggle_theme(_, dark):
         return not dark
 
-    @app.callback(Output("app-root", "className"), Input("theme-store", "data"))
-    def apply_theme(dark):
-        base = "app dark" if dark else "app light"
-        return base + " has-titlebar" if DESKTOP else base
+    @app.callback(Output("app-root", "className"),
+                  Input("theme-store", "data"),
+                  Input("display-layout", "value"),
+                  Input("display-scheme", "value"),
+                  Input("url", "pathname"))
+    def apply_theme(dark, layout, scheme, pathname):
+        return shell.root_class(dark, layout, scheme, pathname, desktop=DESKTOP)
 
     for _, _, module in ALL_PAGES:
         module.register_callbacks(app)
@@ -318,6 +342,7 @@ def create_app(autostart=False):
     ticker.register_callbacks(app)
     feedback_ui.register_callbacks(app)
     sound_alerts.register_callbacks(app)
+    shell.register_callbacks(app)
 
     if autostart:
         from app.collector import manager
