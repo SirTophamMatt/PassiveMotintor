@@ -972,6 +972,43 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - Not done: Overview KPI / Unified Map / Intelligence Feed / Briefing integration (no coordinates in
   the messages yet — would need the SVC grid ref or address geocoded), XLSX export, event-tag slicing.
 
+## Alert sounds (built 2026-09-24)
+- **Opt-in, per browser, off by default.** Sidebar "Sounds" toggle (`app/sound_alerts.py`,
+  shell-level like the ticker); the choice is a `localStorage` `dcc.Store`, so a wall display
+  switched on stays on across reloads and nobody else hears anything.
+- **Sounds are synthesised, not audio files** (`assets/alert_sounds.js`, `window.WDSounds`):
+  detuned stacks, additive partials, FM, filter envelopes, ADSR, a synthetic-reverb + compressor
+  bus. Six sounds, most urgent first: `emergency` (VicEmergency Emergency Warning/Evacuate, BoM
+  warning carrying SEWS), `escalation` (Watch and Act; a gauge at/above Minor or moving up a
+  class), `pager` (CFA pager escalation), `advice` (Advice, new BoM warning), `system` (a collector
+  reporting a new error), `resolved` (a warning leaving the feed). None imitate the real SEWS.
+- **Server lists what is active; the BROWSER decides what is new.** Each tick the callback returns
+  every alertable item with a stable `key` (entity + level, so an escalation is a new key) and an
+  `entity`; `assets/alert_sounds_ui.js` keeps a per-page seen-set and plays ONE sound per tick
+  (the most urgent). The first snapshot after load/switch-on only seeds, so opening mid-event
+  never replays the backlog. Unlike the sidebar log's server-global seen-set, every viewer has
+  their own. A `resolvable` entity (warnings only; gauges hover around Minor) that leaves the set
+  plays `resolved`.
+- **Costs nothing when off:** the callback returns `None` unless the viewer enabled sounds, so the
+  flood/warning queries run only for opted-in browsers (`None` also resets the seen-set).
+- **Browser autoplay rule:** audio needs a user gesture after every page load. `alert_sounds.js`
+  puts `wd-audio-locked` on `<html>` until it is allowed, and the CSS adds "Click anywhere to
+  activate" under an enabled toggle, so "on but silent" is visible.
+- **Settings panel** (⚙ beside the toggle, added 2026-09-24): a volume slider (0-100, plays a
+  preview on release; the label carries the value because a tooltip covers the checklist in a
+  210 px sidebar) and per-category switches (`sound_alerts.CATEGORIES` — a category IS its sound
+  name, so the browser filters on `event.sound`). Both use Dash `persistence` into localStorage,
+  i.e. per browser like the toggle. A switched-off category's events are still marked SEEN, so
+  switching it back on never replays what arrived meanwhile. The panel is a popover beside the
+  sidebar (upward on phones), not in-flow: the sidebar is a fixed-height column already full.
+  A test pins `CATEGORIES` to the `SOUNDS` keys in `alert_sounds.js`.
+- **Dash version:** `requirements.txt` says `dash>=2.17`, which currently installs **4.x**
+  (Radix-based `dcc.Slider`, no `.rc-slider` classes) — target the slider by `[role=slider]` in
+  browser tests.
+- The fixed ticker used to cover the bottom of the sticky sidebar (theme button included);
+  `.app:has(.ticker:not(.ticker-hidden)) .sidebar` now pads it clear while the ticker shows.
+- Not done: road closures (they churn too often to chime on). Tests: `tests/test_sound_alerts.py`.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
