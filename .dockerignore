@@ -1,19 +1,31 @@
 # Keep the image small and never bake secrets/data into it.
-.venv/
-dist/
-build/
-backups/
-storm_frames/
-opsum_images/
-__pycache__/
-*.pyc
-*.db
-*.db-wal
-*.db-shm
-*.log
-config.json
-.env
-power_debug.html
+#
+# Patterns here are relative to the build context and, unlike .gitignore, do
+# NOT match in subdirectories unless they start with **/ . The old plain
+# `*.db` / `backups/` lines only matched at the top level, so the compose
+# volume folder ./data (live DB + 15 backup snapshots, 16 GB on the VPS) was
+# copied into every image until a build filled the disk (2026-09-26).
+# data/ is the compose volume: it is mounted at runtime, never built in.
+data/
+**/.venv/
+**/dist/
+**/build/
+**/backups/
+**/storm_frames/
+**/opsum_images/
+**/__pycache__/
+**/*.pyc
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db-journal
+**/*.log
+**/config.json
+**/.env
+**/power_debug.html
+**/pager_debug.html
+**/opsum_debug_*
+**/chromedriver.log
 .git/
 tests/
 pytest.ini

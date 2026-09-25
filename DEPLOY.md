@@ -71,6 +71,20 @@ The DB and config persist in `./data`. Existing named flood events are migrated
 into date-range **tags** automatically on first start of the new build, so past
 incidents stay selectable on the Flood page.
 
+## "No space left on device" during a build
+
+Check the `load build context` line of the build: it should be a few MB. If it
+is gigabytes, something from `./data` is being copied into the image — see the
+comment at the top of `.dockerignore`. To recover disk after a failed build:
+
+```bash
+docker builder prune -af   # build cache, incl. the half-built layers
+docker image prune -f      # superseded app images (each may hold a copy of the data)
+df -h /
+```
+
+These never touch `./data` or Caddy's certificate volumes.
+
 ## Intel Tool password (Operational Summary)
 
 The Operational Summary builder at `/intel/summary` is marked Official: Sensitive, so it
