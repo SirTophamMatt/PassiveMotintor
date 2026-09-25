@@ -415,3 +415,11 @@ def test_image_route_requires_the_intel_session(images, monkeypatch):
     # ... and a path with a slash never reaches it (Dash's own page answers).
     r = client.get(f"{page.IMAGE_ROUTE}/..%2f..%2fconfig.json")
     assert r.mimetype == "text/html"
+
+
+def test_blank_intel_password_env_means_default():
+    from app.pages import intel
+    assert intel.password_from_env(None) == intel.DEFAULT_PASSWORD
+    assert intel.password_from_env("") == intel.DEFAULT_PASSWORD
+    assert intel.password_from_env("   ") == intel.DEFAULT_PASSWORD
+    assert intel.password_from_env("s3cret") == "s3cret"

@@ -28,8 +28,18 @@ log = logging.getLogger(__name__)
 
 SESSION_KEY = "intel_ok"
 DEFAULT_PASSWORD = "intel"
+
+
+def password_from_env(value):
+    """The Intel password from ``UM_INTEL_PASSWORD``. Blank counts as unset:
+    docker-compose passes ``${UM_INTEL_PASSWORD:-}``, so a deploy that never
+    set it hands the app an empty string, which must not become a password
+    nobody can type (it would lock the fire chart tool out entirely)."""
+    return (value or "").strip() or DEFAULT_PASSWORD
+
+
 # Shared page password. Env override lets a deploy change it without a code edit.
-INTEL_PASSWORD = os.environ.get("UM_INTEL_PASSWORD", DEFAULT_PASSWORD)
+INTEL_PASSWORD = password_from_env(os.environ.get("UM_INTEL_PASSWORD"))
 DESKTOP = os.environ.get("UM_DESKTOP") == "1"
 CHART_PATH = "/intel"
 
