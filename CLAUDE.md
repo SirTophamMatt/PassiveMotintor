@@ -1036,7 +1036,8 @@ what should I be watching* — and is useful **on its own, before anyone generat
   **Console** = a top bar with grouped menus (Situation / Map / Hazards / Tools — `NAV_GROUPS`;
   an unlisted path falls into Tools so a new page is never unreachable) + a statewide **status
   strip** of clickable counts. Chosen from the **Display** panel (button beside Sounds), stored
-  via `persistence="local"` like the sound settings. Both layouts are ALWAYS in the DOM and CSS
+  via `persistence="local"` like the sound settings. **Console is the default**
+  (`shell.DEFAULT_LAYOUT`, 2026-09-26); an unknown/missing value falls back to it. Both layouts are ALWAYS in the DOM and CSS
   shows one (`layout-classic` / `layout-console` on `#app-root`) — a callback whose Input is
   missing never fires. Sounds / Display / theme are rendered ONCE (`shell.controls()`) and CSS
   docks them into the sidebar foot or the top bar; rendering them twice would duplicate ids.
