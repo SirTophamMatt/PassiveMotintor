@@ -14,8 +14,11 @@ STYLE = os.path.join(os.path.dirname(__file__), "..", "assets", "style.css")
 # --------------------------------------------------------------------------- #
 # root_class
 # --------------------------------------------------------------------------- #
-def test_root_class_defaults_to_classic_dark_with_no_scheme_class():
-    assert shell.root_class(True, None, None, "/") == "app dark layout-classic"
+def test_root_class_defaults_to_console_dark_with_no_scheme_class():
+    assert shell.DEFAULT_LAYOUT == shell.LAYOUT_CONSOLE
+    assert shell.root_class(True, None, None, "/") == "app dark layout-console"
+    assert shell.root_class(True, "bogus", None, "/") == "app dark layout-console"
+    assert shell.root_class(True, "classic", None, "/") == "app dark layout-classic"
 
 
 def test_root_class_console_scheme_and_light():

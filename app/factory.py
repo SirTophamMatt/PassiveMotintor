@@ -122,7 +122,7 @@ def _shell_layout():
     # wherever it was found, and the form records that page automatically.
     children.append(feedback_ui.button())
     children.append(feedback_ui.modal())
-    root_class = shell.root_class(True, shell.LAYOUT_CLASSIC,
+    root_class = shell.root_class(True, shell.DEFAULT_LAYOUT,
                                   shell.DEFAULT_SCHEME, None, desktop=DESKTOP)
     return html.Div(children, id="app-root", className=root_class)
 

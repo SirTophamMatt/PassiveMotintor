@@ -26,6 +26,9 @@ services:
       # for the fire chart generator but keeps the Operational Summary page
       # closed (it is Official: Sensitive) until a real password is set.
       UM_INTEL_PASSWORD: ${UM_INTEL_PASSWORD:-}
+      # Fine-grained GitHub token (this repo only, Issues: read and write) so
+      # the feedback form opens an issue per report. Blank = no issues.
+      UM_GITHUB_TOKEN: ${UM_GITHUB_TOKEN:-}
       UM_DATA_DIR: /data
     volumes:
       # Persist the SQLite DB, config.json, log and backups across redeploys.

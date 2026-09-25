@@ -11,7 +11,7 @@ gating does not rely on the UI merely hiding a button.
 from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from app import auth, feedback, mailer, notify
+from app import auth, feedback, github_issues, mailer, notify
 from app import tags as tag_store
 from app import ui
 from app.collector import manager
@@ -321,10 +321,17 @@ def _panel():
                             className="btn", style={"marginTop": "10px"}),
                 html.Div(id="admin-fb-mail-status", className="muted",
                          style={"marginTop": "8px"}),
+                html.Div(id="admin-fb-github-state", children=_fb_github_state(),
+                         className="muted", style={"marginTop": "14px"}),
+                html.Button("Check GitHub connection", id="admin-fb-github-test",
+                            className="btn", style={"marginTop": "10px"}),
+                html.Div(id="admin-fb-github-status", className="muted",
+                         style={"marginTop": "8px"}),
                 html.P("Reports are stored the moment they are submitted, so "
                        "anything listed here exists whether or not the email got "
-                       "out. Use Resend on a report showing a failed delivery "
-                       "once the mail settings are fixed.",
+                       "out, and whether or not a GitHub issue was opened. Use "
+                       "Resend email / Send to GitHub on a report once the "
+                       "settings are fixed.",
                        className="muted",
                        style={"fontSize": "12px", "marginTop": "10px"}),
                 dcc.Link("Mail + feedback settings", href="/settings",
@@ -412,6 +419,19 @@ def _fb_mail_state():
                      html.Span(" " + to)])
 
 
+def _fb_github_state():
+    """Whether a report submitted now would open a GitHub issue."""
+    cfg = load_config()
+    if not github_issues.enabled(cfg):
+        return ui.status_pill(False, text_off="GitHub issues turned off")
+    if not github_issues.repo(cfg):
+        return ui.status_pill(False, text_off="No GitHub repository set")
+    if not github_issues.token():
+        return ui.status_pill(False, text_off="UM_GITHUB_TOKEN not set on the server")
+    return html.Div([ui.status_pill(True, text_on="Opening GitHub issues on"),
+                     html.Span(" " + github_issues.repo(cfg))])
+
+
 def _fb_row(row):
     """One report. The message is shown in full rather than truncated: a bug
     report exists to be read, and a queue of 40-character previews just means
@@ -428,6 +448,14 @@ def _fb_row(row):
     if r.get("email_status") in ("failed", "skipped"):
         bits.append(html.Span("not emailed", className="fb-tag fb-tag-high",
                               title=str(r.get("email_error") or "")))
+    if r.get("github_issue_url"):
+        num = str(r["github_issue_url"]).rstrip("/").rsplit("/", 1)[-1]
+        bits.append(html.A("GitHub #" + num, href=str(r["github_issue_url"]),
+                           target="_blank", rel="noopener noreferrer",
+                           className="fb-tag"))
+    elif r.get("github_status") == "failed":
+        bits.append(html.Span("GitHub failed", className="fb-tag fb-tag-high",
+                              title=str(r.get("github_error") or "")))
 
     who = r.get("reporter_name") or "Anonymous"
     if r.get("reporter_email"):
@@ -447,6 +475,9 @@ def _fb_row(row):
             html.Button("Close", id={"type": "fb-set", "ref": ref, "to": "closed"},
                         className="btn"),
             html.Button("Resend email", id={"type": "fb-resend", "ref": ref},
+                        className="btn"),
+            None if r.get("github_issue_url") else
+            html.Button("Send to GitHub", id={"type": "fb-github", "ref": ref},
                         className="btn"),
         ], style={"marginTop": "4px"}),
     ], className="fb-admin-row")
@@ -935,8 +966,9 @@ def register_callbacks(app):
         Input("admin-fb-status-filter", "value"),
         Input("admin-fb-kind-filter", "value"),
         Input({"type": "fb-set", "ref": ALL, "to": ALL}, "n_clicks"),
-        Input({"type": "fb-resend", "ref": ALL}, "n_clicks"))
-    def refresh_feedback(status, kind, _set_clicks, _resend_clicks):
+        Input({"type": "fb-resend", "ref": ALL}, "n_clicks"),
+        Input({"type": "fb-github", "ref": ALL}, "n_clicks"))
+    def refresh_feedback(status, kind, _set_clicks, _resend_clicks, _gh_clicks):
         message = ""
         trigger = ctx.triggered_id
         # Re-rendering the list fires this callback again with the new buttons
@@ -949,6 +981,9 @@ def register_callbacks(app):
             elif trigger["type"] == "fb-set":
                 feedback.set_status(trigger["ref"], trigger["to"])
                 message = "%s marked %s." % (trigger["ref"], trigger["to"])
+            elif trigger["type"] == "fb-github":
+                ok, detail = feedback.resend_github(trigger["ref"])
+                message = ("OK - " if ok else "Failed - ") + detail
             else:
                 ok, detail = feedback.resend(trigger["ref"])
                 message = ("OK - " if ok else "Failed - ") + detail
@@ -979,6 +1014,21 @@ def register_callbacks(app):
         return (_fb_mail_state(),
                 ("Test email sent to %s." % to) if ok
                 else ("Send failed - %s" % err))
+
+    @app.callback(
+        Output("admin-fb-github-state", "children"),
+        Output("admin-fb-github-status", "children"),
+        Input("admin-fb-github-test", "n_clicks"),
+        prevent_initial_call=True)
+    def test_feedback_github(n_clicks):
+        # Reads the repository only — a connection check must not litter the
+        # tracker with test issues.
+        if not n_clicks:
+            raise PreventUpdate
+        if not auth.is_admin():
+            return _fb_github_state(), "Not authorised."
+        ok, detail = github_issues.check()
+        return _fb_github_state(), ("OK - " if ok else "Failed - ") + detail
 
     # --- notifications ----------------------------------------------------- #
     @app.callback(

@@ -759,6 +759,10 @@ def init_db():
         _ensure_column(conn, "pager_messages", "units_json", "TEXT")
         _ensure_column(conn, "pager_messages", "parser_version",
                        "INTEGER NOT NULL DEFAULT 0")
+        # Feedback -> GitHub issues (2026-09-26): delivery outcome per report,
+        # beside the email one.
+        for _col in ("github_status", "github_error", "github_issue_url"):
+            _ensure_column(conn, "feedback_reports", _col, "TEXT")
         # Visitor geolocation (2026-08-24). page_views predates it, so the
         # columns are added here rather than in SCHEMA -- existing rows keep
         # NULLs and the analytics queries report those as "Unknown".

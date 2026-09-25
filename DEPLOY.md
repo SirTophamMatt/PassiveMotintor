@@ -83,6 +83,24 @@ UM_INTEL_PASSWORD=something-strong
 then `docker compose up -d`. Leaving it blank keeps the old default password for the fire
 chart generator at `/intel`, and the summary page shows how to switch it on.
 
+## Feedback to GitHub issues
+
+Every report from the Feedback button can open an issue in the repository.
+
+1. On GitHub: **Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token**. Resource owner: the repo's owner;
+   **Only select repositories** → this repo; Repository permissions → **Issues:
+   Read and write** (nothing else). Pick an expiry and note it — an expired
+   token just means reports stop opening issues (they are still stored).
+2. Add it to `.env`: `UM_GITHUB_TOKEN=github_pat_...` and run `docker compose up -d`.
+3. Admin → Report delivery → **Check GitHub connection**. It reads the repo only
+   (no test issue) and says whether the repository is PUBLIC.
+
+The repository and the switches (issues on/off, include reporter name) are on the
+Settings page. The reporter's email is never put in an issue; the report text is
+shown in a code block so a public form cannot @-mention people or post links.
+Each report stays in Admin → Feedback either way, with **Send to GitHub** to retry.
+
 ## Trying a branch before merging it
 
 This runs the branch beside the live app on a **copy** of the database, with **no

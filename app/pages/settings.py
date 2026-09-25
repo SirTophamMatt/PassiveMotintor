@@ -142,8 +142,9 @@ def layout():
             html.Div([
                 html.H4("Feedback Form"),
                 html.P("The Feedback button appears on every page. Every "
-                       "submission is stored first and emailed second, so an "
-                       "unreachable mail server never loses a report.",
+                       "submission is stored first and delivered second (email "
+                       "and/or a GitHub issue), so an unreachable mail server or "
+                       "GitHub never loses a report.",
                        className="muted", style={"fontSize": "12px"}),
                 _field("Send reports to", "set-feedback-recipient",
                        cfg["feedback"]["recipient"],
@@ -151,15 +152,33 @@ def layout():
                 _field("Max submissions per network per hour",
                        "set-feedback-rate", cfg["feedback"]["max_per_hour"],
                        input_type="number", min=0),
+                _field("GitHub repository (owner/name)", "set-feedback-github-repo",
+                       cfg["feedback"].get("github_repo", ""),
+                       placeholder="SirTophamMatt/PassiveMotintor"),
                 dcc.Checklist(
                     id="set-feedback-toggles",
                     options=[{"label": " Email reports as they arrive",
-                              "value": "email"}],
-                    value=(["email"] if cfg["feedback"].get("email_enabled", True)
-                           else [])),
+                              "value": "email"},
+                             {"label": " Open a GitHub issue for each report",
+                              "value": "github"},
+                             {"label": " Include the reporter's name in the issue",
+                              "value": "github_name"}],
+                    value=([v for v, on in (
+                        ("email", cfg["feedback"].get("email_enabled", True)),
+                        ("github", cfg["feedback"].get("github_enabled", True)),
+                        ("github_name", cfg["feedback"].get("github_include_name", False)))
+                        if on])),
                 html.Div("0 submissions/hour removes the rate limit. Send a test "
                          "email from the Admin page after saving.",
                          className="muted", style={"fontSize": "12px"}),
+                html.Div(["GitHub issues need a token in the ", html.Code("UM_GITHUB_TOKEN"),
+                          " environment variable on the server (a fine-grained "
+                          "token for this one repository with Issues: read and "
+                          "write). It is never stored in config.json. The "
+                          "reporter's email is never put in an issue — if the "
+                          "repository is public, so are its issues."],
+                         className="muted", style={"fontSize": "12px",
+                                                   "marginTop": "6px"}),
             ], className="panel"),
             html.Div([
                 html.H4("Visitor Geolocation"),
@@ -222,6 +241,7 @@ def register_callbacks(app):
         State("set-feedback-toggles", "value"),
         State("set-geo-toggles", "value"),
         State("set-geo-provider", "value"),
+        State("set-feedback-github-repo", "value"),
         prevent_initial_call=True)
     def save(_, username, password, login_url, power_url, after_url,
              flood_interval, power_interval, roads_url, roads_key,
@@ -229,7 +249,7 @@ def register_callbacks(app):
              notify_webhook, notify_toggles, smtp_host, smtp_port,
              smtp_security, smtp_user, smtp_password, smtp_from,
              smtp_from_name, feedback_recipient, feedback_rate,
-             feedback_toggles, geo_toggles, geo_provider):
+             feedback_toggles, geo_toggles, geo_provider, github_repo):
         if not auth.is_admin():
             return "Not authorised."
         cfg = load_config()
@@ -276,6 +296,9 @@ def register_callbacks(app):
         cfg["feedback"]["max_per_hour"] = (
             int(feedback_rate) if feedback_rate not in (None, "") else 5)
         cfg["feedback"]["email_enabled"] = "email" in (feedback_toggles or [])
+        cfg["feedback"]["github_enabled"] = "github" in (feedback_toggles or [])
+        cfg["feedback"]["github_include_name"] = "github_name" in (feedback_toggles or [])
+        cfg["feedback"]["github_repo"] = (github_repo or "").strip()
         cfg["geo"]["enabled"] = "enabled" in (geo_toggles or [])
         cfg["geo"]["provider_url"] = (geo_provider or "").strip()
         try:
@@ -283,6 +306,9 @@ def register_callbacks(app):
         except OSError as e:
             return f"❌ Could not save settings: {e}"
         msg = "✅ Settings saved."
+        from app import github_issues
+        if cfg["feedback"]["github_repo"] and not github_issues.repo(cfg):
+            msg += " ⚠ The GitHub repository must look like owner/name."
         if radars:
             msg += f" Tracking radars: {', '.join(radars)} (applies next storm cycle)."
         if ungeoref:

@@ -833,6 +833,21 @@ what should I be watching* — and is useful **on its own, before anyone generat
     queue. `feedback.normalise()` (`v != v` catches NaN without importing pandas) is applied on
     every read-back path, including `resend()` — otherwise a NULL reporter email becomes a
     Reply-To of "nan". Same trap as the collectors' NaT normalisation.
+- **GitHub issues (added 2026-09-26)** — a second delivery channel, same store-first shape:
+  `app/github_issues.py` (stdlib `urllib`, never raises, returns `(ok, url_or_error)`) opens
+  one issue per report after the row exists; `github_status` / `github_error` /
+  `github_issue_url` columns (`_ensure_column`) record the outcome. Token ONLY from the
+  `UM_GITHUB_TOKEN` env var (fine-grained, this repo, Issues read/write) — never config.json;
+  compose passes it through. Repo + switches under `feedback.github_*` (Settings page).
+  **Written for a repo that may be public:** the reporter's email and network are never in
+  an issue, their name only with `github_include_name`; the message sits in a code fence
+  longer than any backtick run in it and one-line fields go through `plain()` (escaped,
+  `@` broken with a zero-width space) so a public form cannot @-mention people, link or
+  embed anything. Labels `feedback` + `bug`/`enhancement`; a 422 on labels retries without
+  them. Admin: GitHub delivery pill, **Check GitHub connection** (reads the repo — never a
+  test issue — and says whether it is PUBLIC), per-report issue link or **Send to GitHub**
+  (`resend_github` refuses once an issue exists, so no duplicates). Tests:
+  `tests/test_feedback_github.py`.
 - **Tests:** `tests/test_feedback.py` (25) — reference shape/alphabet/uniqueness, validation, the
   store-survives-email-failure guarantee, skipped-vs-failed, severity dropped for suggestions,
   truncation not rejection, the per-network rate limit (and that a second network is unaffected),
@@ -1021,7 +1036,8 @@ what should I be watching* — and is useful **on its own, before anyone generat
   **Console** = a top bar with grouped menus (Situation / Map / Hazards / Tools — `NAV_GROUPS`;
   an unlisted path falls into Tools so a new page is never unreachable) + a statewide **status
   strip** of clickable counts. Chosen from the **Display** panel (button beside Sounds), stored
-  via `persistence="local"` like the sound settings. Both layouts are ALWAYS in the DOM and CSS
+  via `persistence="local"` like the sound settings. **Console is the default**
+  (`shell.DEFAULT_LAYOUT`, 2026-09-26); an unknown/missing value falls back to it. Both layouts are ALWAYS in the DOM and CSS
   shows one (`layout-classic` / `layout-console` on `#app-root`) — a callback whose Input is
   missing never fires. Sounds / Display / theme are rendered ONCE (`shell.controls()`) and CSS
   docks them into the sidebar foot or the top bar; rendering them twice would duplicate ids.

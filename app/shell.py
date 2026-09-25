@@ -20,9 +20,11 @@ from app import situation, sound_alerts
 LAYOUT_CLASSIC = "classic"
 LAYOUT_CONSOLE = "console"
 LAYOUTS = [
-    (LAYOUT_CLASSIC, "Classic — sidebar"),
     (LAYOUT_CONSOLE, "Console — top bar + status strip"),
+    (LAYOUT_CLASSIC, "Classic — sidebar"),
 ]
+# What a browser gets until it picks otherwise in the Display panel.
+DEFAULT_LAYOUT = LAYOUT_CONSOLE
 
 # Scheme id -> label. Each has a dark AND a light variant in style.css
 # (`.app.dark.scheme-<id>` / `.app.light.scheme-<id>`); "watchdesk" is the
@@ -52,8 +54,8 @@ NAV_GROUPS = [
 def root_class(dark, layout, scheme, pathname, desktop=False):
     """The app root's className. Pure, so the combinations are testable."""
     classes = ["app", "dark" if dark else "light"]
-    classes.append("layout-console" if layout == LAYOUT_CONSOLE
-                   else "layout-classic")
+    layout = layout if layout in dict(LAYOUTS) else DEFAULT_LAYOUT
+    classes.append("layout-" + layout)
     if scheme and scheme != DEFAULT_SCHEME and scheme in dict(SCHEMES):
         classes.append("scheme-" + scheme)
     if pathname == WALL_PATH:
@@ -127,7 +129,7 @@ def controls():
             dcc.RadioItems(id="display-layout",
                            options=[{"label": label, "value": value}
                                     for value, label in LAYOUTS],
-                           value=LAYOUT_CLASSIC, className="display-options",
+                           value=DEFAULT_LAYOUT, className="display-options",
                            persistence=True, persistence_type="local"),
             html.Div("Colour scheme", className="display-panel-label"),
             dcc.RadioItems(id="display-scheme",
