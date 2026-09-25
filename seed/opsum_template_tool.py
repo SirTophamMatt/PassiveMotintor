@@ -196,6 +196,14 @@ def placeholder_png(w_emu, h_emu, label):
     return buf.getvalue()
 
 
+def remove_shape(slide, name):
+    pic = shape(slide, name)
+    blip = pic._element.find(".//" + qn("a:blip"))
+    pic._element.getparent().remove(pic._element)
+    if blip is not None and blip.get(R_EMBED):
+        slide.part.drop_rel(blip.get(R_EMBED))
+
+
 def image_slot(slide, key, name=None, sid=None):
     pic = shape(slide, name=name, sid=sid)
     blip = pic._element.blipFill.find(qn("a:blip"))
@@ -328,8 +336,10 @@ def tokenise(prs):
     body_token(tf, "metro_status", 1)
     body_token(t.cell(3, 0).text_frame, "asthma_text", 0)
     body_token(shape(s, "TextBox 7").text_frame, "thunderstorm_text", 0)
-    image_slot(s, "transport_strip_1", "x_Picture 2")
-    image_slot(s, "transport_strip_2", "Picture 17")
+    # Two animated GIFs the SCC keeps as easter eggs for people building the
+    # pack (invisible in the PDF). Not part of the summary, and 8.7 MB: dropped.
+    for name in ("x_Picture 2", "Picture 17"):
+        remove_shape(s, name)
 
     # ---- 5: operational statistics / AV / other hazards -------------------- #
     s = S[5]

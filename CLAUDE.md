@@ -1062,6 +1062,8 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   pointed at 11 and is re-pointed at slide 9. The SCC switches sections off by HIDING slides;
   the template un-hides everything and planned burning / avian influenza / flood snapshot
   are per-summary optional slides instead (planned burning was hidden in the Sept deck).
+  The two animated GIFs at the top of the Transport column are SCC easter eggs for whoever
+  builds the pack (invisible in the PDF) — deleted by the tool, not an image slot.
 - **The committed template is scrubbed — the repo may be public and the deck is Official:
   Sensitive.** The tool blanks every day value, replaces content pictures with placeholders,
   clears notes, and removes comment authors, the co-authoring change log (`changesInfo`:
@@ -1092,14 +1094,53 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   build the page **stays closed while `UM_INTEL_PASSWORD` is unset** (the default `intel` is
   not good enough for an Official: Sensitive product); the desktop build is exempt.
 - **Colours** copied from the source deck: flood Status MINOR `00B050` / MODERATE `ED7D31` /
-  MAJOR `FF0000` (text forced black); AV workload "no escalation" `E9EBF5`, choices Green /
-  Yellow / Orange / Red (only orange appears in the source — confirm the ERP level names).
+  MAJOR `FF0000` (text forced black); AV workload ERP escalation = nothing (`E9EBF5`, the
+  deck's own fill) / Orange `ED7D31` / Red `FF0000` — the SCC's three levels.
 - Dep: `python-pptx` (pure Python). Tests: `tests/test_opsum.py`.
-- **Not done (Phase 2+):** auto-fill from the modules (VicEmergency counts as at 0830 via the
-  state journal, BoM warnings, roads, power, flood snapshot from `flood.trend`), new fetchers
-  (BoM state forecast, CFA TFB/FDR, GA earthquakes, health alerts), product-availability
-  ticks on the Sources slide (static for now), document intake (upload a PDF/DOCX and pick
-  text/images from it), PDF export.
+- Phase 2 (auto-fill) is below. **Not done:** CFA TFB/FDR and health.vic alerts fetchers,
+  product-availability ticks on the Sources slide (static for now), document intake (upload a
+  PDF/DOCX and pick text/images from it), PDF export.
+
+## Operational Summary — auto-fill (Phase 2, built 2026-09-26)
+- **`app/opsum_auto.py`** (UI-free): `suggest(d)` → `{key: Suggestion(value, source, as_at,
+  note)}` + `{provider: reason}`; `apply(data, sugg, overwrite=False)` fills EMPTY fields /
+  table cells only (a table suggestion uses `None` for "no opinion", so RFA cells stay the
+  operator's); `unapplied()` names fields typed over. Providers are isolated — one throwing
+  costs only its fields; a `LookupError` is a user-facing "not filled: reason".
+- **The deck's clocks, not "now".** `opsum.snapshot_time` 08:30 / `opsum.stats_cutoff` 06:00
+  (server-local wall time — the container runs `TZ=Australia/Melbourne`, and the page's
+  `_today()` deliberately uses the same clock as the data). Warnings + going fires "as at
+  0830" are RECONSTRUCTED from the state journal (`history.state_at(FIRE, 08:30)`), so a pack
+  built at 09:15 still shows 08:30 — an upgrade at 09:00 does not leak in. Before 08:30 the
+  live table is used and the note says so. **A moment the journal does not cover is refused,
+  never substituted with live data.** Incident totals = `fire_incidents` with
+  `COALESCE(created, first_seen)` in (06:00 yesterday, 06:00 today]; `fire_kind()` maps
+  category2 to grass/bush vs structure ("Non-Structure" excluded).
+- **Sources are stated per field** (italic line under each "auto" field): VicEmergency is the
+  PUBLIC feed and under-reports structure fires, so its totals carry that caveat; RFAs are in
+  no feed and are never filled.
+- Other providers: BoM warnings (grouped by type as `# Type` headings), roads (closure/other
+  counts + up to 6 closures), power (statewide total + locations ≥
+  `opsum.power_significant_customers`; refused when >3 h stale), flood snapshot slide (gauges
+  ≥ Minor from readings < 24 h old, most severe first, place name via `gauge_town`, trend from
+  `flood.trend` rate, outlook only when a projection exists — always with the "not an
+  official forecast" wording).
+- **External, on demand only** (`app/opsum_sources.py`, the Fill button — never on page load
+  or a timer; 10-min cache, `opsum.fetch_timeout_seconds`): BoM **state forecast page**
+  (`state.shtml`, fetched like `vicall.shtml`; first "Forecast for …" heading = today,
+  "Weather Situation" = synoptic) and **GA earthquakes** WFS GeoJSON (Victoria bbox from the
+  geometry; magnitude/time/description from whichever usual property name exists; ≥
+  `earthquake_min_magnitude` in `earthquake_hours`). **Both were built without sight of the
+  live sources** (sandbox blocks them): an unparseable response is saved to
+  `<data dir>/opsum_debug_<name>.*` and reported — check those first if either says "not
+  understood".
+- **Page:** opening TODAY's summary for the first time runs the internal providers into empty
+  fields (status says how many); **Fill from Passive Monitor** runs everything, with "Replace
+  what is already typed" to overwrite, and a report of filled / already matching / typed over
+  / not filled (with reasons). Every auto field shows an "auto" badge.
+- Cost: the flood provider groups `flood_observations` by station (one scan, same shape as
+  `flooding_breakdown`) — fine on a click, **do not move it onto a timer**.
+- Tests: `tests/test_opsum_auto.py`.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

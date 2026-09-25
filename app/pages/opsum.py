@@ -19,19 +19,13 @@ import flask
 from dash import ALL, MATCH, Input, Output, State, ctx, dash_table, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
-from app import opsum, opsum_pptx, ui
+from app import opsum, opsum_auto, opsum_pptx, ui
 from app.pages import intel
 
 log = logging.getLogger(__name__)
 
 PATH = "/intel/summary"
 IMAGE_ROUTE = "/intel/summary/image"
-
-try:
-    from zoneinfo import ZoneInfo
-    _MELB = ZoneInfo("Australia/Melbourne")
-except Exception:          # tzdata missing (bare Windows build): local time
-    _MELB = None
 
 SYNTAX_HELP = (
     "Text boxes: one line per bullet (the slide keeps its own bullet style). "
@@ -41,8 +35,10 @@ SYNTAX_HELP = (
 
 
 def _today():
-    now = datetime.datetime.now(_MELB) if _MELB else datetime.datetime.now()
-    return now.date()
+    # Server-local, like every timestamp the app stores (the container runs
+    # TZ=Australia/Melbourne). A separate Melbourne clock here would disagree
+    # with the data on any host that is not, and put 08:30 on the wrong day.
+    return datetime.datetime.now().date()
 
 
 def available():
@@ -91,9 +87,19 @@ def body():
                 html.Button("Mark issued", id="opsum-issue", n_clicks=0, className="btn"),
                 dcc.Download(id="opsum-download"),
             ], style={"alignSelf": "flex-end"}),
+            html.Div([
+                html.Button("Fill from Passive Monitor", id="opsum-fill", n_clicks=0,
+                            className="btn", style={"marginRight": "8px"}),
+                dcc.Checklist(id="opsum-fill-overwrite",
+                              options=[{"label": " Replace what is already typed",
+                                        "value": "on"}],
+                              value=[], inputStyle={"marginRight": "4px"},
+                              style={"display": "inline-block"}),
+            ], style={"alignSelf": "flex-end", "marginLeft": "auto"}),
         ], className="panel", style={"display": "flex", "flexWrap": "wrap",
                                      "alignItems": "flex-start", "gap": "8px"}),
         html.Div(id="opsum-status", className="muted", style={"margin": "6px 0 10px"}),
+        dcc.Loading(html.Div(id="opsum-fill-report", style={"marginBottom": "10px"})),
         html.P(SYNTAX_HELP, className="muted", style={"fontSize": "12px"}),
         dcc.Loading(html.Div(id="opsum-form")),
     ])
@@ -190,7 +196,17 @@ def _image(f, value):
     ])
 
 
-def _field(f, value, d, dark):
+def _source_note(key, notes):
+    """The line under an auto-fillable field saying where its value came from.
+    Present for every such field from the first render — the Fill callback
+    writes to all of them, and an Output that does not exist breaks it."""
+    if key not in opsum_auto.AUTO_KEYS:
+        return None
+    return html.Div((notes or {}).get(key, ""), id={"type": "opsum-src", "key": key},
+                    className="muted", style={"fontSize": "12px", "fontStyle": "italic"})
+
+
+def _field(f, value, d, dark, notes=None):
     if f.kind == "text":
         control = dcc.Textarea(id={"type": "opsum-f", "key": f.key}, value=value,
                                style={"width": "100%", "minHeight": "90px"},
@@ -205,15 +221,21 @@ def _field(f, value, d, dark):
         control = _grid(f, value, dark)
     else:
         control = _image(f, value)
+    label = [_label(f)]
+    if f.key in opsum_auto.AUTO_KEYS:
+        label.append(html.Span(" auto", className="muted",
+                               title="Can be filled from Passive Monitor data",
+                               style={"fontWeight": "400", "fontSize": "12px"}))
     return html.Div([
-        html.Label(_label(f), style={"fontWeight": "600", "display": "block",
-                                     "marginBottom": "4px"}),
+        html.Label(label, style={"fontWeight": "600", "display": "block",
+                                 "marginBottom": "4px"}),
         control,
+        _source_note(f.key, notes),
         html.Div(f.help, className="muted", style={"fontSize": "12px"}) if f.help else None,
     ], style={"marginBottom": "14px"})
 
 
-def form(d, data, dark=True):
+def form(d, data, dark=True, notes=None):
     sections = []
     for n, slide in enumerate(opsum.SLIDES, 1):
         summary = [html.Strong(slide.title)]
@@ -228,10 +250,31 @@ def form(d, data, dark=True):
                 style={"margin": "6px 0 10px"}))
         if slide.note:
             children.append(html.P(slide.note, className="muted"))
-        children += [_field(f, data["fields"][f.key], d, dark) for f in slide.fields]
+        children += [_field(f, data["fields"][f.key], d, dark, notes) for f in slide.fields]
         sections.append(html.Details(children, open=(n <= 2), className="panel",
                                      style={"marginBottom": "10px"}))
     return html.Div(sections)
+
+
+def fill_report(sugg, misses, changed, kept):
+    labels = {k: f.label for k, f in opsum.FIELDS.items()}
+    items = []
+    if changed:
+        items.append(html.Li(["Filled: ", html.Strong(", ".join(labels[k] for k in changed)),
+                              ". Review each value, then Save."]))
+    same = [k for k in sugg if k not in changed and k not in kept]
+    if same:
+        items.append(html.Li("Already matches the data: "
+                             + ", ".join(labels[k] for k in same) + "."))
+    if kept:
+        items.append(html.Li("Left as typed (tick “Replace what is already typed” to "
+                             "overwrite): " + ", ".join(labels[k] for k in kept) + "."))
+    for name, reason in misses.items():
+        items.append(html.Li(f"Not filled — {name}: {reason}.", className="error-text"))
+    if not items:
+        items.append(html.Li("Everything that can be filled already matches the data."))
+    return html.Div(html.Ul(items, style={"margin": "0", "paddingLeft": "18px"}),
+                    className="panel", style={"fontSize": "13px"})
 
 
 # --------------------------------------------------------------------------- #
@@ -295,8 +338,52 @@ def register_callbacks(app):
             raise PreventUpdate
         d = opsum.parse_date(date)
         data, meta, carried_from = opsum.open_draft(d)
-        return form(d, data, dark if dark is not None else True), \
-            _status_text(d, meta, carried_from)
+        notes, extra = {}, None
+        if meta is None and d == _today():
+            # Starting today's summary: fill the empty fields from stored data
+            # straight away. External sources wait for the Fill button so
+            # opening the page never waits on BoM or GA.
+            sugg, _ = opsum_auto.suggest(d, external=False)
+            changed = opsum_auto.apply(data, sugg)
+            notes = {k: sugg[k].describe() for k in changed}
+            if changed:
+                extra = (f"Filled {len(changed)} field(s) from Passive Monitor — "
+                         "check them, then Save.")
+        return form(d, data, dark if dark is not None else True, notes), \
+            _status_text(d, meta, carried_from, extra)
+
+    @app.callback(
+        Output({"type": "opsum-f", "key": ALL}, "value"),
+        Output({"type": "opsum-t", "key": ALL}, "data"),
+        Output({"type": "opsum-src", "key": ALL}, "children"),
+        Output("opsum-fill-report", "children"),
+        Input("opsum-fill", "n_clicks"),
+        State("opsum-date", "date"),
+        State("opsum-fill-overwrite", "value"),
+        State({"type": "opsum-src", "key": ALL}, "id"),
+        State({"type": "opsum-src", "key": ALL}, "children"),
+        *_FORM_STATES,
+        prevent_initial_call=True)
+    def fill(n, date, overwrite, src_ids, src_notes, *states):
+        if not n or not date or not intel.unlocked() or not available():
+            raise PreventUpdate
+        d = opsum.parse_date(date)
+        f_ids, f_vals, t_ids, t_data = states[0], states[1], states[2], states[3]
+        data = opsum.normalise(collect(*states), d)
+        sugg, misses = opsum_auto.suggest(d, external=True)
+        changed = opsum_auto.apply(data, sugg, overwrite=bool(overwrite))
+        fields = data["fields"]
+        new_vals = [fields.get(cid["key"], v) for cid, v in zip(f_ids, f_vals)]
+        new_tables = []
+        for cid, rows in zip(t_ids, t_data):
+            grid = fields.get(cid["key"])
+            new_tables.append([
+                {**row, **{f"c{j}": grid[i][j] for j in range(len(grid[i]))}}
+                for i, row in enumerate(rows or [])] if grid else rows)
+        notes = [sugg[cid["key"]].describe() if cid["key"] in sugg else old
+                 for cid, old in zip(src_ids, src_notes)]
+        return new_vals, new_tables, notes, fill_report(
+            sugg, misses, changed, opsum_auto.unapplied(data, sugg))
 
     @app.callback(
         Output({"type": "opsum-img", "key": MATCH}, "data"),

@@ -52,10 +52,9 @@ SNAPSHOT_TIME = "0830"
 
 GRID_STATES = ("Not Active", "Active", "Readiness")
 
-# Ambulance Victoria workload cells. Only orange appears in the source deck;
-# the rest follow the usual escalation palette. "" = the template's own fill.
-WORKLOAD_COLOURS = {"": None, "Green": "00B050", "Yellow": "FFC000",
-                    "Orange": "ED7D31", "Red": "FF0000"}
+# Ambulance Victoria ERP escalation levels, as the SCC uses them: nothing,
+# Orange or Red. "" = the template's own "no escalation" fill.
+WORKLOAD_COLOURS = {"": None, "Orange": "ED7D31", "Red": "FF0000"}
 
 # Flood class -> fill, exactly as the source deck colours its Status row.
 FLOOD_STATUS_FILLS = {"MINOR": "00B050", "MODERATE": "ED7D31", "MAJOR": "FF0000"}
@@ -153,8 +152,6 @@ SLIDES = [
            default="The Epidemic Thunderstorm Asthma Risk forecast runs from "
                    "1 October to 31 December."),
         _t("thunderstorm_text", "Thunderstorm forecast"),
-        _img("transport_strip_1", "Transport image strip 1", carry=True),
-        _img("transport_strip_2", "Transport image strip 2", carry=True),
     ]),
     Slide("stats", "Operational statistics, Ambulance Victoria, other hazards", [
         _img("ops_stats", "Operational statistics (image)"),
