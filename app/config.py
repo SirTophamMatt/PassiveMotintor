@@ -266,6 +266,14 @@ DEFAULTS = {
         # a public page with no login, so something has to bound it; 0 disables
         # the limit.
         "max_per_hour": 5,
+        # Also open a GitHub issue per report (app/github_issues.py). Needs the
+        # UM_GITHUB_TOKEN environment variable; without it this is skipped.
+        # The reporter's email is never put in an issue (the repo may be
+        # public); their name only when github_include_name is on.
+        "github_enabled": True,
+        "github_repo": "SirTophamMatt/PassiveMotintor",
+        "github_labels": ["feedback"],
+        "github_include_name": False,
     },
     "geo": {
         # Coarse visitor geolocation (app/geoip.py). The client IP is TRUNCATED

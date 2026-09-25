@@ -122,16 +122,17 @@ def modal():
 def _receipt(row):
     """What the reporter sees after a successful send. The reference is the
     point of this panel, so it gets its own line and a selectable style."""
-    delivered = row.get("email_status") == "sent"
+    delivered = (row.get("email_status") == "sent"
+                 or row.get("github_status") == "sent")
     return html.Div([
         html.Div("✓", className="fb-tick"),
         html.H3("Thanks — that's been logged."),
         html.P("Your reference is:"),
         html.Div(row["ref"], className="fb-ref"),
         html.P(
-            "It has been emailed to the Watchdesk maintainer." if delivered else
-            "It has been saved. Email delivery is not available right now, so "
-            "the maintainer will pick it up from the admin queue instead.",
+            "It has been passed to the Watchdesk maintainer." if delivered else
+            "It has been saved, and the maintainer will pick it up from the "
+            "admin queue.",
             className="muted"),
         html.P("Quote that reference if you follow this up.", className="muted"),
     ], className="fb-receipt")

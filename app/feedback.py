@@ -1,4 +1,5 @@
-"""Bug reports and suggestions: reference IDs, storage, and email delivery.
+"""Bug reports and suggestions: reference IDs, storage, and delivery by email
+and as GitHub issues.
 
 UI-free, like ``briefing`` and ``replay`` — the shell widget in
 ``app/feedback_ui.py`` and the Admin page both render from here.
@@ -9,7 +10,10 @@ unconfigured, throttled or broken SMTP server: the reporter still gets their
 reference, the row is still in the database, and the Admin page can retry the
 delivery. Doing it the other way round — mail, then store — loses submissions
 exactly when the system is already unhealthy, which is when bug reports matter
-most.
+most. GitHub issues (``app/github_issues.py``) are a second, independent
+channel with the same shape: attempted after the row exists, outcome recorded
+in ``github_status`` / ``github_error`` / ``github_issue_url``, retryable from
+Admin. Either channel failing never affects the other or the stored report.
 
 Reference IDs look like ``WD-BUG-260824-4XKQ``: kind, the submission date, and
 four random characters from an alphabet with no I/O/0/1, so a reference read
@@ -22,7 +26,7 @@ import logging
 import random
 import re
 
-from app import database, mailer
+from app import database, github_issues, mailer
 from app.config import load_config
 
 log = logging.getLogger(__name__)
@@ -203,7 +207,88 @@ def submit(kind, message, subject="", reporter_name="", reporter_email="",
 
     status, err = _deliver(row, cfg)
     row["email_status"], row["email_error"] = status, err
+    gh_status, gh_detail = _deliver_github(row, cfg)
+    row["github_status"] = gh_status
+    row["github_issue_url" if gh_status == "sent" else "github_error"] = gh_detail
     return row
+
+
+GITHUB_KIND_LABELS = {"bug": "bug", "suggestion": "enhancement"}
+
+
+def format_issue(row, cfg=None):
+    """``(title, body, labels)`` for a report's GitHub issue.
+
+    Built for a repository that may be public: every free-text value from the
+    form is made inert (the message in a code fence, one-line fields escaped),
+    the reporter's email and network are never included, and their name only
+    when ``feedback.github_include_name`` is on."""
+    cfg = cfg or load_config()
+    fcfg = cfg.get("feedback", {})
+    kind = KINDS.get(row["kind"], row["kind"])
+    summary = row.get("subject") or " ".join(str(row["message"]).split())[:70]
+    title = "[%s] %s (%s)" % (kind, github_issues.plain(summary), row["ref"])
+    lines = ["**Reference:** `%s`" % row["ref"],
+             "**Type:** %s" % kind]
+    if row.get("severity"):
+        lines.append("**Severity:** %s" % str(row["severity"]).title())
+    lines += ["**Submitted:** %s" % row["submitted_at"],
+              "**Page:** %s" % github_issues.plain(row.get("page_path") or "unknown")]
+    if fcfg.get("github_include_name") and row.get("reporter_name"):
+        lines.append("**Reporter:** %s" % github_issues.plain(row["reporter_name"]))
+    if row.get("user_agent"):
+        lines.append("**Browser:** %s" % github_issues.plain(row["user_agent"]))
+    if row.get("subject"):
+        lines += ["", "**Subject:** %s" % github_issues.plain(row["subject"])]
+    lines += ["", github_issues.fence(str(row["message"])), "",
+              "_Submitted through the Watchdesk feedback form. Reporter contact "
+              "details, if given, are in Admin → Feedback under this reference._"]
+    labels = [str(l) for l in (fcfg.get("github_labels") or []) if str(l).strip()]
+    if row["kind"] in GITHUB_KIND_LABELS:
+        labels.append(GITHUB_KIND_LABELS[row["kind"]])
+    return title, "\n".join(lines), labels
+
+
+def _deliver_github(row, cfg):
+    """Open the report's GitHub issue and record the outcome on its row.
+    Returns ``(status, url_or_error)``."""
+    if not github_issues.enabled(cfg):
+        status, detail = "skipped", "GitHub issues are turned off in Settings."
+    elif not github_issues.repo(cfg):
+        status, detail = "skipped", "No GitHub repository configured."
+    elif not github_issues.token():
+        status, detail = "skipped", "UM_GITHUB_TOKEN is not set on the server."
+    else:
+        title, body, labels = format_issue(row, cfg)
+        ok, detail = github_issues.create_issue(title, body, labels, cfg)
+        status = "sent" if ok else "failed"
+    try:
+        database.execute(
+            "UPDATE feedback_reports SET github_status = ?, github_error = ?, "
+            "github_issue_url = COALESCE(?, github_issue_url) WHERE ref = ?",
+            [status, None if status == "sent" else detail,
+             detail if status == "sent" else None, row["ref"]])
+    except Exception:
+        log.debug("Could not record GitHub status for %s", row["ref"], exc_info=True)
+    if status == "failed":
+        log.warning("Report %s stored but no GitHub issue: %s", row["ref"], detail)
+    return status, detail
+
+
+def resend_github(ref, cfg=None):
+    """Open the GitHub issue for an already-stored report (Admin page).
+    Refuses when one already exists, so a double click cannot duplicate it."""
+    cfg = cfg or load_config()
+    df = database.read_df("SELECT * FROM feedback_reports WHERE ref = ?", [ref])
+    if df.empty:
+        return False, "No report with reference %s." % ref
+    row = normalise(df.iloc[0].to_dict())
+    if row.get("github_issue_url"):
+        return False, "%s already has an issue: %s" % (ref, row["github_issue_url"])
+    status, detail = _deliver_github(row, cfg)
+    if status == "sent":
+        return True, "Opened %s" % detail
+    return False, "%s: no issue (%s): %s" % (ref, status, detail)
 
 
 def _deliver(row, cfg):
@@ -264,6 +349,7 @@ def recent(limit=50, status=None, kind=None):
     return database.read_df(
         "SELECT ref, kind, severity, submitted_at, subject, message, "
         "reporter_name, reporter_email, page_path, email_status, email_error, "
+        "github_status, github_error, github_issue_url, "
         "status FROM feedback_reports %s "
         "ORDER BY submitted_at DESC, id DESC LIMIT ?" % clause, params)
 
