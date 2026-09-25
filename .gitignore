@@ -9,6 +9,8 @@ config.json
 *.log
 backups/
 storm_frames/
+# Operational Summary uploads (Intel Tool) — summary content, never code.
+opsum_images/
 
 # Python / build
 __pycache__/

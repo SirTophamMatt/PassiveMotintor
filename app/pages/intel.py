@@ -1,6 +1,8 @@
 """Intel Tool: a small internal-tools area behind a simple shared password.
 
-Currently hosts the **Fire burnt-area chart generator** — a self-contained
+Hosts two tools, reached by the tab strip at the top of the unlocked page:
+the **Operational Summary** builder (``/intel/summary``, ``pages/opsum.py``)
+and the **Fire burnt-area chart generator** — a self-contained
 HTML/SVG/JS tool (``assets/intel_fire_chart.html``) embedded in an isolated
 ``<iframe srcDoc=...>`` so its own light-themed UI and client-side logic run
 untouched inside the dark dashboard shell.
@@ -25,8 +27,11 @@ from app.config import BUNDLE_DIR
 log = logging.getLogger(__name__)
 
 SESSION_KEY = "intel_ok"
+DEFAULT_PASSWORD = "intel"
 # Shared page password. Env override lets a deploy change it without a code edit.
-INTEL_PASSWORD = os.environ.get("UM_INTEL_PASSWORD", "intel")
+INTEL_PASSWORD = os.environ.get("UM_INTEL_PASSWORD", DEFAULT_PASSWORD)
+DESKTOP = os.environ.get("UM_DESKTOP") == "1"
+CHART_PATH = "/intel"
 
 # The generator lives in assets/ because the PyInstaller spec already bundles
 # that folder (datas=[("assets","assets")]), so BUNDLE_DIR/assets resolves both
@@ -47,7 +52,7 @@ def _load_chart_html():
 _CHART_HTML = _load_chart_html()
 
 
-def _unlocked():
+def unlocked():
     """Whether the current session has cleared the Intel password gate.
 
     False outside a request context (e.g. at import time)."""
@@ -63,12 +68,33 @@ def _unlocked():
 def layout():
     return html.Div([
         html.H2("Intel Tool"),
-        html.Div(_body(), id="intel-body"),
+        html.Div(body_for(CHART_PATH), id="intel-body"),
     ])
 
 
-def _body():
-    return _tool() if _unlocked() else _gate()
+def body_for(pathname):
+    """The unlocked tool for ``pathname``, or the password gate."""
+    if not unlocked():
+        return _gate()
+    from app.pages import opsum as opsum_page
+    if pathname == opsum_page.PATH:
+        return opsum_page.body()
+    return _tool()
+
+
+def tabs(active):
+    from app.pages import opsum as opsum_page
+    items = [(opsum_page.PATH, "Operational Summary"), (CHART_PATH, "Fire chart generator")]
+    links = [dcc.Link(label, href=path,
+                      className="btn" + (" btn-primary" if path == active else ""),
+                      style={"marginRight": "8px", "textDecoration": "none"})
+             for path, label in items]
+    # The Lock button lives here so every unlocked Intel page has exactly one.
+    return html.Div(links + [
+        html.Button("Lock", id="intel-lock-btn", className="btn",
+                    style={"marginLeft": "auto"}),
+        html.Div(id="intel-lock-dummy"),
+    ], style={"display": "flex", "alignItems": "center", "marginBottom": "12px"})
 
 
 def _gate(error=None):
@@ -88,12 +114,9 @@ def _gate(error=None):
 
 def _tool():
     return html.Div([
-        html.Div([
-            html.Span("Fire burnt-area chart generator", className="muted"),
-            html.Button("Lock", id="intel-lock-btn", className="btn",
-                        style={"float": "right"}),
-            html.Div(id="intel-lock-dummy"),
-        ], style={"marginBottom": "10px"}),
+        tabs(CHART_PATH),
+        html.Div("Fire burnt-area chart generator", className="muted",
+                 style={"marginBottom": "10px"}),
         html.Iframe(
             srcDoc=_CHART_HTML,
             style={"width": "100%", "height": "88vh", "minHeight": "820px",
@@ -112,8 +135,9 @@ def register_callbacks(app):
         Input("intel-unlock-btn", "n_clicks"),
         Input("intel-password", "n_submit"),
         State("intel-password", "value"),
+        State("url", "pathname"),
         prevent_initial_call=True)
-    def unlock(clicks, submits, password):
+    def unlock(clicks, submits, password, pathname):
         # Dash re-fires this when the input is (re)inserted even with
         # prevent_initial_call — the output (intel-body) already exists. Guard
         # on a real click/submit (same lesson as the admin login callback).
@@ -121,7 +145,7 @@ def register_callbacks(app):
             raise PreventUpdate
         if password and hmac.compare_digest(str(password), INTEL_PASSWORD):
             flask.session[SESSION_KEY] = True
-            return _tool()
+            return body_for(pathname)
         return _gate(error="Incorrect password." if password
                      else "Enter the password.")
 

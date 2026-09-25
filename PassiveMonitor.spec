@@ -2,7 +2,9 @@
 # Build with:  pyinstaller PassiveMonitor.spec --noconfirm
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas = [("assets", "assets")]
+datas = [("assets", "assets"),
+         # Operational Summary template (app/opsum.py TEMPLATE_PATH).
+         ("seed/opsum_template.pptx", "seed")]
 binaries = []
 hiddenimports = []
 
@@ -24,6 +26,14 @@ for pkg in [
 hiddenimports += collect_submodules("app")
 # pywebview's Windows EdgeChromium backend talks to .NET through pythonnet.
 hiddenimports += ["clr", "selenium", "webdriver_manager"]
+# python-pptx ships XML templates of its own (default.pptx etc.).
+try:
+    d, b, h = collect_all("pptx")
+    datas += d
+    binaries += b
+    hiddenimports += h
+except Exception as exc:
+    print(f"[spec] skip collect_all(pptx): {exc}")
 
 a = Analysis(
     ["run_desktop.py"],

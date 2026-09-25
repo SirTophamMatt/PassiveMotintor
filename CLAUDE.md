@@ -35,6 +35,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
   bug reports and suggestions; `app/mailer.py` — SMTP sending; `app/geoip.py` — coarse
   visitor geolocation from a truncated IP
+- `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
+  Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
 - `assets/style.css` — light/dark theme
 - `tests/` — pytest suite + HTML fixtures (`tests/fixtures/`); not shipped in the Docker image
@@ -1042,6 +1044,62 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (`ui.table_styles`) now use the CSS variables, so they follow the scheme too. A test pins
   `SCHEMES` to the stylesheet.
 - Tests: `tests/test_shell.py`.
+
+## Operational Summary — Intel Tool (Phase 1, built 2026-09-25)
+Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/summary`.
+- **Fills the SCC's own deck, never redraws it.** `seed/opsum_template.pptx` is an issued
+  summary turned into a template by `seed/opsum_template_tool.py` (one-off, re-run if the SCC
+  changes the deck). `app/opsum_pptx.py` fills it: fonts, colours, menu tiles and slide-jump
+  links stay the SCC's. Template conventions: a paragraph that is exactly `{{key}}` expands to
+  one paragraph per line (keeps that paragraph's bullet/indent/font); other `{{token}}`s are
+  replaced inside their run; table cells are `{{key.row.col}}`; pictures named
+  `OPS_IMG:<key>` are image slots (upload scaled to fit the frame, centred; an empty slot is
+  removed); tables `OPS_GRID:rcc|icc` are recoloured from the slide's own legend table
+  (`OPS_GRID_LEGEND`); slides named `OPS_OPTIONAL:<key>` are deleted when switched off, with
+  any link to them removed.
+- **Template tool decisions.** Source slides 11 (off-season planned burning), 13 (old
+  activation) and 14 (hazard highlight) are dropped; the "SCC 4 Day Activation" menu tile
+  pointed at 11 and is re-pointed at slide 9. The SCC switches sections off by HIDING slides;
+  the template un-hides everything and planned burning / avian influenza / flood snapshot
+  are per-summary optional slides instead (planned burning was hidden in the Sept deck).
+- **The committed template is scrubbed — the repo may be public and the deck is Official:
+  Sensitive.** The tool blanks every day value, replaces content pictures with placeholders,
+  clears notes, and removes comment authors, the co-authoring change log (`changesInfo`:
+  every editor's name + tenant id), SharePoint customXml, the MSIP label custom properties,
+  core-property names, and hyperlinks no longer in use (Isentia media links carry per-user
+  keys). `test_template_is_scrubbed` guards it. **Never commit an issued deck.**
+- **Model `app/opsum.py`** (UI-free): `SLIDES` is the single field map the form and the
+  renderer share — tests assert every field has a token/slot in the template and every
+  template token is a known field, so they cannot drift. Kinds: text / line / table /
+  colors (AV workload grid) / grid (RCC/ICC Not Active·Active·Readiness) / image. One draft
+  per summary date in `opsum_drafts` (JSON); **Mark issued** also copies it to
+  `opsum_versions`. A new date starts from defaults plus every `carry=True` field and the
+  optional-slide switches from the most recent earlier summary (↻ in the form). Derived at
+  render time: AV day headers (7 days to the summary date), Code 1 headers (7 days to
+  date−2), year labels. `normalise()` is the validation for everything the browser sends.
+- **Text box syntax:** one line per bullet, two-space indent = sub-bullet (exact source
+  indent), `# Heading` (copies the cell's own heading style), blank line = spacer (sized to
+  the body text — an empty paragraph otherwise takes the 18 pt default and blows table rows
+  up), `**bold**`, `[text](https://…)`. A value with no `**` keeps the template's weight; a
+  value that uses `**` sets bold/regular on every segment.
+- **Images** are content-addressed (`<data dir>/opsum_images/<sha1>.<ext>`, gitignored),
+  type decided by magic bytes (PNG/JPEG/GIF/BMP only — no SVG), 15 MB cap. Served by
+  `/intel/summary/image/<sha1>.<ext>`, which re-checks the Intel session (403) and a strict
+  filename regex (404).
+- **Access.** Same shared password/session flag as `/intel` (`pages/intel.py`: `unlocked()`,
+  `body_for(path)`, tab strip + Lock button shared by both Intel pages; the unlock callback
+  returns the page you were on). Every callback re-checks the session server-side. On the web
+  build the page **stays closed while `UM_INTEL_PASSWORD` is unset** (the default `intel` is
+  not good enough for an Official: Sensitive product); the desktop build is exempt.
+- **Colours** copied from the source deck: flood Status MINOR `00B050` / MODERATE `ED7D31` /
+  MAJOR `FF0000` (text forced black); AV workload "no escalation" `E9EBF5`, choices Green /
+  Yellow / Orange / Red (only orange appears in the source — confirm the ERP level names).
+- Dep: `python-pptx` (pure Python). Tests: `tests/test_opsum.py`.
+- **Not done (Phase 2+):** auto-fill from the modules (VicEmergency counts as at 0830 via the
+  state journal, BoM warnings, roads, power, flood snapshot from `flood.trend`), new fetchers
+  (BoM state forecast, CFA TFB/FDR, GA earthquakes, health alerts), product-availability
+  ticks on the Sources slide (static for now), document intake (upload a PDF/DOCX and pick
+  text/images from it), PDF export.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

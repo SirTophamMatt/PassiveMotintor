@@ -20,5 +20,7 @@ reportlab>=4.0
 # echo detection + annotation; numpy comes with it but is used directly too.
 opencv-python-headless>=4.8,<5
 numpy>=1.24
+# Operational Summary (Intel Tool): fills the SCC's own .pptx template.
+python-pptx>=1.0,<2
 # werkzeug ships with dash/flask; pinned here as it backs the admin password hash.
 werkzeug>=2.0
