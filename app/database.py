@@ -291,6 +291,26 @@ CREATE INDEX IF NOT EXISTS idx_feedback_submitted
     ON feedback_reports (submitted_at);
 CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback_reports (status);
 
+-- Operational Summary (Intel Tool): one working draft per summary date, all
+-- fields as JSON (app/opsum.py owns the shape). Issued summaries are copied to
+-- opsum_versions so a past day's deck can be rebuilt exactly as issued.
+CREATE TABLE IF NOT EXISTS opsum_drafts (
+    summary_date TEXT PRIMARY KEY,  -- YYYY-MM-DD
+    data_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',   -- draft / issued
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    issued_at TEXT
+);
+CREATE TABLE IF NOT EXISTS opsum_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    summary_date TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    data_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_opsum_versions_date ON opsum_versions (summary_date);
+
 CREATE TABLE IF NOT EXISTS power_timeseries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,

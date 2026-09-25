@@ -14,7 +14,8 @@ from app import auth, database, feedback_ui, shell, sound_alerts
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
-                       importer_page, intel, overview, pager as pager_page,
+                       importer_page, intel, opsum as opsum_page, overview,
+                       pager as pager_page,
                        power,
                        replay as replay_page, roads as roads_page,
                        settings, station, storm as storm_page,
@@ -307,6 +308,9 @@ def create_app(autostart=False):
         # Dynamic station detail pages: /flood/station/<station_key>
         if pathname and pathname.startswith("/flood/station/"):
             return station.layout(station.key_from_path(pathname))
+        # Intel Tool's Operational Summary builder (behind the Intel gate).
+        if pathname == opsum_page.PATH:
+            return opsum_page.layout()
         # Warning detail/history pages: /weather/warning/<id>
         if pathname and pathname.startswith(weather.WARNING_PATH):
             return weather.warning_detail_layout(weather.warning_id_from_path(pathname))
@@ -337,6 +341,7 @@ def create_app(autostart=False):
     for _, _, module in ALL_PAGES:
         module.register_callbacks(app)
     station.register_callbacks(app)
+    opsum_page.register_callbacks(app)
 
     from app import ticker
     ticker.register_callbacks(app)

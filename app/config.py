@@ -151,6 +151,28 @@ DEFAULTS = {
         # skips if they are missing, so nothing crashes on a fresh deploy.
         "autostart": True,
     },
+    "opsum": {
+        # Operational Summary (Intel Tool) auto-fill — app/opsum_auto.py.
+        # The deck reports warnings / going fires "as at 0830" and incident
+        # totals for the "24 hours to 0600"; both are local wall-clock times.
+        "snapshot_time": "08:30",
+        "stats_cutoff": "06:00",
+        # Power: an outage below this many customers is not "significant".
+        "power_significant_customers": 1000,
+        # Flood snapshot slide: at most this many gauges (the table has 5).
+        "flood_max_gauges": 5,
+        # External sources, fetched only when someone presses "Fill" (never on
+        # a timer). BoM's state forecast page is fetched the same way as the
+        # AWS page (vicall.shtml); GA's feed is its public WFS GeoJSON.
+        "bom_forecast_url": "http://www.bom.gov.au/vic/forecasts/state.shtml",
+        "ga_quakes_url": ("https://earthquakes.ga.gov.au/geoserver/earthquakes/wfs?"
+                          "service=WFS&version=1.0.0&request=GetFeature&"
+                          "typeName=earthquakes:earthquakes_seven_days&"
+                          "outputFormat=application/json"),
+        "earthquake_hours": 48,
+        "earthquake_min_magnitude": 2.5,
+        "fetch_timeout_seconds": 10,
+    },
     "intel": {
         # Intelligence Feed change detector (app/intel_feed.py). Reads only
         # already-collected data, so it is cheap and can run often.

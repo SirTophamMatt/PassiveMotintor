@@ -35,6 +35,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
   bug reports and suggestions; `app/mailer.py` — SMTP sending; `app/geoip.py` — coarse
   visitor geolocation from a truncated IP
+- `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
+  Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
 - `assets/style.css` — light/dark theme
 - `tests/` — pytest suite + HTML fixtures (`tests/fixtures/`); not shipped in the Docker image
@@ -1042,6 +1044,103 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (`ui.table_styles`) now use the CSS variables, so they follow the scheme too. A test pins
   `SCHEMES` to the stylesheet.
 - Tests: `tests/test_shell.py`.
+
+## Operational Summary — Intel Tool (Phase 1, built 2026-09-25)
+Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/summary`.
+- **Fills the SCC's own deck, never redraws it.** `seed/opsum_template.pptx` is an issued
+  summary turned into a template by `seed/opsum_template_tool.py` (one-off, re-run if the SCC
+  changes the deck). `app/opsum_pptx.py` fills it: fonts, colours, menu tiles and slide-jump
+  links stay the SCC's. Template conventions: a paragraph that is exactly `{{key}}` expands to
+  one paragraph per line (keeps that paragraph's bullet/indent/font); other `{{token}}`s are
+  replaced inside their run; table cells are `{{key.row.col}}`; pictures named
+  `OPS_IMG:<key>` are image slots (upload scaled to fit the frame, centred; an empty slot is
+  removed); tables `OPS_GRID:rcc|icc` are recoloured from the slide's own legend table
+  (`OPS_GRID_LEGEND`); slides named `OPS_OPTIONAL:<key>` are deleted when switched off, with
+  any link to them removed.
+- **Template tool decisions.** Source slides 11 (off-season planned burning), 13 (old
+  activation) and 14 (hazard highlight) are dropped; the "SCC 4 Day Activation" menu tile
+  pointed at 11 and is re-pointed at slide 9. The SCC switches sections off by HIDING slides;
+  the template un-hides everything and planned burning / avian influenza / flood snapshot
+  are per-summary optional slides instead (planned burning was hidden in the Sept deck).
+  The two animated GIFs at the top of the Transport column are SCC easter eggs for whoever
+  builds the pack (invisible in the PDF) — deleted by the tool, not an image slot.
+- **The committed template is scrubbed — the repo may be public and the deck is Official:
+  Sensitive.** The tool blanks every day value, replaces content pictures with placeholders,
+  clears notes, and removes comment authors, the co-authoring change log (`changesInfo`:
+  every editor's name + tenant id), SharePoint customXml, the MSIP label custom properties,
+  core-property names, and hyperlinks no longer in use (Isentia media links carry per-user
+  keys). `test_template_is_scrubbed` guards it. **Never commit an issued deck.**
+- **Model `app/opsum.py`** (UI-free): `SLIDES` is the single field map the form and the
+  renderer share — tests assert every field has a token/slot in the template and every
+  template token is a known field, so they cannot drift. Kinds: text / line / table /
+  colors (AV workload grid) / grid (RCC/ICC Not Active·Active·Readiness) / image. One draft
+  per summary date in `opsum_drafts` (JSON); **Mark issued** also copies it to
+  `opsum_versions`. A new date starts from defaults plus every `carry=True` field and the
+  optional-slide switches from the most recent earlier summary (↻ in the form). Derived at
+  render time: AV day headers (7 days to the summary date), Code 1 headers (7 days to
+  date−2), year labels. `normalise()` is the validation for everything the browser sends.
+- **Text box syntax:** one line per bullet, two-space indent = sub-bullet (exact source
+  indent), `# Heading` (copies the cell's own heading style), blank line = spacer (sized to
+  the body text — an empty paragraph otherwise takes the 18 pt default and blows table rows
+  up), `**bold**`, `[text](https://…)`. A value with no `**` keeps the template's weight; a
+  value that uses `**` sets bold/regular on every segment.
+- **Images** are content-addressed (`<data dir>/opsum_images/<sha1>.<ext>`, gitignored),
+  type decided by magic bytes (PNG/JPEG/GIF/BMP only — no SVG), 15 MB cap. Served by
+  `/intel/summary/image/<sha1>.<ext>`, which re-checks the Intel session (403) and a strict
+  filename regex (404).
+- **Access.** Same shared password/session flag as `/intel` (`pages/intel.py`: `unlocked()`,
+  `body_for(path)`, tab strip + Lock button shared by both Intel pages; the unlock callback
+  returns the page you were on). Every callback re-checks the session server-side. On the web
+  build the page **stays closed while `UM_INTEL_PASSWORD` is unset** (the default `intel` is
+  not good enough for an Official: Sensitive product); the desktop build is exempt.
+- **Colours** copied from the source deck: flood Status MINOR `00B050` / MODERATE `ED7D31` /
+  MAJOR `FF0000` (text forced black); AV workload ERP escalation = nothing (`E9EBF5`, the
+  deck's own fill) / Orange `ED7D31` / Red `FF0000` — the SCC's three levels.
+- Dep: `python-pptx` (pure Python). Tests: `tests/test_opsum.py`.
+- Phase 2 (auto-fill) is below. **Not done:** CFA TFB/FDR and health.vic alerts fetchers,
+  product-availability ticks on the Sources slide (static for now), document intake (upload a
+  PDF/DOCX and pick text/images from it), PDF export.
+
+## Operational Summary — auto-fill (Phase 2, built 2026-09-26)
+- **`app/opsum_auto.py`** (UI-free): `suggest(d)` → `{key: Suggestion(value, source, as_at,
+  note)}` + `{provider: reason}`; `apply(data, sugg, overwrite=False)` fills EMPTY fields /
+  table cells only (a table suggestion uses `None` for "no opinion", so RFA cells stay the
+  operator's); `unapplied()` names fields typed over. Providers are isolated — one throwing
+  costs only its fields; a `LookupError` is a user-facing "not filled: reason".
+- **The deck's clocks, not "now".** `opsum.snapshot_time` 08:30 / `opsum.stats_cutoff` 06:00
+  (server-local wall time — the container runs `TZ=Australia/Melbourne`, and the page's
+  `_today()` deliberately uses the same clock as the data). Warnings + going fires "as at
+  0830" are RECONSTRUCTED from the state journal (`history.state_at(FIRE, 08:30)`), so a pack
+  built at 09:15 still shows 08:30 — an upgrade at 09:00 does not leak in. Before 08:30 the
+  live table is used and the note says so. **A moment the journal does not cover is refused,
+  never substituted with live data.** Incident totals = `fire_incidents` with
+  `COALESCE(created, first_seen)` in (06:00 yesterday, 06:00 today]; `fire_kind()` maps
+  category2 to grass/bush vs structure ("Non-Structure" excluded).
+- **Sources are stated per field** (italic line under each "auto" field): VicEmergency is the
+  PUBLIC feed and under-reports structure fires, so its totals carry that caveat; RFAs are in
+  no feed and are never filled.
+- Other providers: BoM warnings (grouped by type as `# Type` headings), roads (closure/other
+  counts + up to 6 closures), power (statewide total + locations ≥
+  `opsum.power_significant_customers`; refused when >3 h stale), flood snapshot slide (gauges
+  ≥ Minor from readings < 24 h old, most severe first, place name via `gauge_town`, trend from
+  `flood.trend` rate, outlook only when a projection exists — always with the "not an
+  official forecast" wording).
+- **External, on demand only** (`app/opsum_sources.py`, the Fill button — never on page load
+  or a timer; 10-min cache, `opsum.fetch_timeout_seconds`): BoM **state forecast page**
+  (`state.shtml`, fetched like `vicall.shtml`; first "Forecast for …" heading = today,
+  "Weather Situation" = synoptic) and **GA earthquakes** WFS GeoJSON (Victoria bbox from the
+  geometry; magnitude/time/description from whichever usual property name exists; ≥
+  `earthquake_min_magnitude` in `earthquake_hours`). **Both were built without sight of the
+  live sources** (sandbox blocks them): an unparseable response is saved to
+  `<data dir>/opsum_debug_<name>.*` and reported — check those first if either says "not
+  understood".
+- **Page:** opening TODAY's summary for the first time runs the internal providers into empty
+  fields (status says how many); **Fill from Passive Monitor** runs everything, with "Replace
+  what is already typed" to overwrite, and a report of filled / already matching / typed over
+  / not filled (with reasons). Every auto field shows an "auto" badge.
+- Cost: the flood provider groups `flood_observations` by station (one scan, same shape as
+  `flooding_breakdown`) — fine on a click, **do not move it onto a timer**.
+- Tests: `tests/test_opsum_auto.py`.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

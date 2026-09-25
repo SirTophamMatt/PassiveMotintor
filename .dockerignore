@@ -4,6 +4,7 @@ dist/
 build/
 backups/
 storm_frames/
+opsum_images/
 __pycache__/
 *.pyc
 *.db

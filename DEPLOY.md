@@ -71,6 +71,54 @@ The DB and config persist in `./data`. Existing named flood events are migrated
 into date-range **tags** automatically on first start of the new build, so past
 incidents stay selectable on the Flood page.
 
+## Intel Tool password (Operational Summary)
+
+The Operational Summary builder at `/intel/summary` is marked Official: Sensitive, so it
+stays closed until the Intel Tool has a real password. Add to `.env`:
+
+```bash
+UM_INTEL_PASSWORD=something-strong
+```
+
+then `docker compose up -d`. Leaving it blank keeps the old default password for the fire
+chart generator at `/intel`, and the summary page shows how to switch it on.
+
+## Trying a branch before merging it
+
+This runs the branch beside the live app on a **copy** of the database, with **no
+collectors** (no second EM-COP login, no extra BoM load), reachable only through an SSH
+tunnel. Nothing in the live `./data` is touched.
+
+```bash
+# 1. In the live checkout: put the branch in a separate folder
+git fetch origin
+git worktree add ../pm-test origin/<branch-name>
+
+# 2. Snapshot the live database (SQLite online backup, safe while running)
+docker compose exec app python -c "import sqlite3; s=sqlite3.connect('/data/unified_monitor.db'); d=sqlite3.connect('/data/test-copy.db'); s.backup(d); d.close()"
+mkdir -p ../pm-test/data
+sudo mv data/test-copy.db ../pm-test/data/unified_monitor.db
+
+# 3. Build and run the branch on localhost:8060 with collectors off
+cd ../pm-test
+docker build -t pm-test .
+docker run --rm -d --name pm-test -p 127.0.0.1:8060:8050 \
+  -v "$PWD/data:/data" -e UM_DATA_DIR=/data \
+  -e UM_INTEL_PASSWORD='a-test-password' -e UM_SECRET_KEY=test \
+  pm-test python -c "from app.factory import create_app; from waitress import serve; serve(create_app(autostart=False).server, host='0.0.0.0', port=8050)"
+```
+
+From your own computer: `ssh -L 8060:127.0.0.1:8060 you@your-vps`, then open
+<http://localhost:8060>. Logs: `docker logs -f pm-test`.
+
+Clean up afterwards (the live app is unaffected throughout):
+
+```bash
+docker stop pm-test
+cd <live checkout> && sudo rm -rf ../pm-test && git worktree prune
+docker image rm pm-test
+```
+
 ## Flood-only (smaller/cheaper) variant
 
 If you don't need power yet, you can shrink the image: delete the Chrome/Xvfb
