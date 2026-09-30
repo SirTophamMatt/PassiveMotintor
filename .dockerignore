@@ -1,4 +1,22 @@
 # Keep the image small and never bake secrets/data into it.
+#
+# Patterns match from the build-context ROOT only: `*.db` does NOT match
+# `data/unified_monitor.db`. So the compose data volume (./data: the DB, its
+# 15 startup backups, logs, config.json with credentials) must be excluded by
+# name, and the file patterns need `**/` to reach any depth. Without this every
+# `docker compose up --build` copied the whole live dataset into the image
+# layer AND the build cache.
+data/
+**/backups/
+**/storm_frames/
+**/opsum_images/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.log
+**/config.json
+**/pager_debug.html
+**/opsum_debug_*
 .venv/
 dist/
 build/
