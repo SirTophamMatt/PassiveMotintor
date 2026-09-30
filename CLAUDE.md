@@ -1082,6 +1082,16 @@ what should I be watching* — and is useful **on its own, before anyone generat
   the full one-gauge view, a burst up to four), under a pulsing banner in the class colour, then
   keeps a NEW/UP badge for `FLASH_SECONDS` (15 min). The seen-set holds each gauge's PEAK class
   for `QUIET_SECONDS` (30 min), so a gauge hovering on a threshold flashes once, not every cycle.
+- **Roads: event tag + causes (2026-09-30).** Options gain an **Event** selector (event tags) and
+  **Road causes** (Flooding / Weather-storm / Trees-debris ticked by default, Other off). The Road
+  closures tile and the map's road layers then show only ACTIVE disruptions that STARTED inside the
+  tag (`roads.data.filter_since`: feed `created`, else `first_seen`) and match a ticked cause;
+  nothing ticked = nothing shown. A line on the map (and the tile tooltip) states the filter. The
+  map's roads chip is split into **Road closures** (on) and **Other road disruptions** (off).
+  Causes are keyword matches (`roads.data.causes_of`, `CAUSES`) because eventType is free text:
+  the type is matched as-is, the description only via a "due to / because of / caused by" phrase
+  so a road NAME ("Cabbage Tree Road") never counts as a cause. Add keywords there as real feed
+  wording turns up.
 - **Cost:** the gauge list (one `GROUP BY station_name` over `flood_observations` + a trend per
   flooding gauge) is cached for all viewers for 45 s, like `situation`. Readings older than 24 h are
   not shown as flooding.

@@ -1,4 +1,6 @@
 """Road-disruption data queries and classification."""
+import re
+
 import pandas as pd
 
 from app import database
@@ -144,3 +146,64 @@ def heartbeat_summary():
     if df.empty or not df.iloc[0]["n"]:
         return 0, None
     return int(df.iloc[0]["n"]), df.iloc[0]["last"]
+
+
+# --------------------------------------------------------------------------- #
+# Causes — for "roads cut by the event" views (the flood wall).
+# --------------------------------------------------------------------------- #
+# eventType/eventSubType are FREE TEXT in the v3 feed (the spec enumerates
+# nothing), so a cause is matched by keyword. The type is matched as-is; the
+# public description only through an explicit "due to / because of / caused by"
+# phrase, because it also carries road names — "Cabbage Tree Road" must not make
+# a crash a tree-down. A disruption matching none of these is "other".
+CAUSES = [
+    ("flooding", "Flooding", r"flood|water over|inundat|wash ?(?:out|away)|washed"),
+    ("weather", "Weather / storm", r"weather|storm|wind|snow|ice|icy|hail|fog|"
+                                   r"land ?slip|landslide|rain"),
+    ("trees", "Trees / debris", r"trees?\b|fallen|vegetation|branch|debris"),
+]
+CAUSE_OTHER = "other"
+CAUSE_LABELS = dict([(k, label) for k, label, _ in CAUSES] + [(CAUSE_OTHER, "Other causes")])
+_CAUSE_RE = [(key, re.compile(pattern, re.I))
+             for key, _, pattern in CAUSES]
+_DUE_TO_RE = re.compile(
+    r"(?:due to|because of|caused by|as a result of)\s+((?:[\w'-]+\s+){0,3}[\w'-]+)",
+    re.I)
+
+
+def causes_of(disruption_type, description=None):
+    """The cause keys a disruption matches ({'flooding', ...}); {'other'} when
+    it matches none."""
+    texts = []
+    if disruption_type is not None and disruption_type == disruption_type:
+        texts.append(str(disruption_type))
+    if description is not None and description == description:
+        texts += [m.group(1) for m in _DUE_TO_RE.finditer(str(description))]
+    found = {key for key, rx in _CAUSE_RE if any(rx.search(t) for t in texts)}
+    return found or {CAUSE_OTHER}
+
+
+def filter_causes(df, causes):
+    """Rows matching any of `causes` (keys of CAUSES, plus 'other'). An empty
+    or missing selection means no filtering."""
+    if df is None or df.empty or not causes:
+        return df
+    wanted = set(causes)
+    desc = df["description"] if "description" in df.columns else [None] * len(df)
+    keep = [bool(causes_of(t, d) & wanted)
+            for t, d in zip(df["disruption_type"], desc)]
+    return df[keep]
+
+
+def filter_since(df, start, end=None):
+    """Rows that STARTED inside [start, end] — the feed's `created`, falling back
+    to when we first saw it. `end` None = open-ended (an ongoing event)."""
+    if df is None or df.empty or start is None:
+        return df
+    began = pd.to_datetime(df.get("created"), errors="coerce")
+    if "first_seen" in df.columns:
+        began = began.fillna(pd.to_datetime(df["first_seen"], errors="coerce"))
+    keep = began >= pd.Timestamp(start)
+    if end is not None:
+        keep &= began <= pd.Timestamp(end)
+    return df[keep.fillna(False)]
