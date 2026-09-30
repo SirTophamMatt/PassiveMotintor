@@ -6,9 +6,11 @@ category from the feed is available via the filter. Collection is always-on and
 managed from the Admin page.
 """
 import json
+from datetime import datetime, timedelta
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from dash import Input, Output, dash_table, dcc, html
 
 from app import ui
@@ -216,18 +218,94 @@ def _fill_layer(geometries, colour, opacity):
             "source": {"type": "FeatureCollection", "features": features}}
 
 
+# Warning AREAS, shared by every map on the site (this page, the unified map,
+# replay, the walls): a denser fill and a solid outline, so an area reads as a
+# warning rather than as a faint tint, and NO visible centre dot — the dot
+# looked like just another incident. The dot stays as an invisible hover target
+# so the warning is still identifiable; a warning with no area keeps its dot.
+WARNING_FILL_OPACITY = 0.35
+WARNING_LINE_WIDTH = 3
+# A warning first seen within this many seconds "breathes" (assets/map_pulse.js
+# animates any layer whose name starts with PULSE_PREFIX until the epoch-ms
+# deadline encoded after it). The server stops emitting the pulse layer once
+# the window has passed, so a page left open settles on the next refresh.
+PULSE_SECONDS = 180
+PULSE_PREFIX = "wd-pulse:"
+
+
+def has_area(geometry):
+    """True when a stored geometry string contains a fillable polygon."""
+    if not geometry or not isinstance(geometry, str):
+        return False
+    try:
+        return bool(_polygons(json.loads(geometry)))
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def hidden_point(row):
+    """A warning drawn as an area shows no centre dot."""
+    return row.get("Kind") in WARNING_KINDS and has_area(row.get("geometry"))
+
+
+def _outline_layer(fill, colour, width):
+    return {"sourcetype": "geojson", "type": "line", "below": "traces",
+            "color": colour, "opacity": 0.95, "line": {"width": width},
+            "source": fill["source"]}
+
+
+def warning_area_layers(df, now=None, pulse=True):
+    """Fill + outline map layers for every warning area, one pair per level.
+    Warnings first seen in the last PULSE_SECONDS get a pair of their own,
+    named for the pulse script. `df` needs Kind and geometry (first_seen for
+    the pulse)."""
+    if df is None or df.empty or "geometry" not in df.columns:
+        return []
+    now = now or datetime.now()
+    first = (pd.to_datetime(df["first_seen"], errors="coerce")
+             if pulse and "first_seen" in df.columns
+             else pd.Series(pd.NaT, index=df.index))
+    fresh = (first >= now - timedelta(seconds=PULSE_SECONDS)) & (first <= now)
+    layers = []
+    for kind in WARNING_KINDS:
+        colour = KIND_COLOURS[kind]
+        rows = df[df["Kind"] == kind]
+        settled = rows.loc[~fresh.reindex(rows.index, fill_value=False), "geometry"]
+        fill = _fill_layer(settled.dropna().tolist(), colour, WARNING_FILL_OPACITY)
+        if fill:
+            layers += [fill, _outline_layer(fill, colour, WARNING_LINE_WIDTH)]
+        for idx in rows.index[fresh.reindex(rows.index, fill_value=False)]:
+            fill = _fill_layer([rows.at[idx, "geometry"]], colour,
+                               WARNING_FILL_OPACITY)
+            if not fill:
+                continue
+            ends = int((first[idx] + timedelta(seconds=PULSE_SECONDS))
+                       .timestamp() * 1000)
+            name = f"{PULSE_PREFIX}{ends}"
+            fill["name"] = name
+            line = _outline_layer(fill, colour, WARNING_LINE_WIDTH)
+            line["name"] = name
+            layers += [fill, line]
+    return layers
+
+
 def _map_figure(df, dark, burn_df=None):
     """Incident/warning markers (centroids) with filled polygon overlays for
     events that have an area, plus an optional historical burn-area layer."""
     located = df.dropna(subset=["latitude", "longitude"]) if not df.empty else df
+    hidden = None
+    if located is not None and not located.empty:
+        located = located.copy()
+        located["Kind"] = located.apply(_kind, axis=1)
+        mask = located.apply(hidden_point, axis=1)
+        hidden, located = located[mask], located[~mask]
     if located is None or located.empty:
         fig = px.scatter_map(
             pd.DataFrame({"latitude": [], "longitude": []}),
             lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
             map_style="open-street-map", title="Active Incidents & Warnings")
     else:
-        plot = located.copy()
-        plot["Kind"] = plot.apply(_kind, axis=1)
+        plot = located
         fig = px.scatter_map(
             plot, lat="latitude", lon="longitude", color="Kind",
             color_discrete_map=KIND_COLOURS,
@@ -238,6 +316,17 @@ def _map_figure(df, dark, burn_df=None):
             zoom=5.2, center=MELB_CENTER, map_style="open-street-map",
             title="Active Incidents & Warnings")
         fig.update_traces(marker=dict(size=12))
+    if hidden is not None and not hidden.empty:
+        # Area warnings: no dot, but still hoverable at their centre.
+        fig.add_trace(go.Scattermap(
+            lat=hidden["latitude"], lon=hidden["longitude"], mode="markers",
+            marker=dict(size=16, opacity=0), showlegend=False,
+            hoverinfo="text", text=[
+                "<b>%s</b><br>%s" % (r.get("location") or "Warning",
+                                     " · ".join(str(v) for v in (
+                                         r["Kind"], r.get("status"))
+                                         if v and v == v))
+                for _, r in hidden.iterrows()]))
     # The AWS HTML legend below the map is the key, so hide Plotly's.
     fig.update_layout(showlegend=False)
 
@@ -252,10 +341,13 @@ def _map_figure(df, dark, burn_df=None):
         kinds = df.copy()
         kinds["Kind"] = kinds.apply(_kind, axis=1)
         for kind, colour in KIND_COLOURS.items():
+            if kind in WARNING_KINDS:
+                continue
             geoms = kinds.loc[kinds["Kind"] == kind, "geometry"].dropna().tolist()
             layer = _fill_layer(geoms, colour, 0.25)
             if layer:
                 layers.append(layer)
+        layers += warning_area_layers(kinds)
     if layers:
         fig.update_layout(map_layers=layers)  # magic-underscore: keeps style/zoom
     return ui.apply_theme(fig, dark)

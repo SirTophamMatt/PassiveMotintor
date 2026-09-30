@@ -176,6 +176,30 @@ If a session drops, the scraper re-logs-in on the next cycle.
   on the map markers need a **Mapbox access token** (open-street-map tiles only support circle
   markers) — deferred; the AWS colour/shape key is the token-free stand-in.
 
+## Warning areas on every map (updated 2026-09-30)
+- **One style, every map.** `fire.warning_area_layers()` builds the warning-area layers for both map
+  paths: the Fire page's own `_map_figure` (also the classic Overview and the fire PDF) and
+  `unified.render_fire` (the unified map, Replay, both walls, the console Overview). Per warning
+  level: a fill at `WARNING_FILL_OPACITY` (0.35, was 0.2–0.25) plus a separate **line** layer of
+  `WARNING_LINE_WIDTH` (3 px) — Plotly/MapLibre fill layers cannot have a thick border, so the
+  outline is its own layer over the same GeoJSON. Incident and burn-area fills are unchanged.
+- **No centre dot on an area warning** (`fire.hidden_point`): the dot read as another incident. An
+  invisible (opacity 0) marker stays at the centre so it is still hoverable; a warning with NO area
+  keeps its visible dot. On the unified map a legend-only placeholder trace keeps a solid swatch
+  (an opacity-0 trace would show a faded one).
+- **New warnings breathe for `PULSE_SECONDS` (180) after `first_seen`.** Each gets its own
+  fill+line pair named `wd-pulse:<epoch-ms deadline>`. Plotly cannot animate a layer, so
+  `assets/map_pulse.js` finds those layers on every map (MapLibre id =
+  `plotly-layout-layer-<subplot uid>-<index in layout.map.layers>`) and drives `fill-opacity` /
+  `line-width` directly on the MapLibre map at ~20 fps until the deadline; Plotly re-applies its
+  paint on each figure update and the next tick overrides it. The server stops emitting the pulse
+  layer after the window, so a page left open settles on its next refresh. Reduced-motion
+  browsers get a steady bold area instead. The collector runs every 3 min and pages refresh every
+  30–60 s, so a warning is usually seen breathing for about 2 of its 3 minutes.
+- Browser-testing note: in the sandbox the map never finishes loading unless EVERY non-local
+  request is answered (abort them; fulfil OSM tiles with a PNG) — only then do the plotly layers
+  exist in the MapLibre style. Tests: `tests/test_warning_areas.py`.
+
 ## Weather module — BoM warnings (Phase 2a, built 2026-07-12)
 - **Source:** `api.weather.bom.gov.au/v1` (public JSON behind the BoM website; no auth,
   undocumented so parse defensively). `app/modules/weather/{scraper,data}.py`, page
@@ -1082,6 +1106,16 @@ what should I be watching* — and is useful **on its own, before anyone generat
   the full one-gauge view, a burst up to four), under a pulsing banner in the class colour, then
   keeps a NEW/UP badge for `FLASH_SECONDS` (15 min). The seen-set holds each gauge's PEAK class
   for `QUIET_SECONDS` (30 min), so a gauge hovering on a threshold flashes once, not every cycle.
+- **Roads: event tag + causes (2026-09-30).** Options gain an **Event** selector (event tags) and
+  **Road causes** (Flooding / Weather-storm / Trees-debris ticked by default, Other off). The Road
+  closures tile and the map's road layers then show only ACTIVE disruptions that STARTED inside the
+  tag (`roads.data.filter_since`: feed `created`, else `first_seen`) and match a ticked cause;
+  nothing ticked = nothing shown. A line on the map (and the tile tooltip) states the filter. The
+  map's roads chip is split into **Road closures** (on) and **Other road disruptions** (off).
+  Causes are keyword matches (`roads.data.causes_of`, `CAUSES`) because eventType is free text:
+  the type is matched as-is, the description only via a "due to / because of / caused by" phrase
+  so a road NAME ("Cabbage Tree Road") never counts as a cause. Add keywords there as real feed
+  wording turns up.
 - **Cost:** the gauge list (one `GROUP BY station_name` over `flood_observations` + a trend per
   flooding gauge) is cached for all viewers for 45 s, like `situation`. Readings older than 24 h are
   not shown as flooding.

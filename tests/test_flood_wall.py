@@ -67,7 +67,8 @@ def test_layouts_build():
 
 def test_every_layer_chip_maps_to_something():
     for key, *_ in fw.LAYERS:
-        assert key in ("gauges", "gauges_below", "roads") or fw._fire_kinds([key])
+        assert (key in ("gauges", "gauges_below", "road_closures", "road_other")
+                or fw._fire_kinds([key]))
     assert "gauges_below" not in fw.DEFAULT_LAYERS
     assert fw._fire_kinds(["advice"]) == {"Advice"}
     assert "Fire" in fw._fire_kinds(["incidents"])
@@ -229,3 +230,84 @@ def test_cards_and_map_render(db, fresh_cache):
 def test_quiet_panel_when_nothing_is_flooding(db, fresh_cache):
     _gauge("Low River", [0.4] * 4)
     assert fw.quiet_panel(fw.compute()) is not None
+
+
+# --------------------------------------------------------------------------- #
+# Roads: event tag + causes
+# --------------------------------------------------------------------------- #
+from app.modules.roads import data as roads_data  # noqa: E402
+
+
+@pytest.mark.parametrize("dtype, desc, expected", [
+    ("Flooding, Water over road", None, {"flooding"}),
+    ("Hazard, Fallen tree", None, {"trees"}),
+    ("Weather, Storm damage", None, {"weather"}),
+    ("Hazard, Landslip", None, {"weather"}),
+    ("Crash, Vehicle", "Cabbage Tree Road closed near Tree St", {"other"}),
+    ("Hazard", "Road closed due to fallen trees", {"trees"}),
+    ("Incident", "Closed because of flooding over the causeway", {"flooding"}),
+    (None, None, {"other"}),
+    (float("nan"), float("nan"), {"other"}),
+])
+def test_road_causes(dtype, desc, expected):
+    assert roads_data.causes_of(dtype, desc) == expected
+
+
+def _road(sid, dtype, closure, created, resolved=0, desc=None):
+    return {"source_id": sid, "disruption_type": dtype, "is_closure": closure,
+            "created": created, "first_seen": created, "last_seen": created,
+            "resolved": resolved, "description": desc, "road_name": sid,
+            "latitude": -37.5, "longitude": 145.0}
+
+
+@pytest.fixture
+def roads_and_event(db):
+    from app import tags
+    tags.create_tag("Oct floods", "2026-10-01 06:00:00")
+    database.insert_rows("road_disruptions", [
+        _road("before", "Flooding, Water over road", 1, "2026-09-30 22:00:00"),
+        _road("flood", "Flooding, Water over road", 1, "2026-10-01 09:00:00"),
+        _road("tree", "Hazard, Fallen tree", 1, "2026-10-01 10:00:00"),
+        _road("lane", "Flooding, Water over road", 0, "2026-10-01 11:00:00"),
+        _road("crash", "Crash", 1, "2026-10-01 12:00:00"),
+        _road("reopened", "Flooding", 1, "2026-10-01 13:00:00", resolved=1),
+    ])
+    return tags.list_tags()[0]["id"]
+
+
+def test_event_and_causes_limit_roads_to_current_event_closures(roads_and_event):
+    df, tag = fw.road_selection(roads_and_event, fw.DEFAULT_ROAD_CAUSES)
+    assert tag["name"] == "Oct floods"
+    assert set(df["source_id"]) == {"flood", "tree", "lane"}
+    # No event: the pre-event flooding closure counts again.
+    df, tag = fw.road_selection(None, fw.DEFAULT_ROAD_CAUSES)
+    assert tag is None and "before" in set(df["source_id"])
+    # Other causes on: the crash appears; nothing ticked: nothing at all.
+    assert "crash" in set(fw.road_selection(None, ["other"])[0]["source_id"])
+    assert fw.road_selection(None, [])[0].empty
+
+
+def test_road_tile_counts_closures_only_and_explains_itself(roads_and_event):
+    from app import situation
+    roads, tag = fw.road_selection(roads_and_event, fw.DEFAULT_ROAD_CAUSES)
+    note = fw.road_note(tag, fw.DEFAULT_ROAD_CAUSES)
+    snap = {"ok": True, "flooding": [], "near": [], "map": pd.DataFrame()}
+    road_tile = fw.tiles(snap, situation.Situation(datetime.now()), roads, note)[-1]
+    assert road_tile.children[1].children == "2"      # flood + tree, not the lane
+    assert "Oct floods" in road_tile.title and "flooding" in road_tile.title
+
+
+def test_map_splits_closures_from_other_disruptions(roads_and_event):
+    roads, _ = fw.road_selection(roads_and_event, fw.DEFAULT_ROAD_CAUSES)
+    snap = {"ok": True, "flooding": [], "near": [], "map": pd.DataFrame()}
+    closed = fw.map_figure(snap, ["road_closures"], True, [], roads=roads)
+    names = {t.name for t in closed.data if t.name}
+    assert names == {"Road: Closure"}
+    both = fw.map_figure(snap, ["road_closures", "road_other"], True, [], roads=roads)
+    assert {t.name for t in both.data if t.name} == {"Road: Closure",
+                                                    "Road: Other disruption"}
+
+
+def test_unknown_or_deleted_event_falls_back_to_everything_current(roads_and_event):
+    df, tag = fw.road_selection(99999, fw.DEFAULT_ROAD_CAUSES)
+    assert tag is None and "before" in set(df["source_id"])

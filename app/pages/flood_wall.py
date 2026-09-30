@@ -33,6 +33,7 @@ from dash import Input, Output, State, dcc, html
 
 from app import database, shell, situation
 from app.modules.flood import data as flood_data
+from app.modules.roads import data as roads_data
 from app.pages import wall
 
 log = logging.getLogger(__name__)
@@ -65,14 +66,20 @@ CLASS_NAMES = {1: "Major", 2: "Moderate", 3: "Minor"}
 LAYERS = [
     ("gauges", "Flood gauges ≥ Minor", "#ff7f0e", "●"),
     ("gauges_below", "Gauges below Minor", "#5b8def", "●"),
-    ("roads", "Road disruptions", "#d62728", "━"),
+    ("road_closures", "Road closures", "#d62728", "━"),
+    ("road_other", "Other road disruptions", "#ff7f0e", "━"),
     ("emergency", "Emergency Warning", "#d62728", "▲"),
     ("watch_act", "Watch and Act", "#ff7f0e", "▲"),
     ("advice", "Advice", "#e6c700", "▲"),
     ("incidents", "Incidents", "#ff5722", "●"),
 ]
-# Below-Minor gauges are ~360 small dots: context on demand, not by default.
-DEFAULT_LAYERS = [key for key, *_ in LAYERS if key != "gauges_below"]
+# Below-Minor gauges are ~360 small dots, and lane/partial road disruptions
+# are mostly routine: context on demand, not by default.
+DEFAULT_LAYERS = [key for key, *_ in LAYERS
+                  if key not in ("gauges_below", "road_other")]
+
+# Road causes shown by default: what a flood event closes roads for.
+DEFAULT_ROAD_CAUSES = ["flooding", "weather", "trees"]
 
 
 def _fire_kinds(layers):
@@ -292,6 +299,21 @@ def layout():
                            value=DEFAULT_ROTATE, inline=True,
                            className="display-options",
                            persistence=True, persistence_type="local"),
+            html.Div("Event", className="display-panel-label"),
+            dcc.Dropdown(id="fw-event", options=event_options(),
+                         placeholder="No event — everything current",
+                         clearable=True, className="fw-event-dd",
+                         persistence=True, persistence_type="local"),
+            html.Div("Roads then only count disruptions that started "
+                     "during the event.", className="display-panel-note"),
+            html.Div("Road causes", className="display-panel-label"),
+            dcc.Checklist(id="fw-road-causes",
+                          options=[{"label": " " + roads_data.CAUSE_LABELS[k],
+                                    "value": k}
+                                   for k in [*DEFAULT_ROAD_CAUSES,
+                                             roads_data.CAUSE_OTHER]],
+                          value=DEFAULT_ROAD_CAUSES, className="display-options",
+                          persistence=True, persistence_type="local"),
             dcc.Checklist(id="fw-show-map",
                           options=[{"label": " Show the state map",
                                     "value": "map"}],
@@ -328,17 +350,74 @@ def layout():
                               value=DEFAULT_LAYERS, inline=True,
                               className="fw-layer-chips",
                               persistence=True, persistence_type="local"),
+                html.Div(id="fw-road-note", className="fw-road-note"),
             ], className="wall-map fw-map"),
         ], id="fw-body", className="fw-body"),
     ], className="wall-page fw-page")
+
+
+def event_options():
+    """Event tags for the Event selector, newest first."""
+    from app import tags
+    try:
+        return [{"label": f"{t['name']} (from {str(t['start_ts'])[:16]}"
+                          + ("" if not t.get("end_ts") else
+                             f" to {str(t['end_ts'])[:16]}") + ")",
+                 "value": t["id"]} for t in tags.list_tags()]
+    except Exception:
+        log.exception("Flood wall: event tags unavailable")
+        return []
+
+
+def road_selection(event_id, causes):
+    """Active road disruptions for the wall: optionally only those that STARTED
+    within the chosen event tag, and only for the ticked causes (none ticked =
+    none shown). Returns (df or None when unreadable, tag or None)."""
+    from app import tags
+    tag = None
+    if event_id not in (None, ""):
+        try:
+            tag = tags.get_tag(int(event_id))
+        except Exception:
+            log.exception("Flood wall: event tag %s unavailable", event_id)
+    try:
+        df = roads_data.active_disruptions()
+    except Exception:
+        log.exception("Flood wall: road disruptions unavailable")
+        return None, tag
+    if tag:
+        df = roads_data.filter_since(df, tag["start_ts"], tag.get("end_ts"))
+    causes = DEFAULT_ROAD_CAUSES if causes is None else causes
+    if not causes:
+        return df.iloc[0:0], tag
+    return roads_data.filter_causes(df, causes), tag
+
+
+def road_note(tag, causes):
+    """One line saying what the road figures are counting."""
+    causes = DEFAULT_ROAD_CAUSES if causes is None else causes
+    all_keys = set(DEFAULT_ROAD_CAUSES) | {roads_data.CAUSE_OTHER}
+    if set(causes) >= all_keys:
+        what = "all causes"
+    elif not causes:
+        what = "no causes selected"
+    else:
+        what = ", ".join(roads_data.CAUSE_LABELS[c].lower() for c in causes
+                         if c in roads_data.CAUSE_LABELS)
+    text = f"Roads: {what}"
+    if tag:
+        text += f" · started since {tag['name']} ({str(tag['start_ts'])[:16]})"
+    return text
 
 
 def _chip(key, label, value, tone):
     return situation.Chip(key, label, value, PATH, tone)
 
 
-def tiles(snap, sit):
-    """Flood tiles, then the warning levels (never summed) and road closures."""
+def tiles(snap, sit, roads=None, note=None):
+    """Flood tiles, then the warning levels (never summed) and road closures.
+    `roads` is the filtered disruption frame (`road_selection`); without one
+    the statewide closure count is used."""
     flooding = snap["flooding"] if snap["ok"] else None
 
     def count(pred):
@@ -352,9 +431,18 @@ def tiles(snap, sit):
               "advice"),
         _chip("rising", "Rising gauges", count(lambda g: g.get("rising")), "alert"),
     ]
-    chips += [sit.chip(k) for k in ("emergency", "watch_act", "advice",
-                                    "road_closures")]
-    return [wall.tile(c) for c in chips]
+    chips += [sit.chip(k) for k in ("emergency", "watch_act", "advice")]
+    out = [wall.tile(c) for c in chips]
+    if roads is None and note is None:
+        out.append(wall.tile(sit.chip("road_closures")))
+    else:
+        closures = (None if roads is None
+                    else int(pd.to_numeric(roads["is_closure"], errors="coerce")
+                             .fillna(0).sum()) if not roads.empty else 0)
+        road_tile = wall.tile(_chip("road_closures", "Road closures", closures, None))
+        road_tile.title = note
+        out.append(road_tile)
+    return out
 
 
 # Sources a flood wall depends on; the others' staleness is not its business.
@@ -536,13 +624,14 @@ def banner(flashes, gauges, now):
     return text, f"fw-banner fw-banner-on fw-{CLASS_KEYS.get(worst, 'minor')}"
 
 
-def map_figure(snap, layers, dark, shown):
+def map_figure(snap, layers, dark, shown, roads=None):
     from app.modules.fire import data as fire_data
-    from app.modules.roads import data as roads_data
     from app.pages import fire as fire_page
     from app.pages import unified
 
     layers = set(layers or [])
+    if "roads" in layers:               # chip name before closures/other split
+        layers.add("road_closures")
     kinds = _fire_kinds(layers)
 
     def source(key):
@@ -558,7 +647,16 @@ def map_figure(snap, layers, dark, shown):
                 keep &= ~below
             return df[keep]
         if key == "roads":
-            return roads_data.active_disruptions()
+            df = roads_data.active_disruptions() if roads is None else roads
+            if df is None or df.empty:
+                return df
+            closure = pd.to_numeric(df["is_closure"], errors="coerce").fillna(0) > 0
+            keep = pd.Series(False, index=df.index)
+            if "road_closures" in layers:
+                keep |= closure
+            if "road_other" in layers:
+                keep |= ~closure
+            return df[keep]
         if key == "fire":
             df = fire_data.active_incidents()
             if df.empty:
@@ -569,7 +667,7 @@ def map_figure(snap, layers, dark, shown):
     on = []
     if layers & {"gauges", "gauges_below"}:
         on.append("flood")
-    if "roads" in layers:
+    if layers & {"road_closures", "road_other"}:
         on.append("roads")
     if kinds:
         on.append("fire")
@@ -601,10 +699,13 @@ def register_callbacks(app):
         Output("fw-stale", "title"),
         Output("fw-seen", "data"),
         Output("fw-flash", "data"),
+        Output("fw-road-note", "children"),
         Input("fw-interval", "n_intervals"),
+        Input("fw-event", "value"),
+        Input("fw-road-causes", "value"),
         State("fw-seen", "data"),
         State("fw-flash", "data"))
-    def refresh(_, seen, flashes):
+    def refresh(_, event_id, causes, seen, flashes):
         snap = current()
         sit = situation.current()
         now = time.time()
@@ -616,7 +717,9 @@ def register_callbacks(app):
             fresh = {}                  # an unreadable list is not "all cleared"
         flashes = update_flashes(flashes, fresh, gauges, now)
         text = stale_banner(sit)
-        return tiles(snap, sit), text, text, seen, flashes
+        roads, tag = road_selection(event_id, causes)
+        note = road_note(tag, causes)
+        return tiles(snap, sit, roads, note), text, text, seen, flashes, note
 
     @app.callback(
         Output("fw-rotate", "interval"),
@@ -682,7 +785,12 @@ def register_callbacks(app):
         Input("fw-interval", "n_intervals"),
         Input("fw-layers", "value"),
         Input("fw-shown", "data"),
+        Input("fw-event", "value"),
+        Input("fw-road-causes", "value"),
         Input("theme-store", "data"))
-    def refresh_map(_, layers, shown, dark):
+    def refresh_map(_, layers, shown, event_id, causes, dark):
         layers = layers if layers is not None else DEFAULT_LAYERS
-        return map_figure(current(), layers, bool(dark), shown)
+        roads, _tag = road_selection(event_id, causes)
+        if roads is None:               # unreadable: draw no roads, not all
+            roads = pd.DataFrame(columns=["is_closure"])
+        return map_figure(current(), layers, bool(dark), shown, roads=roads)
