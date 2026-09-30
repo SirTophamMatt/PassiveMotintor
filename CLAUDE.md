@@ -1049,7 +1049,7 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (`CACHE_SECONDS` 45) because `flooding_breakdown` groups the whole of `flood_observations`;
   classic viewers never compute it. Warning levels stay separate chips; an unreadable source is
   "—", never 0.
-- **Wall display `/wall`** (`app/pages/wall.py`, public): no nav (`wall-mode` hides the sidebar,
+- **Wall display `/wall`** (`app/pages/wall.py`, public; scenario walls such as `/wall/flood` below): no nav (`wall-mode` hides the sidebar,
   console header and Feedback button; the ticker stays), big tiles, Melbourne clock, one-line
   stale-source banner, the unified map, and a right panel rotating Latest changes → Active
   warnings → Data sources every 15 s. Full-screen button. Sounds stay reachable, faded, bottom right.
@@ -1060,6 +1060,34 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (`ui.table_styles`) now use the CSS variables, so they follow the scheme too. A test pins
   `SCHEMES` to the stylesheet.
 - Tests: `tests/test_shell.py`.
+
+## Flood wall — scenario walls (built 2026-09-30)
+- **Scenario walls live under `/wall/<name>`.** `shell.is_wall()` gives every one `wall-mode`;
+  `wall.header()` is the shared header (brand, **scenario switcher** from `wall.SCENARIOS`, stale
+  banner, page controls, full screen, clock — the clock/full-screen ids are shared because only
+  one wall is ever on screen). A new scenario = a page module + a `PUBLIC_PAGES` row + a
+  `SCENARIOS` row + the path in `NAV_GROUPS` "Situation".
+- **`/wall/flood`** (`app/pages/flood_wall.py`, public): rotates through every gauge at/above Minor,
+  **1 or 4 per page** (one-gauge view adds the flood-gauge stick and the LFG impacts reached + the
+  next one), each card showing height, class thresholds, trend + projection (with the
+  not-an-official-forecast wording) and a 48 h graph. Beside it a statewide map with **layer chips
+  on the map** (gauges ≥ Minor, gauges below Minor [off by default], road disruptions, Emergency
+  Warning, Watch and Act, Advice, incidents) that double as the legend; the gauges on screen are
+  ringed. Tiles: Major / Moderate / Minor gauges (exact per class), rising gauges, the three
+  warning levels (never summed), road closures. Options (per page, rotation 10–60 s, map on/off)
+  and the layer chips persist per browser (`persistence="local"`).
+- **Flash-up of new gauges.** Server lists what is flooding; each browser keeps its own seen-set in
+  a memory store (`detect_new`), first snapshot only seeds — same shape as the alert sounds. A gauge
+  newly at Minor or moving UP a class takes the screen for `TAKEOVER_SECONDS` (60; a lone one in
+  the full one-gauge view, a burst up to four), under a pulsing banner in the class colour, then
+  keeps a NEW/UP badge for `FLASH_SECONDS` (15 min). The seen-set holds each gauge's PEAK class
+  for `QUIET_SECONDS` (30 min), so a gauge hovering on a threshold flashes once, not every cycle.
+- **Cost:** the gauge list (one `GROUP BY station_name` over `flood_observations` + a trend per
+  flooding gauge) is cached for all viewers for 45 s, like `situation`. Readings older than 24 h are
+  not shown as flooding.
+- Sandbox note: with OSM tiles blocked, Plotly's map never finishes loading and dcc.Graph queues
+  every later update — the map looks frozen. Stub the tile requests when browser-testing.
+- Tests: `tests/test_flood_wall.py`.
 
 ## Operational Summary — Intel Tool (Phase 1, built 2026-09-25)
 Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/summary`.

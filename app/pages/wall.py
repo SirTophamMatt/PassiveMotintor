@@ -11,8 +11,15 @@ the same as any other open tab.
 """
 from dash import Input, Output, dcc, get_asset_url, html
 
-from app import situation
+from app import shell, situation
 from app.pages import overview
+
+# Every wall, for the switcher in the header. A new scenario wall is a module
+# under /wall/<name> plus one row here.
+SCENARIOS = [
+    (shell.WALL_PATH, "All hazards"),
+    (shell.FLOOD_WALL_PATH, "Flood"),
+]
 
 # Tiles, in order. Warning levels stay separate tiles — never one total.
 TILES = ["emergency", "watch_act", "advice", "gauges_minor", "customers_off",
@@ -33,15 +40,7 @@ def layout():
         dcc.Interval(id="wall-rotate", interval=ROTATE_SECONDS * 1000,
                      n_intervals=0),
         dcc.Interval(id="wall-clock-tick", interval=1_000, n_intervals=0),
-        html.Div([
-            html.Div(_brand(), className="wall-brand"),
-            html.Div(id="wall-stale", className="wall-stale"),
-            html.Div(className="console-spacer"),
-            html.Button("⛶ Full screen", id="wall-fullscreen", className="btn",
-                        title="Fill the whole screen (Esc to leave)"),
-            dcc.Link("Exit", href="/", className="btn"),
-            html.Div(id="wall-clock", className="wall-clock"),
-        ], className="wall-head"),
+        header(shell.WALL_PATH, stale_id="wall-stale"),
         html.Div(id="wall-tiles", className="wall-tiles"),
         html.Div([
             html.Div(dcc.Graph(id="wall-map", config={"displayModeBar": False},
@@ -55,6 +54,29 @@ def layout():
             ], className="wall-panel"),
         ], className="wall-body"),
     ], className="wall-page")
+
+
+def header(path, stale_id, extra=None):
+    """The header every wall shares: brand, scenario switcher, stale banner,
+    optional page-specific controls, full screen, exit and the clock.
+
+    The clock and full-screen ids are shared on purpose — only one wall is ever
+    on screen, so one pair of clientside callbacks serves them all."""
+    switcher = html.Div([
+        dcc.Link(label, href=href, className="wall-scenario"
+                 + (" wall-scenario-on" if href == path else ""))
+        for href, label in SCENARIOS], className="wall-scenarios")
+    return html.Div([
+        html.Div(_brand(), className="wall-brand"),
+        switcher,
+        html.Div(id=stale_id, className="wall-stale"),
+        html.Div(className="console-spacer"),
+        *(extra or []),
+        html.Button("⛶ Full screen", id="wall-fullscreen", className="btn",
+                    title="Fill the whole screen (Esc to leave)"),
+        dcc.Link("Exit", href="/", className="btn"),
+        html.Div(id="wall-clock", className="wall-clock"),
+    ], className="wall-head")
 
 
 def _brand():
