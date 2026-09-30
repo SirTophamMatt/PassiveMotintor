@@ -36,7 +36,7 @@
                     type: layer.type,
                     until: Number(name.slice(PREFIX.length)) || 0,
                     opacity: layer.opacity == null ? 0.35 : layer.opacity,
-                    width: (layer.line && layer.line.width) || 3
+                    width: (layer.line && layer.line.width) || 2
                 });
             });
         });

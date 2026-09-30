@@ -181,7 +181,7 @@ If a session drops, the scraper re-logs-in on the next cycle.
   paths: the Fire page's own `_map_figure` (also the classic Overview and the fire PDF) and
   `unified.render_fire` (the unified map, Replay, both walls, the console Overview). Per warning
   level: a fill at `WARNING_FILL_OPACITY` (0.35, was 0.2–0.25) plus a separate **line** layer of
-  `WARNING_LINE_WIDTH` (3 px) — Plotly/MapLibre fill layers cannot have a thick border, so the
+  `WARNING_LINE_WIDTH` (2 px; was 3 px, eased 2026-09-30) — Plotly/MapLibre fill layers cannot have a thick border, so the
   outline is its own layer over the same GeoJSON. Incident and burn-area fills are unchanged.
 - **No centre dot on an area warning** (`fire.hidden_point`): the dot read as another incident. An
   invisible (opacity 0) marker stays at the centre so it is still hoverable; a warning with NO area

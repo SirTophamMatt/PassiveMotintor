@@ -54,7 +54,7 @@ def test_warning_areas_get_a_denser_fill_and_an_outline():
     assert [l["type"] for l in layers] == ["fill", "line"]
     fill, line = layers
     assert fill["opacity"] == fire_page.WARNING_FILL_OPACITY > 0.25
-    assert line["line"]["width"] == fire_page.WARNING_LINE_WIDTH >= 3
+    assert line["line"]["width"] == fire_page.WARNING_LINE_WIDTH == 2
     assert fill["color"] == line["color"] == fire_page.KIND_COLOURS["Watch and Act"]
     assert "name" not in fill                  # an old warning does not pulse
 
