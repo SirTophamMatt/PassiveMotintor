@@ -39,11 +39,13 @@ SCHEMES = [
 DEFAULT_SCHEME = "watchdesk"
 
 WALL_PATH = "/wall"
+# Scenario walls live under /wall/<name>; every one gets `wall-mode`.
+FLOOD_WALL_PATH = WALL_PATH + "/flood"
 
 # Console top-bar menus. Paths not listed fall into "Tools" so a page added to
 # the factory later is never unreachable from the console layout.
 NAV_GROUPS = [
-    ("Situation", ["/", "/feed", "/briefing", WALL_PATH]),
+    ("Situation", ["/", "/feed", "/briefing", WALL_PATH, FLOOD_WALL_PATH]),
     ("Map", ["/map", "/replay"]),
     ("Hazards", ["/flood", "/fire", "/weather", "/storm", "/roads", "/pager",
                  "/power"]),
@@ -58,11 +60,17 @@ def root_class(dark, layout, scheme, pathname, desktop=False):
     classes.append("layout-" + layout)
     if scheme and scheme != DEFAULT_SCHEME and scheme in dict(SCHEMES):
         classes.append("scheme-" + scheme)
-    if pathname == WALL_PATH:
+    if is_wall(pathname):
         classes.append("wall-mode")
     if desktop:
         classes.append("has-titlebar")
     return " ".join(classes)
+
+
+def is_wall(pathname):
+    """The general wall and every scenario wall under it (not "/wallaby")."""
+    return bool(pathname) and (pathname == WALL_PATH
+                               or pathname.startswith(WALL_PATH + "/"))
 
 
 def group_items(items):
@@ -142,6 +150,8 @@ def controls():
             html.Div("Light / dark is the ☀ / ☾ button; every scheme has both.",
                      className="display-panel-note"),
             dcc.Link("Open the wall display →", href=WALL_PATH,
+                     className="display-panel-link"),
+            dcc.Link("Open the flood wall →", href=FLOOD_WALL_PATH,
                      className="display-panel-link"),
         ], id="display-panel", className="display-panel display-panel-hidden"),
     ], className="shell-controls")
