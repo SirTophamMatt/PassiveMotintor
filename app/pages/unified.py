@@ -74,20 +74,43 @@ def render_fire(df):
     df["Kind"] = df.apply(fire_page._kind, axis=1)
     traces, fills = [], []
     located = df.dropna(subset=["latitude", "longitude"])
+    hidden = (located.apply(fire_page.hidden_point, axis=1) if not located.empty
+              else pd.Series(dtype=bool))
     for kind, colour in fire_page.KIND_COLOURS.items():
         sub = located[located["Kind"] == kind]
         if sub.empty:
             continue
-        traces.append(go.Scattermap(
-            mode="markers", lat=sub["latitude"], lon=sub["longitude"],
-            name=kind, legendgroup="fire", marker=dict(size=11, color=colour),
-            hoverinfo="text", text=[_fire_hover(r) for _, r in sub.iterrows()]))
+        dots, areas = sub[~hidden[sub.index]], sub[hidden[sub.index]]
+        # A warning drawn as an area has no visible dot (it read as another
+        # incident); an invisible marker keeps it hoverable. The legend entry
+        # stays either way, on whichever trace comes first.
+        if not dots.empty:
+            traces.append(go.Scattermap(
+                mode="markers", lat=dots["latitude"], lon=dots["longitude"],
+                name=kind, legendgroup="fire", marker=dict(size=11, color=colour),
+                hoverinfo="text", text=[_fire_hover(r) for _, r in dots.iterrows()]))
+        if not areas.empty:
+            traces.append(go.Scattermap(
+                mode="markers", lat=areas["latitude"], lon=areas["longitude"],
+                name=kind, legendgroup="fire", showlegend=False,
+                marker=dict(size=16, color=colour, opacity=0),
+                hoverinfo="text", text=[_fire_hover(r) for _, r in areas.iterrows()]))
+            if dots.empty:
+                # Legend-only entry: the hover trace's invisible marker would
+                # otherwise show as a faded swatch.
+                traces.append(go.Scattermap(
+                    mode="markers", lat=[None], lon=[None], name=kind,
+                    legendgroup="fire", marker=dict(size=11, color=colour),
+                    hoverinfo="skip"))
     if "geometry" in df.columns:
         for kind, colour in fire_page.KIND_COLOURS.items():
+            if kind in fire_page.WARNING_KINDS:
+                continue
             geoms = df.loc[df["Kind"] == kind, "geometry"].dropna().tolist()
             layer = fire_page._fill_layer(geoms, colour, 0.2)
             if layer:
                 fills.append(layer)
+        fills += fire_page.warning_area_layers(df)
     return traces, fills
 
 
