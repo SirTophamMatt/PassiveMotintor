@@ -200,6 +200,26 @@ If a session drops, the scraper re-logs-in on the next cycle.
   request is answered (abort them; fulfil OSM tiles with a PNG) — only then do the plotly layers
   exist in the MapLibre style. Tests: `tests/test_warning_areas.py`.
 
+## Calm graphs — no flicker on refresh (built 2026-09-30)
+- **Cause, measured:** every page refreshes on a timer and dcc.Graph passes each new figure to
+  `Plotly.react`. For a map, Plotly then removes and re-adds EVERY MapLibre layer and source even
+  when the figure is byte-identical (~44 layers / 48 sources per refresh on `/map`) — that rebuild
+  was the flicker, and most refreshes change nothing (the server's figure JSON is identical tick to
+  tick). In a hidden tab MapLibre's render loop pauses, so queued `Plotly.react` calls piled up and
+  flushed one redraw at a time on return — the "loads everything since I last looked" effect.
+- **Fix, site-wide in one file:** `assets/graph_calm.js` wraps `Plotly.react` (dcc.Graph looks it up
+  on `window` at call time, so every graph on every page is covered). Per graph it keeps an FNV
+  hash of the incoming figure JSON (hashed BEFORE drawing — Plotly decodes arrays in the object it
+  is given); an identical update is skipped, and while `document.hidden` only the LATEST update is
+  kept and drawn once on `visibilitychange`. A graph's first draw always goes through (dcc.Graph
+  binds events after it). It installs via a `window.Plotly` setter so the wrapper exists before the
+  first draw — polling installed it too late, and the first refresh then redrew for nothing.
+  `gd.__wdLast` (first / draw / skip) records the last decision for diagnosis.
+- **Not changed:** a figure that genuinely changes still rebuilds the map's layers (Plotly
+  behaviour). The flood wall's ring moves every rotation, so its map redraws on rotation by design.
+- Tests: `tests/test_graph_calm.py` (static; behaviour was verified in Chromium: identical
+  refreshes skip, hidden updates collapse to one draw with the newest figure).
+
 ## Weather module — BoM warnings (Phase 2a, built 2026-07-12)
 - **Source:** `api.weather.bom.gov.au/v1` (public JSON behind the BoM website; no auth,
   undocumented so parse defensively). `app/modules/weather/{scraper,data}.py`, page
