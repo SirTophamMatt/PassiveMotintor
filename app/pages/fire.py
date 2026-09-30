@@ -224,7 +224,7 @@ def _fill_layer(geometries, colour, opacity):
 # looked like just another incident. The dot stays as an invisible hover target
 # so the warning is still identifiable; a warning with no area keeps its dot.
 WARNING_FILL_OPACITY = 0.35
-WARNING_LINE_WIDTH = 3
+WARNING_LINE_WIDTH = 2   # halfway between the old 1 px fill edge and 3 px
 # A warning first seen within this many seconds "breathes" (assets/map_pulse.js
 # animates any layer whose name starts with PULSE_PREFIX until the epoch-ms
 # deadline encoded after it). The server stops emitting the pulse layer once
