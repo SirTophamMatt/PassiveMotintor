@@ -994,9 +994,10 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 /* ----------------------------------------------------------------------
    Flood wall (/wall/flood)
    ---------------------------------------------------------------------- */
-.fw-tiles { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
+.fw-tiles { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 10px; }
 .fw-tiles .wall-tile { padding: 10px 14px; min-width: 0; }
-.fw-tiles .wall-tile-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-tiles .wall-tile-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: clamp(12px, 0.95vw, 19px); }
 .fw-tiles .wall-tile-value { font-size: clamp(28px, 3.3vw, 72px); }
 .fw-options { position: relative; }
 .fw-options > summary { list-style: none; cursor: pointer; margin: 0; }
@@ -1120,7 +1121,7 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .fw-near-height { font-weight: 700; }
 @media (max-width: 1000px) {
     .wall-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .fw-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .fw-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .fw-body { grid-template-columns: minmax(0, 1fr); }
     .fw-gauges.fw-per-4 { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
     .fw-card { min-height: 420px; }

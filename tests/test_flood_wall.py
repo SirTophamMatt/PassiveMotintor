@@ -311,3 +311,76 @@ def test_map_splits_closures_from_other_disruptions(roads_and_event):
 def test_unknown_or_deleted_event_falls_back_to_everything_current(roads_and_event):
     df, tag = fw.road_selection(99999, fw.DEFAULT_ROAD_CAUSES)
     assert tag is None and "before" in set(df["source_id"])
+
+
+# --------------------------------------------------------------------------- #
+# Incidents: agency filter (SES etc.) + event tag
+# --------------------------------------------------------------------------- #
+from app.modules.fire import data as fire_data  # noqa: E402
+
+
+@pytest.mark.parametrize("org, expected", [
+    ("VIC/SES", "ses"), ("vic/ses", "ses"), ("VIC/CFA", "cfa"), ("VIC/FRV", "frv"),
+    ("VIC/MFB", "frv"), ("VIC/DELWP", "ffm"), ("VIC/DEECA", "ffm"),
+    ("VIC/EMV", "other"), (None, "other"), (float("nan"), "other"),
+])
+def test_agency_of(org, expected):
+    assert fire_data.agency_of(org) == expected
+
+
+def _incident(sid, org, created, feed_type="incident", category="Flooding",
+              level=None):
+    return {"source_id": sid, "feed_type": feed_type, "category1": level or category,
+            "warning_level": level, "source_org": org, "location": sid,
+            "latitude": -37.0, "longitude": 145.0, "created": created,
+            "first_seen": created, "last_seen": created, "updated": created,
+            "resolved": 0}
+
+
+@pytest.fixture
+def incidents_and_event(db):
+    from app import tags
+    tags.create_tag("Oct floods", "2026-10-01 06:00:00")
+    database.insert_rows("fire_incidents", [
+        _incident("ses-old", "VIC/SES", "2026-09-30 20:00:00"),
+        _incident("ses-new", "VIC/SES", "2026-10-01 09:00:00", category="Tree Down"),
+        _incident("cfa-new", "VIC/CFA", "2026-10-01 10:00:00", category="Fire"),
+        _incident("warn", "VIC/SES", "2026-10-01 11:00:00", feed_type="warning",
+                  level="Watch and Act"),
+    ])
+    return tags.list_tags()[0]["id"]
+
+
+def test_incidents_filter_by_agency_and_event_and_never_include_warnings(
+        incidents_and_event):
+    df, _ = fw.incident_selection(None, None)
+    assert set(df["source_id"]) == {"ses-old", "ses-new", "cfa-new"}
+    df, _ = fw.incident_selection(None, ["ses"])
+    assert set(df["source_id"]) == {"ses-old", "ses-new"}
+    df, tag = fw.incident_selection(incidents_and_event, ["ses"])
+    assert tag["name"] == "Oct floods" and set(df["source_id"]) == {"ses-new"}
+    assert fw.incident_selection(None, [])[0].empty
+
+
+def test_incident_tile_counts_and_names_the_agency(incidents_and_event):
+    from app import situation
+    snap = {"ok": True, "flooding": [], "near": [], "map": pd.DataFrame()}
+    incidents, tag = fw.incident_selection(None, ["ses"])
+    note = fw.road_note(tag, fw.DEFAULT_ROAD_CAUSES, ["ses"])
+    tiles = fw.tiles(snap, situation.Situation(datetime.now()), None, note,
+                     incidents, ["ses"])
+    tile = next(t for t in tiles if "incidents" in t.children[0].children.lower())
+    assert tile.children[0].children == "SES incidents"
+    assert tile.children[1].children == "2"
+    assert "Incidents: SES" in note
+    assert fw.incident_label(None) == "Incidents"
+
+
+def test_map_filters_incidents_but_keeps_warnings(incidents_and_event):
+    incidents, _ = fw.incident_selection(None, ["ses"])
+    snap = {"ok": True, "flooding": [], "near": [], "map": pd.DataFrame()}
+    fig = fw.map_figure(snap, fw.DEFAULT_LAYERS, True, [], incidents=incidents)
+    texts = " ".join(str(t.text) for t in fig.data if getattr(t, "text", None) is not None)
+    assert "ses-new" in texts.lower() or "Ses-New" in texts
+    assert "cfa-new" not in texts.lower()
+    assert "warn" in texts.lower()          # the Watch and Act stays on the map
