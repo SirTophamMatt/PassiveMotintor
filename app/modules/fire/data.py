@@ -97,3 +97,31 @@ def heartbeat_summary():
     if df.empty or not df.iloc[0]["n"]:
         return 0, None
     return int(df.iloc[0]["n"]), df.iloc[0]["last"]
+
+
+# --------------------------------------------------------------------------- #
+# Agency — who an incident belongs to (VicEmergency `sourceOrg`, e.g. "VIC/SES")
+# --------------------------------------------------------------------------- #
+# Matched by keyword because the feed writes the agency as free text with a
+# state prefix. Order matters only for readability: the patterns don't overlap.
+AGENCIES = [
+    ("ses", "SES", ("SES",)),
+    ("cfa", "CFA", ("CFA",)),
+    ("frv", "FRV", ("FRV", "MFB", "FIRE RESCUE")),
+    ("ffm", "Forest Fire Management", ("DELWP", "DEECA", "FFM", "FOREST FIRE",
+                                       "PARKS")),
+]
+AGENCY_OTHER = "other"
+AGENCY_LABELS = dict([(k, label) for k, label, _ in AGENCIES]
+                     + [(AGENCY_OTHER, "Other agencies")])
+
+
+def agency_of(source_org):
+    """'VIC/SES' -> 'ses'; anything unrecognised (or missing) -> 'other'."""
+    if source_org is None or source_org != source_org:      # None / NaN
+        return AGENCY_OTHER
+    text = str(source_org).upper()
+    for key, _, needles in AGENCIES:
+        if any(n in text for n in needles):
+            return key
+    return AGENCY_OTHER

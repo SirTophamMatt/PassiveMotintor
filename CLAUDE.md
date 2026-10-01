@@ -1144,6 +1144,15 @@ what should I be watching* — and is useful **on its own, before anyone generat
   the type is matched as-is, the description only via a "due to / because of / caused by" phrase
   so a road NAME ("Cabbage Tree Road") never counts as a cause. Add keywords there as real feed
   wording turns up.
+- **Incidents + agency filter (2026-10-01).** An **Incidents** tile (VicEmergency incidents only —
+  never warnings, never burn areas; its own count beside the warning levels, never added to them)
+  and an Options **Incident agency** checklist (SES / CFA / FRV / Forest Fire Management / Other,
+  all ticked by default; none ticked = none shown) that filters the tile AND the map's incident
+  markers — warnings on the map are never filtered by agency. Agency comes from the feed's
+  `sourceOrg` (`VIC/SES`, …) via `fire.data.agency_of` (keyword match; unknown → other). With
+  exactly one agency ticked the tile reads e.g. "SES incidents". The **Event** option now scopes
+  incidents too (started during the tag, same `filter_since`), and the map note reads
+  "Roads: … · Incidents: SES · started since …".
 - **Cost:** the gauge list (one `GROUP BY station_name` over `flood_observations` + a trend per
   flooding gauge) is cached for all viewers for 45 s, like `situation`. Readings older than 24 h are
   not shown as flooding.
