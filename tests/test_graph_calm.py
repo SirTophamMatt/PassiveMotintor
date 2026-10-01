@@ -23,3 +23,13 @@ def test_first_draw_always_goes_through():
     # dcc.Graph binds its event handlers after the first draw; skipping it
     # would leave a blank, dead graph.
     assert "!gd._fullLayout" in JS
+
+
+def test_maps_keep_the_viewers_view_across_refreshes():
+    # uirevision did not hold a MapLibre map against the re-sent default view;
+    # keepView substitutes the live view for any view requested before.
+    assert "function keepView" in JS and "keepView(gd, figureOf(args))" in JS
+    assert "getZoom()" in JS and "getCenter()" in JS
+    # "seen" set, not "last request": dcc.Graph echoes the user's own zoom back
+    # through Plotly.react, which made the default look new again.
+    assert "__wdViews" in JS

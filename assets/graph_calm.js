@@ -15,7 +15,8 @@
  * window at call time, so wrapping Plotly.react covers them all):
  *   1. an update identical to the last one drawn on that graph is skipped;
  *   2. while the tab is hidden, only the LATEST update per graph is kept and
- *      drawn once when the tab is shown again.
+ *      drawn once when the tab is shown again;
+ *   3. a map keeps the viewer's pan/zoom when an update arrives (keepView).
  * A graph's first draw always goes through (dcc.Graph binds its events after
  * it), so nothing here can leave a graph blank.
  */
@@ -42,6 +43,49 @@
         }
     }
 
+    var MAP_KEY = /^(map|mapbox)\d*$/;
+
+    function requestedView(sub) {
+        sub = sub || {};
+        return JSON.stringify([sub.center || null, sub.zoom == null ? null : sub.zoom,
+                               sub.bearing || 0, sub.pitch || 0]);
+    }
+
+    // Keep the viewer's pan/zoom across refreshes. Every refresh re-sends the
+    // page's starting view (e.g. zoom 5.4 over Victoria), and uirevision does
+    // not hold a MapLibre map against that (verified: a wheel-zoomed map
+    // snapped back on each real data change). So every view a figure has ever
+    // REQUESTED for a map is remembered, and a request seen before is replaced
+    // by the map's live view: the server re-sending its default never moves
+    // the map. Only a view never requested before is honoured (a new page, a
+    // deliberate re-centre). "Seen" rather than "last" matters: dcc.Graph also
+    // echoes the user's own zoom back through Plotly.react, so remembering
+    // only the last request let that echo make the default look new again.
+    function keepView(gd, fig) {
+        if (!fig || !fig.layout) return;
+        var full = gd._fullLayout, seen = gd.__wdViews || (gd.__wdViews = {});
+        var layout = fig.layout, copied = false;
+        Object.keys(layout).forEach(function (key) {
+            if (!MAP_KEY.test(key)) return;
+            var req = requestedView(layout[key]);
+            var known = seen[key] || (seen[key] = {});
+            var sp = full && full[key] && full[key]._subplot;
+            var repeat = known[req];
+            known[req] = true;
+            if (!repeat || !sp || !sp.map) return;
+            var m = sp.map, c = m.getCenter();
+            if (!copied) { layout = Object.assign({}, layout); copied = true; }
+            layout[key] = Object.assign({}, layout[key], {
+                center: {lon: c.lng, lat: c.lat}, zoom: m.getZoom(),
+                bearing: m.getBearing(), pitch: m.getPitch()});
+        });
+        if (copied) fig.layout = layout;
+    }
+
+    function figureOf(args) {
+        return args.length === 2 ? args[1] : null;   // dcc.Graph's call shape
+    }
+
     function install(Plotly) {
         var react = Plotly.react;
         if (!react || react.__wdCalm) return;
@@ -50,6 +94,7 @@
             gd.__wdLast = "draw";          // last decision, for diagnosis
             gd.__wdSig = sig;
             gd.__wdPending = null;
+            keepView(gd, figureOf(args));
             return react.apply(Plotly, args);
         }
 
@@ -59,7 +104,10 @@
             // is given, so the object afterwards no longer matches the JSON.
             var sig = signature(args);
             if (!gd || !gd._fullLayout) {                       // first draw
-                if (gd) { gd.__wdSig = sig; gd.__wdLast = "first"; }
+                if (gd) {
+                    gd.__wdSig = sig; gd.__wdLast = "first";
+                    keepView(gd, figureOf(args));      // records the requested view
+                }
                 return react.apply(Plotly, args);
             }
             if (sig !== null && sig === gd.__wdSig && !gd.__wdPending) {

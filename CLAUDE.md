@@ -215,6 +215,15 @@ If a session drops, the scraper re-logs-in on the next cycle.
   binds events after it). It installs via a `window.Plotly` setter so the wrapper exists before the
   first draw — polling installed it too late, and the first refresh then redrew for nothing.
   `gd.__wdLast` (first / draw / skip) records the last decision for diagnosis.
+- **Maps keep the viewer's pan/zoom (`keepView`, 2026-10-01).** `uirevision` did NOT hold a
+  MapLibre map: a wheel-zoomed map snapped back to the page default on every real data change
+  (measured on /map, /fire, /roads, both walls, the Overview, /weather — several of which never set
+  uirevision at all). The wrapper now remembers every view a figure has REQUESTED per map subplot
+  (`gd.__wdViews`) and swaps any previously-seen request for the map's live center/zoom/bearing/
+  pitch; only a never-requested view moves the map. It must be a seen-SET, not "last request":
+  dcc.Graph echoes the user's own zoom back through `Plotly.react`, so comparing with the last
+  request made the default look new again and the map still reset. Verified in Chromium: zoom + pan
+  survive a genuine server update (theme toggle) and a data change on every map page.
 - **Not changed:** a figure that genuinely changes still rebuilds the map's layers (Plotly
   behaviour). The flood wall's ring moves every rotation, so its map redraws on rotation by design.
 - Tests: `tests/test_graph_calm.py` (static; behaviour was verified in Chromium: identical
@@ -529,9 +538,8 @@ unchanged.
   **Power** (geocoded outage markers sized by customers-off), **Rainfall** (AWS
   stations with rain-since-9am, off by default). A `dcc.Checklist` toggles layer
   groups and Plotly's legend isolates individual traces.
-- **View is pinned across refreshes:** `uirevision="unified-map"` so the 60s
-  auto-refresh never resets pan/zoom (sit zoomed on a fireground while data
-  updates). Uses `ui.MAP_CONFIG` for scroll-wheel zoom like every other map.
+- **View is pinned across refreshes** — by `assets/graph_calm.js` `keepView`, not by
+  `uirevision="unified-map"` (which turned out not to hold a MapLibre map; see Calm graphs). Uses `ui.MAP_CONFIG` for scroll-wheel zoom like every other map.
 - **Flood gauges are intentionally excluded** — still no lat/lons (BoM KiWIS
   backlog item); a note on the page says so rather than faking positions.
 - Fill layers are attached via `layout.mapbox.layers` (built INTO the mapbox dict,
