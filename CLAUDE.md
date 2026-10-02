@@ -1160,6 +1160,27 @@ what should I be watching* — and is useful **on its own, before anyone generat
   every later update — the map looks frozen. Stub the tile requests when browser-testing.
 - Tests: `tests/test_flood_wall.py`.
 
+## Newsroom wall — /wall/news (built 2026-10-02)
+- **The Intelligence Feed as a live TV news desk** (`app/pages/news_wall.py`, public, a `wall.SCENARIOS`
+  row). A bit of fun on real data: every word is a stored feed entry or a `situation` count.
+- **Desk:** programme bug, TOP STORY (`top_story`: most severe of the newest 15, newest among
+  equals) with a map centred on it, a LATEST column, a strip of headline counts (warning levels
+  separate, never summed) and a white crawler of the last `CRAWL_HOURS` (6) of entries — its label
+  turns red BREAKING while a Critical entry is among the newest 10. The shell ticker is hidden on
+  this page (`.app:has(.nw-page) .ticker`); the crawler replaces it.
+- **Takeover:** a NEW entry at severity 3 is **BREAKING** (held 15 s), severity 2 **UPDATE!** (10 s)
+  — `TAKEOVER`. It zooms up to fill the screen (headline, the entry's lines, a map at
+  `STORY_ZOOM` on its position), then shrinks back. Several at once queue, most severe first, at
+  most `QUEUE_LIMIT` (4) per refresh; an unshown story expires after 15 min.
+- **New is per browser** (`detect_new`, memory store; the first snapshot only seeds — same shape as
+  the flood wall and alert sounds), so opening it mid-event replays nothing; **↻ Replay last**
+  pushes the latest Critical/Major story on demand.
+- **The takeover clock is client-side** (`STAGE_JS`, a 500 ms clientside callback over the queue
+  store), so zoom/hold/zoom-out cost the server nothing. The server refreshes every 20 s from a
+  feed snapshot cached for all viewers (`CACHE_SECONDS` 20; context lines resolved for the first
+  `CONTEXT_LIMIT` entries only). Reduced-motion browsers get no zoom/stripes/crawl animation.
+- Tests: `tests/test_news_wall.py`.
+
 ## Operational Summary — Intel Tool (Phase 1, built 2026-09-25)
 Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/summary`.
 - **Fills the SCC's own deck, never redraws it.** `seed/opsum_template.pptx` is an issued

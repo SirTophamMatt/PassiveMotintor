@@ -1131,3 +1131,124 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     .wall-page { height: auto; }
     .wall-map { height: 55vh; }
 }
+
+/* ======================================================================
+   Newsroom wall (/wall/news) — a live TV news desk over the Intelligence
+   Feed. News-red is the accent here regardless of colour scheme; warning
+   colours (from the feed) are never restyled.
+   ====================================================================== */
+.app:has(.nw-page) .ticker { display: none; }        /* the page has its own crawler */
+.nw-page { --nw-red: #d7141a; --nw-ink: #0b0f17; gap: 12px; position: relative; overflow: hidden; }
+.nw-live {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 6px;
+    background: var(--nw-red); color: #fff; font-weight: 800; letter-spacing: 2px; font-size: 15px;
+}
+.nw-live-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff;
+    animation: nw-blink 1.2s ease-in-out infinite; }
+@keyframes nw-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+/* Programme bug */
+.nw-bug { display: flex; align-items: stretch; border-radius: 6px; overflow: hidden;
+    font-weight: 800; letter-spacing: 1.5px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.nw-bug-brand { background: var(--nw-red); color: #fff; padding: 8px 18px; font-size: 20px; }
+.nw-bug-show { background: #fff; color: var(--nw-ink); padding: 8px 18px; font-size: 20px; }
+.nw-bug-status { flex: 1; background: var(--bg-panel); color: var(--muted); padding: 10px 18px;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.5px; display: flex; align-items: center; }
+
+/* Desk */
+.nw-desk { flex: 1; min-height: 0; display: grid; gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 30%); }
+.nw-main { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.nw-kicker { display: inline-block; align-self: flex-start; background: var(--nw-red); color: #fff;
+    font-weight: 800; letter-spacing: 2px; font-size: 14px; padding: 4px 12px; border-radius: 4px; }
+.nw-top-inner { border-left: 6px solid var(--nw-red); padding: 4px 0 4px 16px; }
+.nw-sev-3.nw-top-inner { border-left-color: #d62728; }
+.nw-sev-2.nw-top-inner { border-left-color: #ff7f0e; }
+.nw-top-headline { font-size: clamp(26px, 2.6vw, 54px); font-weight: 800; line-height: 1.1;
+    margin: 6px 0; }
+.nw-top-meta { margin-left: 10px; color: var(--muted); font-size: 16px; }
+.nw-top-lines { font-size: clamp(14px, 1.1vw, 20px); color: var(--muted); line-height: 1.4; }
+.nw-tag { display: inline-block; color: #111; font-weight: 800; font-size: 13px;
+    letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; }
+.nw-map { flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.nw-map-graph { height: 100%; }
+.nw-side { min-height: 0; display: flex; flex-direction: column; gap: 10px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.nw-latest { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+.nw-latest-row { border-left: 4px solid var(--border); padding-left: 10px; }
+.nw-latest-row.nw-sev-3 { border-left-color: #d62728; }
+.nw-latest-row.nw-sev-2 { border-left-color: #ff7f0e; }
+.nw-latest-row.nw-sev-1 { border-left-color: #e6c700; }
+.nw-latest-time { font-family: Consolas, monospace; font-weight: 700; margin-right: 8px; }
+.nw-latest-headline { font-size: clamp(14px, 1.05vw, 20px); font-weight: 600; margin-top: 3px; }
+.nw-latest-empty { color: var(--muted); }
+
+/* Numbers strip, "market board" style */
+.nw-strip { display: flex; gap: 8px; }
+.nw-strip-item { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; }
+.nw-strip-value { font-family: Consolas, monospace; font-size: 26px; font-weight: 800; }
+.nw-strip-label { font-size: 12px; letter-spacing: 1px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nw-strip-item.chip-emergency { border-color: #e5484d; background: rgba(229, 72, 77, 0.16); }
+.nw-strip-item.chip-watch { border-color: #f5a623; background: rgba(245, 166, 35, 0.14); }
+.nw-strip-item.chip-advice { border-color: #d9bb2b; background: rgba(217, 187, 43, 0.14); }
+.nw-strip-item.chip-alert { border-color: #ff7a45; }
+
+/* Crawler */
+.nw-crawl { display: flex; align-items: stretch; height: 46px; border-radius: 6px; overflow: hidden;
+    background: #fff; color: var(--nw-ink); box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.nw-crawl-label { flex: none; display: flex; align-items: center; padding: 0 18px;
+    background: var(--nw-ink); color: #fff; font-weight: 800; letter-spacing: 2px; font-size: 17px; }
+.nw-crawl-label.nw-crawl-breaking { background: var(--nw-red); animation: nw-blink 1.6s ease-in-out infinite; }
+.nw-crawl-track { flex: 1; overflow: hidden; display: flex; align-items: center; }
+.nw-crawl-text { white-space: nowrap; font-size: 20px; font-weight: 700; padding-left: 100%;
+    animation: nw-crawl linear infinite; animation-duration: 60s; }
+@keyframes nw-crawl { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+/* Takeover: BREAKING / UPDATE! zooms in to fill the screen, holds, zooms out. */
+.nw-takeover { display: none; position: fixed; inset: 0; z-index: 900; background: var(--nw-ink);
+    color: #fff; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; }
+.nw-takeover.nw-on { display: grid; animation: nw-zoom-in 0.75s cubic-bezier(.2,1.4,.4,1) both; }
+.nw-takeover.nw-leaving { animation: nw-zoom-out 0.7s ease-in both; }
+@keyframes nw-zoom-in {
+    0% { transform: scale(0.15) rotate(-6deg); opacity: 0; filter: blur(6px); }
+    60% { transform: scale(1.04) rotate(0.5deg); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes nw-zoom-out { to { transform: scale(0.2); opacity: 0; } }
+.nw-to-stripes { position: absolute; inset: 0; pointer-events: none; opacity: 0.18;
+    background: repeating-linear-gradient(-45deg, var(--nw-red) 0 28px, transparent 28px 56px);
+    animation: nw-stripes 1.2s linear infinite; }
+.nw-major .nw-to-stripes { background: repeating-linear-gradient(-45deg, #ff7f0e 0 28px, transparent 28px 56px); }
+@keyframes nw-stripes { to { background-position: 79px 0; } }
+.nw-to-text { position: relative; display: flex; flex-direction: column; justify-content: center;
+    gap: 22px; padding: 6vh 4vw; }
+.nw-to-label { align-self: flex-start; font-size: clamp(54px, 7vw, 150px); font-weight: 900;
+    letter-spacing: 6px; line-height: 1; padding: 10px 28px; background: var(--nw-red); color: #fff;
+    transform: skewX(-8deg); animation: nw-label 0.9s ease-in-out infinite alternate; }
+.nw-major .nw-to-label { background: #ff7f0e; color: #111; }
+@keyframes nw-label { from { box-shadow: 0 0 0 0 rgba(215, 20, 26, 0.0); }
+    to { box-shadow: 0 0 60px 10px rgba(215, 20, 26, 0.65); } }
+.nw-to-meta { font-size: clamp(16px, 1.4vw, 28px); letter-spacing: 3px; font-weight: 700; opacity: 0.85; }
+.nw-to-headline { font-size: clamp(34px, 3.8vw, 84px); font-weight: 900; line-height: 1.08;
+    animation: nw-rise 0.9s 0.25s both; }
+.nw-to-lines { font-size: clamp(18px, 1.6vw, 32px); line-height: 1.45; white-space: pre-line;
+    opacity: 0.9; animation: nw-rise 0.9s 0.5s both; }
+@keyframes nw-rise { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 0.95; } }
+.nw-to-map { position: relative; z-index: 1; border-left: 8px solid var(--nw-red); }
+.nw-to-text { z-index: 1; }
+/* The faded Sounds control would sit on the crawler: lift it clear. */
+.app.wall-mode:has(.nw-page) .shell-controls { bottom: 70px; }
+.nw-major .nw-to-map { border-left-color: #ff7f0e; }
+@media (prefers-reduced-motion: reduce) {
+    .nw-takeover.nw-on, .nw-takeover.nw-leaving, .nw-to-stripes, .nw-to-label,
+    .nw-to-headline, .nw-to-lines, .nw-crawl-label, .nw-live-dot { animation: none; }
+    .nw-crawl-text { animation-duration: 240s !important; }
+}
+@media (max-width: 1000px) {
+    .nw-desk { grid-template-columns: minmax(0, 1fr); }
+    .nw-map { height: 50vh; flex: none; }
+    .nw-strip { flex-wrap: wrap; }
+    .nw-takeover { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+}
