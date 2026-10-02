@@ -20,6 +20,7 @@ from app.pages import overview
 SCENARIOS = [
     (shell.WALL_PATH, "All hazards"),
     (shell.FLOOD_WALL_PATH, "Flood"),
+    (shell.NEWS_WALL_PATH, "Newsroom"),
 ]
 
 # Tiles, in order. Warning levels stay separate tiles — never one total.
