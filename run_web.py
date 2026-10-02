@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Web entry point: serves the dashboard on the network.
 
 Usage:  python run_web.py [--host 0.0.0.0] [--port 8050]

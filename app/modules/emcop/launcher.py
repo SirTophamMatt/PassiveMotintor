@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """EM-COP quick-launch: opens a visible Chrome window and logs in.
 
 This replaces the old '#Passive Monitor.py' tkinter tool. Runs in a

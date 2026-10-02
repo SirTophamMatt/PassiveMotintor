@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Shared Chrome/ChromeDriver startup.
 
 The power scraper and the EM-COP quick-launch both drive a real Chrome, and

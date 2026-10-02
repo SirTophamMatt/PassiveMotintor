@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Outbound notifications via a webhook (Teams / Slack / Discord / generic).
 
 One config field (notify.webhook_url) covers the common services, with the

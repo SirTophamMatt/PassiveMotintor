@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Read-only spatial API: the monitored state as GeoJSON.
 
 Every page in this app renders its own data server-side. This module does the

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Power Outage page (public, read-only): KPIs, trends, map, durations.
 
 Collection is controlled from the Admin page; this page shows a read-only

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Opt-in alert sounds: which alertable things are active right now.
 
 The sounds themselves live in ``assets/alert_sounds.js``; this module decides

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """BoM AWS weather-observation scraper.
 
 Captures the current observation for every Victorian Automatic Weather Station

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """BoM weather scraper (api.weather.bom.gov.au).
 
 Each cycle fetches current warnings for Victoria and upserts them on their BoM

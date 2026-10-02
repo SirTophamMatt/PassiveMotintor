@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Open GitHub issues from feedback reports (stdlib only — no new dependency).
 
 The counterpart of ``app/mailer.py``: :func:`create_issue` never raises and

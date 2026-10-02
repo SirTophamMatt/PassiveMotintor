@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """CFA pager collector: mazzanet.net.au/cfa/pager-cfa.php.
 
 One GET per cycle (default every 4 minutes, ``pager.interval_minutes``). Every

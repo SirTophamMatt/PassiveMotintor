@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """External sources for the Operational Summary auto-fill.
 
 Fetched ON DEMAND (someone pressed "Fill" on the summary page), never on a

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """One-off tool: match flood gauges to coordinates from BoM Water Data Online.
 
 Our flood gauges are keyed by their BoM flood-warning station NAME and carry no

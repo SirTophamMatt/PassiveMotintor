@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Event Replay (public, read-only): how did the situation develop?
 
 Pick an event tag, drag a timestamp, and see the map, the KPIs and the

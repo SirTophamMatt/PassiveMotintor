@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Flood rate-of-rise intelligence: rate, acceleration, threshold distance,
 a trend projection (ETA) — and a verification record so the projections can be
 scored against what actually happened.

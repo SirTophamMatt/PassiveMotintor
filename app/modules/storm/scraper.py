@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """BoM radar storm-cell scraper.
 
 Each cycle probes the BoM radar frame URLs for the last few minutes

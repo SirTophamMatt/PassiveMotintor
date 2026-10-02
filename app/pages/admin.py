@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Admin page: login-gated controls for the public web deployment.
 
 When not authenticated this renders a login form. Once logged in it exposes the
@@ -969,6 +970,12 @@ def register_callbacks(app):
         Input({"type": "fb-resend", "ref": ALL}, "n_clicks"),
         Input({"type": "fb-github", "ref": ALL}, "n_clicks"))
     def refresh_feedback(status, kind, _set_clicks, _resend_clicks, _gh_clicks):
+        # Dash callbacks are reachable by a direct POST to
+        # /_dash-update-component whether or not the Admin page rendered, so
+        # the queue itself (reporter names, emails, messages) is gated here,
+        # not just the buttons.
+        if not auth.is_admin():
+            return [], "", ""
         message = ""
         trigger = ctx.triggered_id
         # Re-rendering the list fires this callback again with the new buttons

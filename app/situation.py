@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Statewide situation counts shared by the Console layout's status strip, the
 console Overview and the wall display (UI-free, like `briefing`/`replay`).
 

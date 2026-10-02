@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Briefing Mode (public, read-only): the screen you stand in front of.
 
 Deliberately NOT another Overview. Overview answers "what is happening"; this

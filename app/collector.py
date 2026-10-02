@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Background data collection.
 
 Collection runs in daemon threads owned by the server process, independent

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Overview PDF report for briefings.
 
 Renders the current Overview — headline KPIs, power trend, outage map and

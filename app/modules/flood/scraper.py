@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """BoM Victoria river gauge scraper.
 
 Each cycle fetches the flood-warning summary tables (one latest reading per

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """EM-COP power outage scraper.
 
 Maintains a headless Chrome session logged into EM-COP, scrapes headline

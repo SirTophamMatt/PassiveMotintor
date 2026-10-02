@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Flood wall (/wall/flood): a scenario wall for a flood event.
 
 Rotates through every gauge at or above Minor — one gauge per page (with the

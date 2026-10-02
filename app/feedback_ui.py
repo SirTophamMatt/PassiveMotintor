@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """The feedback widget: a floating button on every page and its modal form.
 
 Shell-level, not a page — mounted once by ``factory._shell_layout`` and driven

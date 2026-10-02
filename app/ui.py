@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Shared UI helpers: KPI cards, figure theming, table styles."""
 from dash import html
 

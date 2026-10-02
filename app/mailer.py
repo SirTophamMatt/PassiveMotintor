@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Outbound email over SMTP (stdlib only — no new dependency).
 
 Used by the feedback form to deliver bug reports and suggestions. Settings live

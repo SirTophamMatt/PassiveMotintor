@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Intelligence Feed page (public, read-only) — route ``/feed``.
 
 A reverse-chronological log of what CHANGED, quantified. Each entry is a

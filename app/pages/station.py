@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Station detail page (public): one gauge, its own graph, a linear flood
 gauge "stick" showing where the water is against the flood class levels, and
 the watch points / expected impacts extracted from the VICSES Local Flood

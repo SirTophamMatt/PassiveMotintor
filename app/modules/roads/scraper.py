@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """VicRoads / Transport Victoria "Unplanned Disruptions - Road" scraper.
 
 Each cycle fetches the Disruptions - Road GeoJSON feed (near-real-time road

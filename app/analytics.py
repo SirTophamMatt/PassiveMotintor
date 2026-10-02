@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Lightweight page analytics: views, unique visitors, and visitor origin.
 
 Page views are logged from the URL-change callback (the app is a Dash SPA, so

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Weather page (public, read-only): BoM warnings for Victoria.
 
 Rainfall (per monitored location, derived from the flood gauges) is added in a
