@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Storm Tracker page (public, read-only): BoM radar cell detection loop.
 
 Shows the annotated radar loop (last ~2 h of frames), active tracked cells

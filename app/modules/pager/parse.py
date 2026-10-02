@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Pure parsing for the Mazzanet CFA pager page (no I/O, no DB).
 
 Two layers, kept apart so each can be tested on its own:

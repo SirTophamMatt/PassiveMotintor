@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Radar echo detection on BoM transparent frame layers.
 
 Ported from the standalone "storm Tracker" project and simplified: frames are

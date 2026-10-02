@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Frame-to-frame storm cell tracking.
 
 Ported from the standalone "storm Tracker" with the gaps fixed:

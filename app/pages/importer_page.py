@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Import page: pull legacy data files into the unified database (admin only)."""
 from dash import Input, Output, State, dcc, html
 

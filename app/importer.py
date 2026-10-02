@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Legacy data import.
 
 Pulls data from the old Flood Monitor / PowerDashboard projects into the

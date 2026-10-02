@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Data export: bundle a date range (usually a tag) into a single XLSX file.
 
 One workbook with a Summary sheet plus a sheet per selected module. Uses

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """CFA Pager page (public, read-only): pager messages from Mazzanet.
 
 Three views of the same stored messages:

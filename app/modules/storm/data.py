@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Storm tracker data queries and cell classification styling."""
 import json
 import os

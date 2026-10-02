@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Live shell widgets: the sidebar incident log and the bottom news ticker.
 
 Both are part of the app shell (every page) and refresh on one interval.

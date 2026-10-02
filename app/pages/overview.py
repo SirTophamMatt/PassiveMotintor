@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Overview page: cross-module KPIs, collector status, EM-COP quick-launch,
 plus at-a-glance power trends, the outage map, and flooding-station graphs."""
 from dash import Input, Output, dcc, html

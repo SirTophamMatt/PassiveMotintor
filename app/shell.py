@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Shell chrome that sits around every page: the two layouts (Classic sidebar /
 Console top bar), the colour schemes, and the Display panel that switches them.
 

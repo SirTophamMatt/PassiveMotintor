@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Bug reports and suggestions: reference IDs, storage, and delivery by email
 and as GitHub issues.
 

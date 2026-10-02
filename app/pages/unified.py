@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Unified Map (public, read-only): every located layer on ONE map.
 
 Pulls straight from each module's data layer and reuses the fire/roads rendering

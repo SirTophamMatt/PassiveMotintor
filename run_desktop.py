@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Desktop entry point: runs the same app inside a native window.
 
 The Dash server runs on localhost in a background thread and a pywebview

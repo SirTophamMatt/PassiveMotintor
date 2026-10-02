@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Analytics page (admin-only): page views, unique visitors, visitor origin.
 
 Self-hosted, no third-party trackers — every figure comes from the local
@@ -7,8 +8,9 @@ and deliberately no finer.
 """
 import plotly.express as px
 from dash import Input, Output, dcc, html
+from dash.exceptions import PreventUpdate
 
-from app import analytics, geoip, ui
+from app import analytics, auth, geoip, ui
 
 
 def layout():
@@ -77,6 +79,9 @@ def register_callbacks(app):
         Input("analytics-interval", "n_intervals"),
         Input("theme-store", "data"))
     def refresh(_, dark):
+        # Reachable by a direct callback POST, not just via the gated page.
+        if not auth.is_admin():
+            raise PreventUpdate
         dark = bool(dark)
         s = analytics.summary()
         kpis = [
@@ -120,6 +125,9 @@ def register_callbacks(app):
         Input("analytics-interval", "n_intervals"),
         Input("theme-store", "data"))
     def refresh_geo(_, dark):
+        # Reachable by a direct callback POST, not just via the gated page.
+        if not auth.is_admin():
+            raise PreventUpdate
         dark = bool(dark)
         cov = analytics.location_coverage(days=30)
 

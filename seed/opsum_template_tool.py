@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """One-off: turn an issued SCC State Operational Summary deck into the blank,
 tokenised template the Operational Summary page fills.
 

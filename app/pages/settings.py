@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Settings page: EM-COP credentials, URLs, intervals, alert thresholds.
 
 Saved to config.json (gitignored) — credentials are never hardcoded.

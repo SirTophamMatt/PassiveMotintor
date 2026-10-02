@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Wall display (/wall): a navigation-free, big-type view for a screen on an
 operations-room wall. Public and read-only, like Overview.
 

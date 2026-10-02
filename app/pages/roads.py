@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Road Disruptions page (public, read-only): VicRoads / Transport Victoria.
 
 Shows headline counts, a state map (closure/other markers + line/area overlays),

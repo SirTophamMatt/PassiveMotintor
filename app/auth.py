@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Admin authentication for the web deployment.
 
 The dashboards (Overview / Flood / Power) are public and read-only. Everything

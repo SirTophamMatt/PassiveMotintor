@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Extract height->impact tables from Local Flood Guide PDFs (final pass).
 
 Matches each table to a BoM station from the app's Flood Levels.xlsx using

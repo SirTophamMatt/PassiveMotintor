@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Operational Summary — Intel Tool page that builds the SCC State Operational
 Summary deck (``/intel/summary``).
 

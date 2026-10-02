@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Fire / Incidents page (public, read-only): VicEmergency incidents & warnings.
 
 Shows headline counts, a state map coloured by severity, a table of active

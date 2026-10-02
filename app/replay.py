@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Event Replay data layer: what did Passive Monitor know at a given moment?
 
 Reconstruction pulls from two kinds of storage, and which one is used per layer

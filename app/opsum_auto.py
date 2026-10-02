@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Operational Summary auto-fill: suggested field values from what Passive
 Monitor already collects, plus two on-demand external sources.
 

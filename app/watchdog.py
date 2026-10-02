@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Supervisor: collector watchdog + threshold alerting.
 
 One daemon thread, started by the web entry point alongside autostart, that

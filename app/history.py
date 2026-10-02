@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Generic entity state-change journal.
 
 Most modules keep real history already: every flood reading, storm cell and AWS

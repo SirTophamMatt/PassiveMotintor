@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Operational briefing model.
 
 The Overview and the module pages answer "what is happening right now". This

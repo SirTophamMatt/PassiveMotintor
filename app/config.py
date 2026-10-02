@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Configuration handling.
 
 Settings (including EM-COP credentials) live in config.json next to the app.

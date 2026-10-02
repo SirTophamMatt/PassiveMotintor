@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Builds the Dash application: shell layout, routing, theme, auth, health."""
 import logging
 import os

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Render an Operational Summary draft into the SCC's own PowerPoint template.
 
 The output is the template deck (``seed/opsum_template.pptx``, built from an

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Pager queries: the message log, jobs collated by F-number, escalations."""
 import json
 from datetime import datetime, timedelta

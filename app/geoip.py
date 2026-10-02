@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Coarse visitor geolocation from a truncated client IP.
 
 What this deliberately does NOT do

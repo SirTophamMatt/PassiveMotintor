@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """One-off tool: rasterise the Watchdesk brand SVGs into print-resolution PNGs
 for the PDF reports.
 

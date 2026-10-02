@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """VicEmergency incident & warning scraper.
 
 Each cycle fetches the public VicEmergency GeoJSON feed (all live incidents and

@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Flood data queries and flood-level classification.
 
 Collection is always-on and writes every reading under the fixed LIVE_EVENT

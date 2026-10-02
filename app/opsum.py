@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Operational Summary — the model behind the SCC State Operational Summary deck.
 
 UI-free, like ``briefing`` / ``feedback``: the Intel Tool page edits a draft,

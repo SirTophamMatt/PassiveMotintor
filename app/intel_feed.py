@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Intelligence Feed — the change-detection engine.
 
 Every other page in this app answers *what is happening*. This one answers

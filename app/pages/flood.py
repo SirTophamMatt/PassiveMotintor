@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Flood Monitor page (public, read-only): observation table and station graphs.
 
 Collection is always-on and controlled from the Admin page. This page views the

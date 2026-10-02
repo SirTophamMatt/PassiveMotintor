@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Event tags: named date ranges applied over the continuously-collected data.
 
 Collection now runs always-on (see app.collector). An "event" is no longer a

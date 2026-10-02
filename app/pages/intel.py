@@ -1,3 +1,4 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Intel Tool: a small internal-tools area behind a simple shared password.
 
 Hosts two tools, reached by the tab strip at the top of the unlocked page:
