@@ -1198,6 +1198,9 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .fiw-card-meta { font-size: 13px; }
 .fiw-card-change { font-size: 14px; }
 .fiw-more { font-size: 13px; padding: 4px 2px; }
+.fiw-test-badge { padding: 6px 12px; border-radius: 8px; font-weight: 800; letter-spacing: 1px;
+    background: repeating-linear-gradient(45deg, #ffd400 0 10px, #111 10px 20px); color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
 .fiw-banner-growth { background: #ff1744; color: #fff; }
 .fiw-banner-emergency { background: #d62728; color: #fff; }
 .fiw-banner-watch { background: #ff7f0e; color: #111; }

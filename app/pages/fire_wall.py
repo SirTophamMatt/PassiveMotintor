@@ -29,12 +29,13 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
-from app import fire_areas, shell, situation
+from app import auth, fire_areas, fire_demo, shell, situation
 from app.pages import wall
 
 log = logging.getLogger(__name__)
 
 PATH = shell.FIRE_WALL_PATH
+TEST_PATH = shell.FIRE_WALL_TEST_PATH
 
 REFRESH_SECONDS = 30
 ROTATE_CHOICES = [10, 15, 20, 30, 60]
@@ -174,7 +175,27 @@ def _radio(id_, choices, value, fmt):
                           persistence=True, persistence_type="local")
 
 
-def layout():
+def snapshot(link_km, window, test=False):
+    """The live snapshot, or — for an admin on the test page — the simulated
+    one (`app.fire_demo`). Re-checked here, not just at routing: every Dash
+    callback can be POSTed directly, so a flag from the browser proves
+    nothing on its own."""
+    if test and auth.is_admin():
+        return fire_demo.snapshot(link_km, window)
+    return fire_areas.current(link_km, window)
+
+
+def test_locked():
+    return html.Div([
+        html.H2("Fire wall test run"),
+        html.P("The test run shows simulated fires and warnings, so it is "
+               "for signed-in admins only — sign in on the Admin page, then "
+               "come back to this address."),
+        html.A("Go to Admin →", href="/admin", className="btn btn-primary"),
+    ], className="panel", style={"maxWidth": "560px", "margin": "40px auto"})
+
+
+def layout(test=False):
     options = html.Details([
         html.Summary("⚙ Options", className="btn"),
         html.Div([
@@ -211,9 +232,13 @@ def layout():
         dcc.Store(id="fiw-seen", storage_type="memory"),
         dcc.Store(id="fiw-flash", storage_type="memory"),
         dcc.Store(id="fiw-pin", storage_type="memory"),
+        dcc.Store(id="fiw-test", data=bool(test)),
         dcc.Store(id="fiw-focus-key", storage_type="memory"),
         dcc.Store(id="fiw-highlight", storage_type="memory"),
-        wall.header(PATH, stale_id="fiw-stale", extra=[options]),
+        wall.header(PATH, stale_id="fiw-stale",
+                    extra=([html.Span("TEST RUN", className="fiw-test-badge"),
+                            dcc.Link("Leave test", href=PATH, className="btn")]
+                           if test else []) + [options]),
         html.Div(id="fiw-tiles", className="wall-tiles fiw-tiles"),
         html.Div(id="fiw-banner", className="fw-banner"),
         html.Div([
@@ -582,16 +607,18 @@ def register_callbacks(app):
         Input("fiw-link-km", "value"),
         Input("fiw-window", "value"),
         State("fiw-seen", "data"),
-        State("fiw-flash", "data"))
-    def refresh(_, link_km, window, seen, flashes):
-        snap = fire_areas.current(link_km, window)
+        State("fiw-flash", "data"),
+        State("fiw-test", "data"))
+    def refresh(_, link_km, window, seen, flashes, test):
+        snap = snapshot(link_km, window, test)
         now = time.time()
         if snap["ok"]:
             seen, fresh = fire_areas.detect_new(seen, fire_areas.events(snap))
         else:
             fresh = []                  # an unreadable snapshot is not "all clear"
         flashes = update_flashes(flashes, fresh, now)
-        text = stale_banner(situation.current())
+        text = (fire_demo.describe(snap) if snap.get("test")
+                else stale_banner(situation.current()))
         return tiles(snap), text, text, seen, flashes
 
     @app.callback(
@@ -632,10 +659,11 @@ def register_callbacks(app):
         Input("fiw-statewide", "value"),
         Input("fiw-link-km", "value"),
         Input("fiw-window", "value"),
-        Input("theme-store", "data"))
+        Input("theme-store", "data"),
+        State("fiw-test", "data"))
     def render(tick, _refresh, flashes, pinned, layers, statewide, link_km,
-               window, dark):
-        snap = fire_areas.current(link_km, window)
+               window, dark, test):
+        snap = snapshot(link_km, window, test)
         areas = snap.get("areas") or []
         now_ts, now = time.time(), datetime.now()
         flash, flash_area = hot_flash(flashes, areas, now_ts)
@@ -669,9 +697,10 @@ def register_callbacks(app):
         Input("fiw-interval", "n_intervals"),
         Input("fiw-flash", "data"),
         Input("fiw-link-km", "value"),
-        Input("fiw-window", "value"))
-    def refresh_list(_, flashes, link_km, window):
-        return area_list(fire_areas.current(link_km, window), flashes)
+        Input("fiw-window", "value"),
+        State("fiw-test", "data"))
+    def refresh_list(_, flashes, link_km, window, test):
+        return area_list(snapshot(link_km, window, test), flashes)
 
     app.clientside_callback(
         HIGHLIGHT_JS,

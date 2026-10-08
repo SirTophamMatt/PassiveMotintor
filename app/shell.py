@@ -43,6 +43,8 @@ WALL_PATH = "/wall"
 # Scenario walls live under /wall/<name>; every one gets `wall-mode`.
 FLOOD_WALL_PATH = WALL_PATH + "/flood"
 FIRE_WALL_PATH = WALL_PATH + "/fire"
+# Admin-only simulated run of the fire wall (app/fire_demo.py).
+FIRE_WALL_TEST_PATH = FIRE_WALL_PATH + "/test"
 NEWS_WALL_PATH = WALL_PATH + "/news"
 
 # Console top-bar menus. Paths not listed fall into "Tools" so a page added to

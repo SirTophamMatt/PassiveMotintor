@@ -35,7 +35,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
   bug reports and suggestions; `app/mailer.py` — SMTP sending; `app/geoip.py` — coarse
   visitor geolocation from a truncated IP
-- `app/fire_areas.py` — fire wall model: burn-area shape history/change + areas of operation
+- `app/fire_areas.py` — fire wall model: burn-area shape history/change + areas of operation;
+  `app/fire_demo.py` — the in-memory simulated scenario behind `/wall/fire/test`
 - `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
   Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
@@ -1204,6 +1205,18 @@ what should I be watching* — and is useful **on its own, before anyone generat
   `time.sleep` stalls every request — use `page.wait_for_timeout`.
 - **Cost:** `fire_areas.current` is cached 45 s per (link km, window) for every viewer; history reads
   are bounded to the window (+ one baseline row per polygon). Dep: `shapely>=2` (binary wheels).
+- **Test run `/wall/fire/test`** (admin only — fake Emergency Warnings on a public page could be
+  screenshotted as real; Admin → Fire collection has the link). `app/fire_demo.py` generates a
+  scenario from the clock, entirely IN MEMORY — nothing is written to the DB, so the feed, webhooks,
+  ticker and sounds never see it — and hands it to the same `fire_areas.assemble`/`_change_for` the
+  live wall uses. An 18-min cycle, one shape per 3 min: TEST Fire Alpha grows east every step, Bravo
+  is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
+  Emergency Warning (step 5), a tree down attaches as context, Grass Fire Charlie is a second area
+  and a flood Advice is (correctly) not one. Striped TEST RUN badge + a header line with the step and
+  next change. `fire_wall.snapshot()` re-checks `auth.is_admin()` in every callback, so a direct
+  POST with `fiw-test=true` still gets live data.
+- **`is_fire_warning` reads the hazard fields** (`event`/`category2`) and only falls back to the
+  headline when there is no hazard — the test run's "flood Advice (not a fire)" headline exposed it.
 - Tests: `tests/test_fire_wall.py`.
 
 ## Newsroom wall — /wall/news (built 2026-10-02)

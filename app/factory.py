@@ -319,6 +319,10 @@ def create_app(autostart=False):
         # Intel Tool's Operational Summary builder (behind the Intel gate).
         if pathname == opsum_page.PATH:
             return opsum_page.layout()
+        # Fire wall test run: simulated fires, admins only (see app/fire_demo.py).
+        if pathname == shell.FIRE_WALL_TEST_PATH:
+            return (fire_wall.layout(test=True) if auth.is_admin()
+                    else fire_wall.test_locked())
         # Warning detail/history pages: /weather/warning/<id>
         if pathname and pathname.startswith(weather.WARNING_PATH):
             return weather.warning_detail_layout(weather.warning_id_from_path(pathname))

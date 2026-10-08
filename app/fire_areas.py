@@ -445,10 +445,13 @@ def _text(value):
 
 
 def is_fire_warning(row):
-    """A warning about a fire (or a burn): by its hazard text, since the
-    VicEmergency feed has no single hazard field shared by every warning."""
-    text = " ".join(_text(row.get(c)) for c in
-                    ("event", "category2", "headline", "category1")).lower()
+    """A warning about a fire (or a burn), by its HAZARD fields (`event`,
+    `category2`). The headline/location is only consulted when the feed gives
+    no hazard at all: it is free text, and a flood warning for "Fire Station
+    Rd" is still a flood warning."""
+    hazard = " ".join(_text(row.get(c)) for c in ("event", "category2")).strip()
+    text = (hazard or " ".join(_text(row.get(c)) for c in
+                               ("headline", "category1"))).lower()
     return "fire" in text or "burn" in text
 
 
@@ -655,12 +658,21 @@ def compute(now=None, link_km=DEFAULT_LINK_KM, window_hours=DEFAULT_WINDOW_HOURS
             fire_ids = incidents.loc[kinds == "Fire", "source_id"].tolist()
         ids = fire_ids + (burn["source_id"].tolist() if not burn.empty else [])
         changes = area_changes(ids, now, window_hours)
-        members = members_from(incidents, burn, changes, now, window_hours)
-        snap.update(incidents=incidents, burn=burn, changes=changes,
-                    areas=build_areas(members, changes, link_km))
+        assemble(snap, incidents, burn, changes)
     except Exception as e:
         log.exception("Fire wall: areas of operation unavailable")
         snap.update(ok=False, error=str(e))
+    return snap
+
+
+def assemble(snap, incidents, burn, changes):
+    """Fill a snapshot from rows + their area changes. Shared by the live
+    snapshot and the simulated test run (`app.fire_demo`), so the test
+    exercises exactly the linking the wall uses."""
+    members = members_from(incidents, burn, changes, snap["at"],
+                           snap["window_hours"])
+    snap.update(incidents=incidents, burn=burn, changes=changes,
+                areas=build_areas(members, changes, snap["link_km"]))
     return snap
 
 

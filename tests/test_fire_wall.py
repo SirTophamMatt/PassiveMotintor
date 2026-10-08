@@ -492,3 +492,119 @@ def test_quiet_state_is_said_plainly():
     assert snap["areas"] == []
     fig = fiw.map_figure(snap, None, fiw.DEFAULT_LAYERS, True, NOW)
     assert fig.layout.map.zoom == fiw.STATE_VIEW[1]
+
+
+# --------------------------------------------------------------------------- #
+# Test run (/wall/fire/test) — simulated, in memory, admin only
+# --------------------------------------------------------------------------- #
+from app import auth, fire_demo  # noqa: E402
+
+
+def _test_snap(step, link_km=5):
+    start, _, _ = fire_demo.clock(1_800_000_000.0)
+    return fire_demo.snapshot(link_km, 6, now_ts=start + step * fire_demo.STEP_SECONDS + 5)
+
+
+def test_fire_warning_is_judged_by_hazard_not_headline():
+    flood = {"event": "Riverine Flood", "headline": "Flooding near Fire Station Rd"}
+    assert not fa.is_fire_warning(flood)
+    assert fa.is_fire_warning({"event": "Bushfire"})
+    assert fa.is_fire_warning({"event": None, "headline": "Grass fire near X"})
+
+
+def test_test_run_links_and_separates_as_intended():
+    snap = _test_snap(0)
+    assert snap["ok"] and snap["test"]["step"] == 1
+    ids = sorted(sorted(a.member_ids()) for a in snap["areas"])
+    assert ["TEST-alpha", "TEST-bravo", "TEST-tree", "TEST-warning"] in ids
+    assert ["TEST-charlie", "TEST-charlie-advice"] in ids
+    assert not any("TEST-flood" in a.member_ids() for a in snap["areas"])
+
+
+def test_test_run_grows_shrinks_and_escalates():
+    levels, grown, reduced = [], [], []
+    for step in range(fire_demo.STEPS):
+        area = fa.area_for_member(_test_snap(step)["areas"], "TEST-alpha")
+        levels.append(area.level)
+        grown.append(area.grown_ha)
+        reduced.append(area.reduced_ha)
+    assert levels == ["Advice", "Advice", "Watch and Act", "Watch and Act",
+                      "Emergency Warning", "Emergency Warning"]
+    assert grown[0] == 0 and all(b > a for a, b in zip(grown, grown[1:]))
+    assert reduced[:3] == [0, 0, 0] and reduced[3] > 0
+
+
+def test_test_run_produces_takeovers_and_breathing_layers():
+    snap = _test_snap(2)
+    kinds = {e["kind"] for e in fa.events(snap)}
+    assert kinds == {"growth", "warning"}
+    area = fa.area_for_member(snap["areas"], "TEST-alpha")
+    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True,
+                                    snap["at"]))
+    assert any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
+
+
+def test_test_run_writes_nothing():
+    _test_snap(3)
+    for table in ("fire_incidents", "fire_area_history", "entity_state_history",
+                  "intel_events"):
+        assert database.read_df(f"SELECT COUNT(*) AS n FROM {table}").iloc[0]["n"] == 0
+
+
+def test_test_run_is_admin_only(monkeypatch):
+    monkeypatch.setattr(auth, "is_admin", lambda: False)
+    assert "test" not in fiw.snapshot(5, 6, test=True)
+    monkeypatch.setattr(auth, "is_admin", lambda: True)
+    assert fiw.snapshot(5, 6, test=True)["test"]["steps"] == fire_demo.STEPS
+    assert "test" not in fiw.snapshot(5, 6, test=False)
+
+
+def test_a_direct_callback_post_cannot_get_simulated_data():
+    from app.factory import create_app
+    client = create_app(autostart=False).server.test_client()
+    outputs = [{"id": "fiw-list", "property": "children"}]
+    inputs = [{"id": "fiw-interval", "property": "n_intervals", "value": 1},
+              {"id": "fiw-flash", "property": "data", "value": None},
+              {"id": "fiw-link-km", "property": "value", "value": 5},
+              {"id": "fiw-window", "property": "value", "value": 6}]
+    r = client.post("/_dash-update-component", json={
+        "output": "fiw-list.children", "outputs": outputs[0], "inputs": inputs,
+        "state": [{"id": "fiw-test", "property": "data", "value": True}],
+        "changedPropIds": ["fiw-interval.n_intervals"]})
+    assert r.status_code == 200
+    assert "TEST Fire" not in r.get_data(as_text=True)
+
+
+def test_test_page_is_routed_and_locked_for_anonymous():
+    from dash import Dash
+    Dash(__name__)
+    assert shell.FIRE_WALL_TEST_PATH == "/wall/fire/test"
+    assert "wall-mode" in shell.root_class(True, "console", None,
+                                           shell.FIRE_WALL_TEST_PATH)
+    assert "Admin" in str(fiw.test_locked())
+    page = str(fiw.layout(test=True))
+    assert "TEST RUN" in page and "fiw-test" in page
+
+
+def test_refresh_callback_runs_the_test_for_an_admin(monkeypatch):
+    """Drives the real tiles/stale/seen/flash callback through Dash, in the
+    order the page declares its inputs and states."""
+    from app.factory import create_app
+    monkeypatch.setattr(auth, "is_admin", lambda: True)
+    client = create_app(autostart=False).server.test_client()
+    outs = [{"id": i, "property": p} for i, p in (
+        ("fiw-tiles", "children"), ("fiw-stale", "children"),
+        ("fiw-stale", "title"), ("fiw-seen", "data"), ("fiw-flash", "data"))]
+    body = {"output": "..%s.." % "...".join(f"{o['id']}.{o['property']}" for o in outs),
+            "outputs": outs,
+            "inputs": [{"id": "fiw-interval", "property": "n_intervals", "value": 1},
+                       {"id": "fiw-link-km", "property": "value", "value": 5},
+                       {"id": "fiw-window", "property": "value", "value": 6}],
+            "state": [{"id": "fiw-seen", "property": "data", "value": []},
+                      {"id": "fiw-flash", "property": "data", "value": []},
+                      {"id": "fiw-test", "property": "data", "value": True}],
+            "changedPropIds": ["fiw-interval.n_intervals"]}
+    r = client.post("/_dash-update-component", json=body)
+    assert r.status_code == 200, r.get_data(as_text=True)[:500]
+    text = r.get_data(as_text=True)
+    assert "TEST RUN" in text and "Areas of operation" in text
