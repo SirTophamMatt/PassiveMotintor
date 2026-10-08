@@ -15,7 +15,7 @@ from app import auth, database, feedback_ui, shell, sound_alerts
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
-                       flood_wall, news_wall,
+                       fire_wall, flood_wall, news_wall,
                        importer_page, intel, opsum as opsum_page, overview,
                        pager as pager_page,
                        power,
@@ -38,6 +38,8 @@ PUBLIC_PAGES = [
     (shell.WALL_PATH, "Wall Display", wall_page),
     # Flood scenario wall: rotates through the gauges at/above Minor.
     (shell.FLOOD_WALL_PATH, "Flood Wall", flood_wall),
+    # Fire scenario wall: map-first, focused on one area of operation at a time.
+    (shell.FIRE_WALL_PATH, "Fire Wall", fire_wall),
     # Newsroom-style wall: BREAKING / UPDATE! takeovers from the Intelligence Feed.
     (shell.NEWS_WALL_PATH, "Newsroom", news_wall),
     ("/map", "Unified Map", unified_page),

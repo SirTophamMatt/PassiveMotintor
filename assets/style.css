@@ -1132,6 +1132,82 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     .wall-map { height: 55vh; }
 }
 
+/* ----------------------------------------------------------------------
+   Fire wall (/wall/fire) — map first. The map takes the page; the area in
+   focus is a card over it and every area of operation is listed beside it.
+   Growth red / reduction blue are fixed, like the warning colours.
+   ---------------------------------------------------------------------- */
+.fiw-tiles { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.fiw-tiles .wall-tile { padding: 8px 14px; min-width: 0; }
+.fiw-tiles .wall-tile-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: clamp(12px, 0.95vw, 19px); }
+.fiw-tiles .wall-tile-value { font-size: clamp(26px, 2.9vw, 64px); }
+.fiw-body {
+    flex: 1; min-height: 0; display: grid; gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 22%);
+}
+.fiw-map { position: relative; }
+.fiw-focus {
+    position: absolute; left: 12px; bottom: 12px; z-index: 5; width: min(440px, 46%);
+    max-height: calc(100% - 90px); overflow: hidden; padding: 12px 16px;
+    border-radius: 12px; background: var(--bg-panel); border: 1px solid var(--border);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 6px;
+}
+.fiw-focus:empty { display: none; }
+.fiw-focus-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fiw-focus-name { font-size: clamp(20px, 1.8vw, 34px); font-weight: 700; line-height: 1.15; }
+.fiw-focus-counts { font-size: 15px; }
+.fiw-change { font-size: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.fiw-grow { color: #ff1744; font-weight: 700; }
+.fiw-reduce { color: #2979ff; font-weight: 700; }
+.app.light .fiw-reduce { color: #1559d6; }
+.fiw-level { padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 14px;
+    color: #111; white-space: nowrap; }
+.fiw-level.fiw-emergency { background: #d62728; color: #fff; }
+.fiw-level.fiw-watch { background: #ff7f0e; }
+.fiw-level.fiw-advice { background: #e6c700; }
+.fiw-tag { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.6px; background: #00c8ff; color: #04222c; }
+.fiw-members { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; min-height: 0; }
+.fiw-member { display: flex; gap: 8px; align-items: baseline; font-size: 14px; min-width: 0; }
+.fiw-member-icon { flex: none; }
+.fiw-member-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fiw-member-detail { margin-left: auto; white-space: nowrap; font-size: 13px; }
+.fiw-pager {
+    position: absolute; right: 12px; bottom: 12px; z-index: 5; padding: 4px 10px;
+    border-radius: 8px; background: var(--bg-panel); border: 1px solid var(--border);
+}
+.fiw-pager:empty { display: none; }
+.fiw-side { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.fiw-side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fiw-side-head .wall-panel-title { margin: 0; }
+.fiw-resume { margin: 0; font-size: 13px; padding: 4px 10px; }
+.fiw-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.fiw-card {
+    cursor: pointer; padding: 8px 12px; border-radius: 10px; background: var(--bg-panel);
+    border: 1px solid var(--border); border-left: 5px solid #ff5722;
+}
+.fiw-card:hover { border-color: var(--accent); }
+.fiw-card-emergency { border-left-color: #d62728; }
+.fiw-card-watch { border-left-color: #ff7f0e; }
+.fiw-card-advice { border-left-color: #e6c700; }
+.fiw-card-on { outline: 2px solid #00c8ff; outline-offset: -1px; }
+.fiw-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fiw-card-name { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; min-width: 0; flex: 1; }
+.fiw-card-meta { font-size: 13px; }
+.fiw-card-change { font-size: 14px; }
+.fiw-more { font-size: 13px; padding: 4px 2px; }
+.fiw-banner-growth { background: #ff1744; color: #fff; }
+.fiw-banner-emergency { background: #d62728; color: #fff; }
+.fiw-banner-watch { background: #ff7f0e; color: #111; }
+@media (max-width: 1000px) {
+    .fiw-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fiw-body { grid-template-columns: minmax(0, 1fr); }
+    .fiw-map { height: 65vh; }
+    .fiw-focus { width: calc(100% - 24px); max-height: 45%; }
+}
+
 /* ======================================================================
    Newsroom wall (/wall/news) — a live TV news desk over the Intelligence
    Feed. News-red is the accent here regardless of colour scheme; warning

@@ -61,8 +61,19 @@
     // deliberate re-centre). "Seen" rather than "last" matters: dcc.Graph also
     // echoes the user's own zoom back through Plotly.react, so remembering
     // only the last request let that echo make the default look new again.
+    //
+    // A map that steers its own view (the fire wall rotating between areas)
+    // sends layout.meta.wdFocus: the requested view is honoured whenever that
+    // focus CHANGES — so returning to an area seen before still moves the
+    // map — and the viewer's pan/zoom is kept while the focus stays the same.
     function keepView(gd, fig) {
         if (!fig || !fig.layout) return;
+        var focus = fig.layout.meta && fig.layout.meta.wdFocus;
+        if (focus !== undefined && focus !== null) {
+            var moved = gd.__wdFocus !== focus;
+            gd.__wdFocus = focus;
+            if (moved) { gd.__wdViews = {}; }   // honour this request below
+        }
         var full = gd._fullLayout, seen = gd.__wdViews || (gd.__wdViews = {});
         var layout = fig.layout, copied = false;
         Object.keys(layout).forEach(function (key) {

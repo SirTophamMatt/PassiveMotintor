@@ -42,13 +42,14 @@ DEFAULT_SCHEME = "watchdesk"
 WALL_PATH = "/wall"
 # Scenario walls live under /wall/<name>; every one gets `wall-mode`.
 FLOOD_WALL_PATH = WALL_PATH + "/flood"
+FIRE_WALL_PATH = WALL_PATH + "/fire"
 NEWS_WALL_PATH = WALL_PATH + "/news"
 
 # Console top-bar menus. Paths not listed fall into "Tools" so a page added to
 # the factory later is never unreachable from the console layout.
 NAV_GROUPS = [
     ("Situation", ["/", "/feed", "/briefing", WALL_PATH, FLOOD_WALL_PATH,
-                   NEWS_WALL_PATH]),
+                   FIRE_WALL_PATH, NEWS_WALL_PATH]),
     ("Map", ["/map", "/replay"]),
     ("Hazards", ["/flood", "/fire", "/weather", "/storm", "/roads", "/pager",
                  "/power"]),
@@ -155,6 +156,8 @@ def controls():
             dcc.Link("Open the wall display →", href=WALL_PATH,
                      className="display-panel-link"),
             dcc.Link("Open the flood wall →", href=FLOOD_WALL_PATH,
+                     className="display-panel-link"),
+            dcc.Link("Open the fire wall →", href=FIRE_WALL_PATH,
                      className="display-panel-link"),
             dcc.Link("Open the newsroom →", href=NEWS_WALL_PATH,
                      className="display-panel-link"),

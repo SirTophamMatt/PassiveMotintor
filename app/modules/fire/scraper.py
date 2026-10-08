@@ -217,6 +217,16 @@ def _journal(now):
         log.exception("Fire: state journal write failed (collection unaffected)")
 
 
+def _record_areas(now):
+    """Burn-area shape history for the fire wall's growth highlight
+    (`app.fire_areas`). Change-only, and never allowed to break collection."""
+    try:
+        from app import fire_areas
+        fire_areas.record(now)
+    except Exception:
+        log.exception("Fire: burn-area history write failed (collection unaffected)")
+
+
 def _count_levels(rows):
     counts = {lvl: 0 for lvl in _LEVELS}
     for r in rows:
@@ -260,6 +270,7 @@ def fetch_fire_data():
             [now] + seen)
 
     _journal(now)
+    _record_areas(now)
 
     active = [r for r in rows if r["feed_type"] != "burn-area"
               and not _is_resolved(r["status"])]
