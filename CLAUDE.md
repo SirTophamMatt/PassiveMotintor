@@ -650,6 +650,44 @@ columns, the availability stamp never drifting, event/ongoing-event windows, his
 with the slider, "—" vs "0", stale-gauge exclusion, coverage honesty, and a guard that a regression
 reaching for live data would leave the replay map empty.
 
+## Replay export — downloadable debrief player (built 2026-10-08)
+- **One self-contained .html per event** (`app/replay_export.py` + template `app/replay_player.html`):
+  the event's data, the player and Plotly itself (`plotly.offline.get_plotlyjs`, ~4.7 MB) inline,
+  so it plays from disk with no server. `/replay` gains **Open fast player** (`/replay/export/<tag
+  id>`) and **Download replay (.html)** (`?download=1`, attachment). Public like /replay; built once
+  and cached 10 min per tag (`CACHE_SECONDS`, one lock so a room pressing Download builds it once).
+- **Why:** the /replay page round-trips the server for a new map on every slider step. The player
+  binary-searches each entity's CHANGE list in the browser — measured 60 fps at 15 min/sec in
+  Chromium. Speeds 1 min/s … 3 h/s (default 15 min/s), a range-input scrub bar with the
+  Major/Critical feed entries marked on it, ±15 m / ±1 h, keyboard (Space, arrows, Shift+arrows,
+  Home/End).
+- **Data shape:** time = whole minutes from the tag start; an entity = `[[t, active, …], …]`
+  (state at the start clamped to t=-1, then every journal change). Geometries de-duplicated into
+  one table and rounded to 4 dp (~11 m). Stored text goes through `_safe_json` (`<`, `>`, `&`,
+  U+2028/9 escaped) so nothing in a feed can close the `<script>`.
+- **Contents:** VicEmergency warnings + incidents (journal; burn areas left out), **weather-related
+  roads only** — the flood wall's rule: cause flooding / weather / trees (`roads.data.causes_of`)
+  AND started during the event (state `start_time`, else first journal row) — BoM warnings as a
+  list, power customers-off series (6 h staleness → "—"), the Intelligence Feed timeline (click to
+  seek), and **flood gauges**: every gauge on the map with its class CHANGES (a gauge silent 24 h
+  goes to "no data"), plus a height graph with class lines for every gauge that reached Minor
+  DURING the event (12 h lead-in shown, event window shaded), grouped by river = the BoM
+  `catchment` column, most severe river first. The graph cursor is a positioned div
+  (`xaxis.l2p`), not a relayout, so 60 graphs cost nothing per frame; graphs are drawn lazily
+  (IntersectionObserver). Click a gauge on the map → its graph; click a graph → seek there.
+- **Two MapLibre traps, both handled in the template:**
+  1. **Opened from file://, Chrome will not start a MODULE worker**, and MapLibre (inside
+     Plotly 3) runs one — the map never loads, silently. A shim before Plotly restarts it as a
+     classic worker (its bundle's only module syntax is the trailing `export{…}`). Over http(s)
+     nothing changes. `test_player_runs_maplibre_from_disk` guards it.
+  2. **A tile style that cannot load never finishes loading**, and a `Plotly.react` during style
+     load ("Style is not done loading") leaves the map blank. The player starts on `white-bg`,
+     probes one OSM tile and only then switches to streets (offline: stays plain, the other
+     basemaps marked offline); map draws are serialised (`commitMap`).
+- Times are wall-clock local held as "UTC" in the browser so Plotly's date axes and the labels
+  agree whatever time zone the viewer's laptop is in.
+- Tests: `tests/test_replay_export.py`.
+
 ## Briefing Mode — /briefing (Phase B, built 2026-08-10)
 Answers the three questions actually asked at a briefing — *what matters now · what changed ·
 what should I be watching* — and is useful **on its own, before anyone generates a PDF**.
