@@ -6,6 +6,8 @@ bucket; the old per-event namespacing is gone. Views and exports now select
 data by timestamp range (usually resolved from an event tag), not by the event
 column.
 """
+import threading
+
 import pandas as pd
 
 from app import database
@@ -13,6 +15,33 @@ from app import database
 # The single always-on collection bucket. Kept in the event column so the
 # existing dedup index (event, station, timestamp, height) still works.
 LIVE_EVENT = "live"
+
+
+_latest_lock = threading.Lock()
+_latest_cache = {"key": None, "df": None}
+
+
+def latest_readings():
+    """The newest reading per station: station_name, height_m, catchment, ts.
+
+    That GROUP BY reads the whole of flood_observations (1.4M+ rows), and the
+    ticker, alert sounds, maps, walls, status strip and watchdog all need it —
+    the ticker every 20 s per open browser. The 2026-10-08 /admin/cpu profile
+    had it running on every waitress thread at once. It is now computed once
+    per NEW READING: the cache key is MAX(id), an O(1) primary-key lookup, so
+    the scan runs at most once per flood cycle however many viewers there are.
+    Returns a copy; callers may modify it.
+    """
+    with _latest_lock:
+        top = database.read_df("SELECT MAX(id) AS id FROM flood_observations")
+        key = (database.DB_FILE,
+               None if top.empty else top.iloc[0]["id"])
+        if _latest_cache["key"] != key or _latest_cache["df"] is None:
+            _latest_cache["df"] = database.read_df(
+                "SELECT station_name, height_m, catchment, MAX(timestamp) AS ts "
+                "FROM flood_observations GROUP BY station_name")
+            _latest_cache["key"] = key
+        return _latest_cache["df"].copy()
 
 
 def get_events():
@@ -144,12 +173,12 @@ def map_gauges():
     """Latest reading for every gauge that has coordinates (gauge_coords),
     classified by flood level. Returns a DataFrame with station_name, height_m,
     latitude, longitude, priority, label, colour — for the map layers."""
-    df = database.read_df(
-        "SELECT o.station_name, o.height_m, g.latitude, g.longitude "
-        "FROM (SELECT station_name, height_m, MAX(timestamp) AS ts "
-        "      FROM flood_observations GROUP BY station_name) o "
-        "JOIN gauge_coords g ON g.station_key = LOWER(TRIM(o.station_name)) "
-        "WHERE g.latitude IS NOT NULL AND g.longitude IS NOT NULL")
+    coords = database.read_df(
+        "SELECT station_key, latitude, longitude FROM gauge_coords "
+        "WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+    latest = latest_readings()[["station_name", "height_m"]]
+    latest["station_key"] = latest["station_name"].astype(str).str.strip().str.lower()
+    df = latest.merge(coords, on="station_key").drop(columns="station_key")
     if df.empty:
         return df
     levels = load_flood_levels()
@@ -202,9 +231,7 @@ def flooding_breakdown():
     levels = load_flood_levels()
     if not levels:
         return empty
-    latest = database.read_df(
-        "SELECT station_name, height_m, MAX(timestamp) AS ts "
-        "FROM flood_observations GROUP BY station_name")
+    latest = latest_readings()
     if latest.empty:
         return empty
     heights = pd.to_numeric(latest["height_m"], errors="coerce")
@@ -227,9 +254,7 @@ def current_flooding_stations(max_stations=12):
     levels = load_flood_levels()
     if not levels:
         return []
-    latest = database.read_df(
-        "SELECT station_name, height_m, MAX(timestamp) AS ts "
-        "FROM flood_observations GROUP BY station_name")
+    latest = latest_readings()
     if latest.empty:
         return []
     flooding = []

@@ -274,10 +274,37 @@ def _metric_prev(hazard, entity_key, metric):
     return _num(row["value"]), row["label"], _parse_ts(row["ts"])
 
 
-def _metric_record(hazard, entity_key, metric, value=None, label=None, ts=None):
+def _metric_prev_map(hazard, metric):
+    """{entity_key: (value, label, datetime)} — the last recorded value of
+    `metric` for EVERY entity, in one query.
+
+    Detectors walk whole tables (every road disruption and BoM warning ever
+    seen), so a per-row `_metric_prev` meant two queries, each on a fresh
+    connection, per row per 60-second pass — the intel thread alone held a
+    core on the VPS (2026-10-08 /admin/cpu profile). Same window-function shape
+    as history.py's batch de-dup lookup."""
+    df = database.read_df(
+        "SELECT entity_key, value, label, ts FROM ("
+        "  SELECT entity_key, value, label, ts, ROW_NUMBER() OVER ("
+        "    PARTITION BY entity_key ORDER BY ts DESC, id DESC) AS rn"
+        "  FROM intel_metrics WHERE hazard = ? AND metric = ?"
+        ") WHERE rn = 1", [hazard, metric])
+    return {str(k): (_num(v), lab if isinstance(lab, str) else None,
+                     _parse_ts(t))
+            for k, v, lab, t in zip(df["entity_key"], df["value"],
+                                    df["label"], df["ts"])}
+
+
+_UNSET = object()
+
+
+def _metric_record(hazard, entity_key, metric, value=None, label=None, ts=None,
+                   prev=_UNSET):
     """Append a metric observation, but ONLY when it differs from the last one.
-    That keeps intel_metrics proportional to change, not to poll frequency."""
-    prev = _metric_prev(hazard, entity_key, metric)
+    That keeps intel_metrics proportional to change, not to poll frequency.
+    Pass `prev` (from `_metric_prev_map`) to skip the lookup."""
+    if prev is _UNSET:
+        prev = _metric_prev(hazard, entity_key, metric)
     if prev is not None:
         prev_value, prev_label, _ = prev
         same_value = (prev_value is None and value is None) or (
@@ -305,6 +332,8 @@ def _detect_fire(cfg, cutoff):
         "FROM fire_incidents WHERE resolved = 0 AND feed_type != 'burn-area'")
     if df.empty:
         return
+    level_prevs = _metric_prev_map(WARNING, "warning_level")
+    area_prevs = _metric_prev_map("fire", "area_ha")
 
     for _, row in df.iterrows():
         key = row.get("source_id")
@@ -321,8 +350,9 @@ def _detect_fire(cfg, cutoff):
             ordinal = _WARNING_ORDINAL.get(level.lower())
             if not level or ordinal is None:
                 continue
-            prev = _metric_prev(WARNING, key, "warning_level")
-            _metric_record(WARNING, key, "warning_level", ordinal, level, ts)
+            prev = level_prevs.get(str(key))
+            _metric_record(WARNING, key, "warning_level", ordinal, level, ts,
+                           prev=prev)
             if prev is None:
                 first_seen = _parse_ts(row.get("first_seen"))
                 if first_seen and first_seen >= cutoff:
@@ -351,8 +381,8 @@ def _detect_fire(cfg, cutoff):
         area = _parse_ha(row.get("size"))
         if area is None:
             continue
-        prev = _metric_prev("fire", key, "area_ha")
-        _metric_record("fire", key, "area_ha", area, None, ts)
+        prev = area_prevs.get(str(key))
+        _metric_record("fire", key, "area_ha", area, None, ts, prev=prev)
         if prev is None:
             continue
         prev_area, _, prev_ts = prev
@@ -647,6 +677,7 @@ def _detect_power(cfg, cutoff):
         "FROM power_outages WHERE restored = 0")
     if outages.empty:
         return
+    power_prevs = _metric_prev_map("power", "customers_off")
     for _, row in outages.iterrows():
         location = str(row.get("location") or "").strip()
         if not location:
@@ -655,8 +686,9 @@ def _detect_power(cfg, cutoff):
         if customers is None:
             continue
         ts = _parse_ts(row.get("last_seen")) or _now()
-        prev = _metric_prev("power", location, "customers_off")
-        _metric_record("power", location, "customers_off", customers, None, ts)
+        prev = power_prevs.get(location)
+        _metric_record("power", location, "customers_off", customers, None, ts,
+                       prev=prev)
         threshold = float(settings["power_location_min_delta"])
         if prev is None:
             first_seen = _parse_ts(row.get("first_seen"))
@@ -753,6 +785,8 @@ def _detect_weather(cfg, cutoff):
         "issue_time, first_seen, last_seen, active FROM weather_warnings")
     if df.empty:
         return
+    active_prevs = _metric_prev_map("weather", "active")
+    issue_prevs = _metric_prev_map("weather", "issue_time")
     for _, row in df.iterrows():
         warning_id = row.get("warning_id")
         if not warning_id:
@@ -765,9 +799,9 @@ def _detect_weather(cfg, cutoff):
 
         if not active:
             cleared = _parse_ts(row.get("last_seen"))
-            prev = _metric_prev("weather", warning_id, "active")
+            prev = active_prevs.get(str(warning_id))
             _metric_record("weather", warning_id, "active", 0, "cancelled",
-                           cleared or _now())
+                           cleared or _now(), prev=prev)
             if (prev and prev[0] == 1 and cleared and cleared >= cutoff):
                 record("weather", "cleared", INFO,
                        "BoM warning no longer current", cleared,
@@ -777,14 +811,15 @@ def _detect_weather(cfg, cutoff):
             continue
 
         _metric_record("weather", warning_id, "active", 1, "active",
-                       first_seen or _now())
+                       first_seen or _now(),
+                       prev=active_prevs.get(str(warning_id)))
         # A reissue keeps the same BoM id but carries a new issue_time; the
         # per-version history in weather_warning_updates is the source of truth.
-        prev_issue = _metric_prev("weather", warning_id, "issue_time")
+        prev_issue = issue_prevs.get(str(warning_id))
         issue_stamp = _stamp(issue_ts) if issue_ts else None
         if issue_stamp:
             _metric_record("weather", warning_id, "issue_time", None,
-                           issue_stamp, issue_ts)
+                           issue_stamp, issue_ts, prev=prev_issue)
         if prev_issue is None:
             if first_seen and first_seen >= cutoff:
                 record("weather", "new",
@@ -820,6 +855,7 @@ def _detect_roads(cfg, cutoff):
         "last_seen, resolved FROM road_disruptions")
     if df.empty:
         return
+    closed_prevs = _metric_prev_map("roads", "closed")
     for _, row in df.iterrows():
         key = row.get("source_id")
         if not key:
@@ -828,9 +864,9 @@ def _detect_roads(cfg, cutoff):
         closed = int(row.get("is_closure") or 0) and not int(row.get("resolved") or 0)
         ts = _parse_ts(row.get("last_seen")) or _now()
         lat, lon = _num(row.get("latitude")), _num(row.get("longitude"))
-        prev = _metric_prev("roads", key, "closed")
+        prev = closed_prevs.get(str(key))
         _metric_record("roads", key, "closed", 1 if closed else 0,
-                       "Closed" if closed else "Open", ts)
+                       "Closed" if closed else "Open", ts, prev=prev)
         if prev is None:
             first_seen = _parse_ts(row.get("first_seen"))
             if closed and first_seen and first_seen >= cutoff:

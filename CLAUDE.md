@@ -1004,6 +1004,19 @@ what should I be watching* — and is useful **on its own, before anyone generat
   `--disable-background-timer-throttling` is removed via `excludeSwitches`, so Chrome can throttle
   the parked session tab in the background.
 
+- **First profile result (2026-10-08) and the fixes.** The intel thread was ~70% of a core:
+  `_detect_roads` (and the weather/fire/power detectors) ran `_metric_prev` + `_metric_record`, i.e. two
+  queries on fresh connections, for EVERY row of tables that only grow. Detectors now load the
+  previous values once per pass with `_metric_prev_map(hazard, metric)` (a ROW_NUMBER window query)
+  and pass `prev=` to `_metric_record`. Waitress threads were all running the same
+  `MAX(timestamp) … GROUP BY station_name` scan of `flood_observations`: the ticker every 20 s per
+  browser, plus alert sounds, `/map`, the flood wall and the status strip. That is now
+  `flood_data.latest_readings()`, shared and cached until `MAX(id)` changes (an O(1) lookup), so it
+  runs once per new reading. The ticker's per-gauge crossing lookups used plain `station_name = ?`,
+  which has NO index (full scan, twice per flooding gauge). They now match on
+  `LOWER(TRIM(station_name))` and are memoised per (station, level, latest reading).
+  **Use `latest_readings()` for any new "latest per gauge" need.**
+
 ## CFA Pager module (built 2026-09-24)
 - **Source:** `mazzanet.net.au/cfa/pager-cfa.php`, scraped **with the site owner's permission**. One
   plain GET per cycle (`pager.interval_minutes`=4, `pager.autostart`=true), identifying User-Agent,

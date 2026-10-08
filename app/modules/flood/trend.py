@@ -504,9 +504,7 @@ def run_projection_cycle(cfg=None):
     levels = flood_data.load_flood_levels()
     if not levels:
         return 0, 0
-    latest = database.read_df(
-        "SELECT station_name, height_m, MAX(timestamp) AS ts "
-        "FROM flood_observations GROUP BY station_name")
+    latest = flood_data.latest_readings()
     made = 0
     for _, row in latest.iterrows():
         station_name = row["station_name"]

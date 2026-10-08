@@ -241,9 +241,7 @@ class Supervisor(threading.Thread):
         levels = flood_data.load_flood_levels()
         if not levels:
             return
-        latest = database.read_df(
-            "SELECT station_name, height_m, MAX(timestamp) AS ts "
-            "FROM flood_observations GROUP BY station_name")
+        latest = flood_data.latest_readings()
         current = {}
         for _, row in latest.iterrows():
             lv = levels.get(str(row["station_name"]).strip().lower())

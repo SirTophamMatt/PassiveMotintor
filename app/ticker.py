@@ -145,6 +145,38 @@ def _vicemergency_items(now, cutoff):
     return items
 
 
+_crossings = {}   # (station, minor, latest ts) -> crossing datetime or None
+
+
+def _crossing_time(station, minor, latest_ts):
+    """When the gauge last crossed up through `minor`, or None if it has never
+    been below it. Remembered per (station, level, latest reading), so it is
+    worked out once per new reading rather than on every 20-second tick of
+    every open browser. Matches on LOWER(TRIM(station_name)) so the expression
+    index serves it — a plain `station_name = ?` has no index and scanned the
+    whole table, twice per flooding gauge."""
+    key = (database.DB_FILE, station, minor, latest_ts)
+    if key in _crossings:
+        return _crossings[key]
+    below = database.read_df(
+        "SELECT MAX(timestamp) AS t FROM flood_observations "
+        "WHERE LOWER(TRIM(station_name)) = LOWER(TRIM(?)) AND height_m < ?",
+        [station, minor])
+    last_below = below.iloc[0]["t"] if not below.empty else None
+    crossing_ts = None  # never below minor — not a crossing
+    if last_below:
+        crossed = database.read_df(
+            "SELECT MIN(timestamp) AS t FROM flood_observations "
+            "WHERE LOWER(TRIM(station_name)) = LOWER(TRIM(?)) AND timestamp > ?",
+            [station, last_below])
+        crossing_ts = _parse_ts(crossed.iloc[0]["t"] if not crossed.empty
+                                else None)
+    if len(_crossings) > 2000:
+        _crossings.clear()
+    _crossings[key] = crossing_ts
+    return crossing_ts
+
+
 def _flood_crossing_items(now, cutoff):
     """Gauges whose latest reading is at/above minor AND whose crossing into
     flood happened inside the window. The crossing reading's own observation
@@ -152,9 +184,7 @@ def _flood_crossing_items(now, cutoff):
     levels = flood_data.load_flood_levels()
     if not levels:
         return []
-    latest = database.read_df(
-        "SELECT station_name, height_m, MAX(timestamp) AS ts "
-        "FROM flood_observations GROUP BY station_name")
+    latest = flood_data.latest_readings()
     items = []
     for _, row in latest.iterrows():
         lv = levels.get(str(row["station_name"]).strip().lower())
@@ -163,20 +193,7 @@ def _flood_crossing_items(now, cutoff):
         if priority >= 4 or lv is None or pd.isna(lv.get("minor")):
             continue
         station = row["station_name"]
-        below = database.read_df(
-            "SELECT MAX(timestamp) AS t FROM flood_observations "
-            "WHERE station_name = ? AND height_m < ?",
-            [station, float(lv["minor"])])
-        last_below = below.iloc[0]["t"] if not below.empty else None
-        if last_below:
-            crossed = database.read_df(
-                "SELECT MIN(timestamp) AS t FROM flood_observations "
-                "WHERE station_name = ? AND timestamp > ?",
-                [station, last_below])
-            crossing_ts = _parse_ts(crossed.iloc[0]["t"] if not crossed.empty
-                                    else None)
-        else:
-            crossing_ts = None  # has never been below minor — not a crossing
+        crossing_ts = _crossing_time(station, float(lv["minor"]), row["ts"])
         if crossing_ts is None or crossing_ts < cutoff:
             continue
         items.append({

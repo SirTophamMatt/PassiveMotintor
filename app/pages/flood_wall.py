@@ -179,14 +179,13 @@ def compute(now=None):
     snap = {"at": now, "flooding": [], "near": [], "map": pd.DataFrame(),
             "ok": True}
     try:
-        latest = database.read_df(
-            "SELECT o.station_name, o.height_m, o.catchment, o.ts, "
-            "g.latitude, g.longitude "
-            "FROM (SELECT station_name, height_m, catchment, "
-            "      MAX(timestamp) AS ts FROM flood_observations "
-            "      GROUP BY station_name) o "
-            "LEFT JOIN gauge_coords g "
-            "  ON g.station_key = LOWER(TRIM(o.station_name))")
+        latest = flood_data.latest_readings()
+        coords = database.read_df(
+            "SELECT station_key, latitude, longitude FROM gauge_coords")
+        latest["station_key"] = (latest["station_name"].astype(str)
+                                 .str.strip().str.lower())
+        latest = latest.merge(coords, on="station_key", how="left") \
+            .drop(columns="station_key")
         if not latest.empty:
             flooding, near, map_df = classify_gauges(
                 latest, flood_data.load_flood_levels(), now)
