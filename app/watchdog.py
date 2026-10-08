@@ -284,14 +284,15 @@ class Supervisor(threading.Thread):
         alert_cats = {c.strip().lower() for c in
                       cfg.get("fire_alerts", {}).get("alert_categories", [])}
         df = fire_data.active_incidents()
-        current = {}
+        current, kinds = {}, {}
         for _, row in df.iterrows():
             is_warning = row.get("feed_type") == "warning"
             cat = str(row.get("category1") or "").strip().lower()
             if not is_warning and cat not in alert_cats:
                 continue  # only warnings + configured incident categories alert
             priority, _ = fire_data.classify(row.get("warning_level"),
-                                             row.get("category1"))
+                                             row.get("category1"),
+                                             row.get("feed_type"))
             if is_warning:
                 label = (f"{row.get('warning_level') or 'Warning'} — "
                          f"{row.get('location') or 'VIC'}")
@@ -300,12 +301,17 @@ class Supervisor(threading.Thread):
                          f"{row.get('location') or 'unknown'} "
                          f"({row.get('status') or 'active'})")
             current[row["source_id"]] = (priority, label)
+            kinds[row["source_id"]] = is_warning
 
         if self._first_fire_check:
             if current:
                 worst = sorted(current.values())[0][1]
-                notify.send(f"Monitor started — {len(current)} active fire/warning "
-                            f"event(s) (worst: {worst}).", kind="fire_alert", cfg=cfg)
+                n_warn = sum(1 for w in kinds.values() if w)
+                n_inc = len(current) - n_warn
+                # Counted apart: a warning is not a fire.
+                notify.send(f"Monitor started — {n_inc} incident(s), {n_warn} "
+                            f"warning(s) active (worst: {worst}).",
+                            kind="fire_alert", cfg=cfg)
         else:
             escalated = [
                 label for sid, (priority, label)

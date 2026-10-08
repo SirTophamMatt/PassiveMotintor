@@ -52,6 +52,7 @@ import pandas as pd
 
 from app import database
 from app.config import load_config
+from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.flood import trend as flood_trend
 from app.modules.weather import data as weather_data
@@ -68,16 +69,25 @@ SEVERITY_STYLE = {
     INFO: ("Info", "#5b8def"),
 }
 
-HAZARDS = ["fire", "flood", "storm", "weather", "power", "roads", "rainfall"]
+# VicEmergency community warnings (Emergency Warning / Watch and Act / Advice,
+# whatever the hazard) are their own "warning" hazard, NOT "fire": a flood
+# Advice is not a fire, and even a bushfire Advice is a warning rather than a
+# fire. Entries recorded before 2026-10-08 are moved across by init_db.
+WARNING = "warning"
+
+HAZARDS = ["fire", WARNING, "flood", "storm", "weather", "power", "roads",
+           "rainfall"]
 
 HAZARD_LABEL = {
-    "fire": "Fire", "flood": "Flood", "storm": "Storm", "weather": "Weather",
-    "power": "Power", "roads": "Roads", "rainfall": "Rainfall",
+    "fire": "Fire", WARNING: "Warning", "flood": "Flood", "storm": "Storm",
+    "weather": "Weather", "power": "Power", "roads": "Roads",
+    "rainfall": "Rainfall",
 }
 
 HAZARD_PAGE = {
-    "fire": "/fire", "flood": "/flood", "storm": "/storm", "weather": "/weather",
-    "power": "/power", "roads": "/roads", "rainfall": "/weather",
+    "fire": "/fire", WARNING: "/fire", "flood": "/flood", "storm": "/storm",
+    "weather": "/weather", "power": "/power", "roads": "/roads",
+    "rainfall": "/weather",
 }
 
 # Radar product id prefix -> the name a human uses for it. Mirrors
@@ -311,12 +321,12 @@ def _detect_fire(cfg, cutoff):
             ordinal = _WARNING_ORDINAL.get(level.lower())
             if not level or ordinal is None:
                 continue
-            prev = _metric_prev("fire", key, "warning_level")
-            _metric_record("fire", key, "warning_level", ordinal, level, ts)
+            prev = _metric_prev(WARNING, key, "warning_level")
+            _metric_record(WARNING, key, "warning_level", ordinal, level, ts)
             if prev is None:
                 first_seen = _parse_ts(row.get("first_seen"))
                 if first_seen and first_seen >= cutoff:
-                    record("fire", "new", CRITICAL if ordinal == 1 else MAJOR,
+                    record(WARNING, "new", CRITICAL if ordinal == 1 else MAJOR,
                            f"New {level} issued", first_seen, entity_key=key,
                            entity_name=place, metric="warning_level",
                            new_label=level, latitude=lat, longitude=lon,
@@ -328,7 +338,7 @@ def _detect_fire(cfg, cutoff):
             if prev_ordinal is None or prev_ordinal == ordinal:
                 continue
             escalated = ordinal < prev_ordinal
-            record("fire", "escalation" if escalated else "downgrade",
+            record(WARNING, "escalation" if escalated else "downgrade",
                    (CRITICAL if ordinal == 1 else MAJOR) if escalated else INFO,
                    f"Warning {'upgraded' if escalated else 'downgraded'} "
                    f"to {level} — {place}",
@@ -354,8 +364,8 @@ def _detect_fire(cfg, cutoff):
         if grew < floor:
             continue
 
-        kind_word = ("fire" if str(row.get("category1") or "").strip().lower()
-                     == "fire" else str(row.get("category1") or "incident").lower())
+        kind_word = ("fire" if fire_data.is_fire(row)
+                     else str(row.get("category1") or "incident").lower())
         detail = []
         if row.get("status"):
             detail.append(f"Status: {row['status']}")
@@ -1006,13 +1016,18 @@ def _nearby_lines(lat, lon, radius_km, sources, hazard):
                          f"flood level within {radius_km:g} km")
 
     if hazard != "fire":
-        fires = within(sources["fires"])
-        if fires is not None and not fires.empty:
-            warnings = fires[fires["feed_type"] == "warning"]
-            text = _plural(len(fires), "active incident")
-            if not warnings.empty:
-                text += f", {len(warnings)} under warning"
-            lines.append(f"{text} within {radius_km:g} km")
+        rows = within(sources["fires"])
+        if rows is not None and not rows.empty:
+            # Incidents and warnings counted apart: a warning is not an
+            # incident. A warning entry is not told about other warnings.
+            is_warn = rows["feed_type"].fillna("").str.lower() == "warning"
+            parts = []
+            if (~is_warn).any():
+                parts.append(_plural(int((~is_warn).sum()), "active incident"))
+            if is_warn.any() and hazard != WARNING:
+                parts.append(_plural(int(is_warn.sum()), "warning") + " current")
+            if parts:
+                lines.append(f"{', '.join(parts)} within {radius_km:g} km")
     return lines
 
 

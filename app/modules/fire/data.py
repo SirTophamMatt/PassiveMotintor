@@ -14,12 +14,34 @@ WARNING_STYLE = {
 
 _TS_COLS = ("created", "updated", "first_seen", "last_seen")
 
+# Feed types that are NOT incidents. A community warning (including an Advice)
+# is a statement about a hazard, not an incident; a burn area is a historical
+# footprint. Neither is ever counted as a fire.
+NOT_INCIDENT_FEED_TYPES = ("warning", "burn-area")
 
-def classify(warning_level=None, category1=None):
+
+def is_warning(row):
+    return str(row.get("feed_type") or "").strip().lower() == "warning"
+
+
+def is_incident(row):
+    return (str(row.get("feed_type") or "").strip().lower()
+            not in NOT_INCIDENT_FEED_TYPES)
+
+
+def is_fire(row):
+    """The ONE definition of "a fire" used site-wide: an INCIDENT whose
+    category is Fire. Warnings and Advices about fires are warnings, not fires,
+    so they never add to a fire count."""
+    return is_incident(row) and \
+        str(row.get("category1") or "").strip().lower() == "fire"
+
+
+def classify(warning_level=None, category1=None, feed_type=None):
     """(priority, colour) for a row: warnings by level, live fires amber, else grey."""
     if warning_level in WARNING_STYLE:
         return WARNING_STYLE[warning_level]
-    if str(category1 or "").strip().lower() == "fire":
+    if is_fire({"feed_type": feed_type, "category1": category1}):
         return 2, "#ff7f0e"
     return 4, "#9aa0a6"
 
@@ -63,15 +85,21 @@ def burn_areas():
 def latest_counts():
     """Headline counts of active events for KPI cards."""
     df = database.read_df(
-        "SELECT category1, warning_level FROM fire_incidents "
+        "SELECT feed_type, category1, warning_level FROM fire_incidents "
         "WHERE resolved = 0 AND feed_type != 'burn-area'")
     if df.empty:
-        return {"total": 0, "active_fires": 0, "emergency": 0,
+        return {"total": 0, "incidents": 0, "active_fires": 0, "emergency": 0,
                 "watch_act": 0, "advice": 0}
-    level = df["warning_level"].fillna("")
+    rows = df.to_dict("records")
+    warnings = df["feed_type"].fillna("").str.lower() == "warning"
+    level = df["warning_level"].where(warnings, "").fillna("")
     return {
+        # Incidents and warnings together. Kept for callers that need the
+        # feed's size, but never shown as one figure: a warning is not an
+        # incident, and adding them lets either one over-represent the other.
         "total": len(df),
-        "active_fires": int((df["category1"].fillna("").str.lower() == "fire").sum()),
+        "incidents": int((~warnings).sum()),
+        "active_fires": sum(1 for r in rows if is_fire(r)),
         "emergency": int((level == "Emergency Warning").sum()),
         "watch_act": int((level == "Watch and Act").sum()),
         "advice": int((level == "Advice").sum()),

@@ -72,7 +72,7 @@ def _kind(row):
         return _WARNING_ALIASES.get(lvl, "Advice")
     cat1 = str(row.get("category1") or "").strip().lower()
     cat2 = str(row.get("category2") or "").strip().lower()
-    if cat1 == "fire":
+    if fire_data.is_fire(row):
         return "Fire"
     if cat1 == "met" or cat2 == "met":
         return MET_KIND  # meteorological — weather, not a fire incident
@@ -430,7 +430,9 @@ def register_callbacks(app):
                         "#ff7f0e" if counts["watch_act"] else None),
             ui.kpi_card("Advice", str(counts["advice"]),
                         "#e6c700" if counts["advice"] else None),
-            ui.kpi_card("Total Active", str(counts["total"])),
+            # Incidents only: a warning is not an incident, so warnings are
+            # never added into this (or any fire) figure.
+            ui.kpi_card("Active Incidents", str(counts["incidents"])),
         ]
 
         df = fire_data.active_incidents()

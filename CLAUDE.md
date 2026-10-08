@@ -1219,6 +1219,25 @@ what should I be watching* — and is useful **on its own, before anyone generat
   headline when there is no hazard — the test run's "flood Advice (not a fire)" headline exposed it.
 - Tests: `tests/test_fire_wall.py`.
 
+## Warnings never count as fires (2026-10-08)
+- **One definition of a fire:** `fire.data.is_fire(row)` — an INCIDENT (`feed_type` not `warning` /
+  `burn-area`) whose `category1` is Fire. Every fire count/sort/label uses it (collector heartbeat
+  `active_fires`, `latest_counts`, `classify`, the map `_kind`, the feed's growth wording). A warning
+  — any level, any hazard, even one about a fire — is never a fire.
+- **No combined totals:** the /fire page's "Total Active" and the Fire PDF's "Total Active Events"
+  (incidents + warnings) became **Active Incidents** (`latest_counts()["incidents"]`); the Unified
+  Map's "Fire Warnings" card (ALL warnings, flood included, summed) became one card per level. The
+  briefing files its warning KPIs under a **Warnings** group, not Fire. Watchdog's start message
+  counts incidents and warnings apart; the feed's context line reads "1 active incident, 2 warnings
+  current" (it used to count warnings AS incidents).
+- **Intelligence Feed `warning` hazard** (`intel_feed.WARNING`, label "Warning", page /fire): warning
+  level changes were filed under "fire", so every Advice read as a FIRE entry on the feed, newsroom
+  and briefing. `init_db` moves old `metric='warning_level'` rows in `intel_events`/`intel_metrics`
+  (idempotent). Briefing consequences don't count "warning" as a second hazard — a fire and its own
+  Watch and Act are one hazard at that spot.
+- Historical `fire_timeseries.active_fires` rows are as recorded. `app/fire.py` is an old, unrouted
+  copy of the Fire page (the live one is `app/pages/fire.py`). Tests: `tests/test_fire_counts.py`.
+
 ## Newsroom wall — /wall/news (built 2026-10-02)
 - **The Intelligence Feed as a live TV news desk** (`app/pages/news_wall.py`, public, a `wall.SCENARIOS`
   row). A bit of fun on real data: every word is a stored feed entry or a `situation` count.

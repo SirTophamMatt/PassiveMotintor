@@ -21,6 +21,7 @@ from datetime import datetime
 import requests
 
 from app import database, history
+from app.modules.fire import data as fire_data
 
 log = logging.getLogger(__name__)
 
@@ -278,8 +279,7 @@ def fetch_fire_data():
     database.insert_rows("fire_timeseries", [{
         "timestamp": now,
         "total_active": len(active),
-        "active_fires": sum(1 for r in active
-                            if str(r["category1"]).strip().lower() == "fire"),
+        "active_fires": sum(1 for r in active if fire_data.is_fire(r)),
         "emergency_warnings": levels["emergency warning"],
         "watch_act": levels["watch and act"],
         "advice": levels["advice"],

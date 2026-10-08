@@ -640,7 +640,7 @@ def build_fire_pdf():
     kpi_rows = [
         ["Active Fires", str(c["active_fires"]), "Emergency Warnings", str(c["emergency"])],
         ["Watch & Act", str(c["watch_act"]), "Advice", str(c["advice"])],
-        ["Total Active Events", str(c["total"]), "", ""],
+        ["Active Incidents", str(c["incidents"]), "", ""],
     ]
     kpi = Table(kpi_rows, colWidths=[45 * mm, 40 * mm, 45 * mm, 40 * mm])
     kpi.setStyle(TableStyle([
