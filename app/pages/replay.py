@@ -22,9 +22,11 @@ apart visually.
 import logging
 from datetime import timedelta
 
+import flask
 from dash import ALL, Input, Output, State, ctx, dcc, html
 
 from app import replay as replay_data
+from app import replay_export
 from app import ui
 from app.pages import unified
 
@@ -39,6 +41,11 @@ TICK_MS = 1000
 SPEEDS = [1, 2, 4]
 
 SEVERITY_COLOUR = {3: "#d62728", 2: "#ff7f0e", 1: "#e6c700", 0: "#5b8def"}
+
+# The whole event as one self-contained HTML player (`app.replay_export`):
+# opened in a tab it plays entirely in the browser, downloaded it plays from
+# a laptop with no server.
+EXPORT_ROUTE = "/replay/export"
 
 
 def layout():
@@ -62,6 +69,26 @@ def layout():
                               labelStyle={"display": "block"}),
             ], className="panel"),
         ], className="panel-row"),
+
+        html.Div([
+            html.Div([
+                html.Strong("Fast player / debrief file"),
+                html.Div("The whole event in one file that plays in the browser — "
+                         "smooth scrubbing, up to 3 hours per second, flood graphs "
+                         "for every river in flood, weather-related roads only. "
+                         "Download it to play offline in a debrief.",
+                         className="muted", style={"fontSize": "12px"}),
+            ], style={"flex": "1 1 320px"}),
+            html.A("Open fast player", id="replay-open-player", href="#",
+                   target="_blank", className="btn",
+                   style={"marginRight": "6px", "pointerEvents": "none",
+                          "opacity": 0.5}),
+            html.A("Download replay (.html)", id="replay-download", href="#",
+                   className="btn",
+                   style={"pointerEvents": "none", "opacity": 0.5}),
+        ], className="panel", style={"display": "flex", "gap": "8px",
+                                     "alignItems": "center", "flexWrap": "wrap",
+                                     "marginTop": "10px"}),
 
         html.Div(id="replay-coverage", className="muted",
                  style={"margin": "10px 0", "fontSize": "12px",
@@ -166,7 +193,43 @@ def _timeline(entries, selected):
     return html.Div(rows)
 
 
+def _export_links(tag_id):
+    """(open href, download href, style) for the export buttons."""
+    if not tag_id:
+        off = {"pointerEvents": "none", "opacity": 0.5}
+        return "#", "#", {"marginRight": "6px", **off}, off
+    base = "%s/%s" % (EXPORT_ROUTE, int(tag_id))
+    return base, base + "?download=1", {"marginRight": "6px"}, {}
+
+
 def register_callbacks(app):
+    @app.server.route("%s/<int:tag_id>" % EXPORT_ROUTE)
+    def replay_export_file(tag_id):
+        try:
+            result = replay_export.export(tag_id)
+        except Exception:
+            log.exception("Replay export failed for event %s", tag_id)
+            return flask.Response("Replay export failed — see the server log.",
+                                  status=500, mimetype="text/plain")
+        if result is None:
+            return flask.Response("Event not found.", status=404,
+                                  mimetype="text/plain")
+        name, body = result
+        resp = flask.Response(body, mimetype="text/html")
+        if flask.request.args.get("download"):
+            resp.headers["Content-Disposition"] = 'attachment; filename="%s"' % name
+        resp.headers["Cache-Control"] = "private, max-age=300"
+        return resp
+
+    @app.callback(
+        Output("replay-open-player", "href"),
+        Output("replay-download", "href"),
+        Output("replay-open-player", "style"),
+        Output("replay-download", "style"),
+        Input("replay-event", "value"))
+    def export_links(tag_id):
+        return _export_links(tag_id)
+
     @app.callback(
         Output("replay-slider", "min"),
         Output("replay-slider", "max"),

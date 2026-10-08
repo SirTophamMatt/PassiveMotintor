@@ -1,0 +1,457 @@
+# Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
+"""Event Replay as ONE self-contained HTML file — for debriefs.
+
+The /replay page asks the server for a new map on every slider step, which is
+slow over the web for a long event. This builds the whole event once and hands
+it to the browser: a single .html file carrying the event's data, the player
+and Plotly itself, so it can be opened from a laptop, a USB stick or an email
+attachment and scrubbed or played at any speed with no server at all.
+
+What goes in (all from stored data — nothing here fetches, same rule as
+`app.replay`):
+
+* **Flood gauges.** Every gauge with coordinates is on the map, its class
+  changing as it did. Every gauge that reached Minor or above during the event
+  gets a height graph with its class levels, grouped by river (the BoM
+  catchment), and a cursor that follows the replay clock.
+* **VicEmergency warnings and incidents** from the state journal (burn-area
+  footprints left out — static plan data, not events).
+* **Road disruptions, weather-related only** — the flood wall's rule: the
+  cause is flooding, weather/storm or trees/debris (`roads.data.causes_of`),
+  and the disruption started during the event. A months-old landslip closure
+  or a crash is not part of this event's story.
+* BoM warnings (as a list — they carry no geometry), statewide customers off,
+  and the Intelligence Feed as a click-to-seek timeline.
+
+Time is stored as whole minutes from the event start, and an entity is its
+list of state CHANGES; the browser binary-searches each entity for the moment
+on the clock. That is what keeps the file small and playback instant at
+15 minutes of event time per second (or faster).
+
+Basemap tiles are the one thing the file still needs the internet for; offline
+the map draws on a plain background and every layer still works.
+"""
+import html
+import json
+import logging
+import threading
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+
+from app import database, history, intel_feed, replay
+from app.modules.flood import data as flood_data
+from app.modules.roads import data as roads_data
+from app.pages import fire as fire_page
+
+log = logging.getLogger(__name__)
+
+TEMPLATE = Path(__file__).resolve().parent / "replay_player.html"
+
+# Graph context before the event starts, so a gauge's rise is visible from
+# where it began rather than from the first minute of the tag.
+GRAPH_LEAD_HOURS = 12
+# A gauge silent this long is drawn as not reporting (mirrors
+# replay.STALE_READING_HOURS) instead of frozen at its last class.
+STALE_MINUTES = replay.STALE_READING_HOURS * 60
+# Power KPI rows older than this read as "—" (mirrors replay._latest_timeseries).
+POWER_STALE_MINUTES = 6 * 60
+# Same default as the flood wall: what a flood event closes roads for.
+ROAD_CAUSES = ("flooding", "weather", "trees")
+# ~11 m. Warning polygons are the bulk of the file; a fifth decimal is
+# invisible at any zoom a debrief uses.
+COORD_DECIMALS = 4
+TIMELINE_LIMIT = 400
+
+# Flood classes, most severe = highest number (the player sorts on it).
+NO_DATA, BELOW, MINOR, MODERATE, MAJOR = -1, 0, 1, 2, 3
+_CLASS_OF_PRIORITY = {1: MAJOR, 2: MODERATE, 3: MINOR, 4: BELOW}
+
+CACHE_SECONDS = 600
+_cache = {}
+_cache_lock = threading.Lock()
+
+
+def _minutes(when, start):
+    return int(round((when - start).total_seconds() / 60.0))
+
+
+def _dt(value):
+    parsed = pd.to_datetime(value, errors="coerce")
+    return None if pd.isna(parsed) else parsed.to_pydatetime().replace(tzinfo=None)
+
+
+def _text(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    s = str(value).strip()
+    return s if s and s.lower() not in ("nan", "none") else None
+
+
+def _num(value):
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if pd.isna(f) else f
+
+
+def _round_coords(obj):
+    if isinstance(obj, float):
+        return round(obj, COORD_DECIMALS)
+    if isinstance(obj, list):
+        return [_round_coords(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _round_coords(v) for k, v in obj.items()}
+    return obj
+
+
+class _Geoms:
+    """De-duplicated geometry table: a warning area that is reissued twenty
+    times with the same polygon is stored once."""
+
+    def __init__(self):
+        self.items, self._index = [], {}
+
+    def add(self, raw):
+        if not raw:
+            return None
+        try:
+            geom = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(geom, dict) or not geom.get("type"):
+            return None
+        geom = _round_coords(geom)
+        key = json.dumps(geom, sort_keys=True, separators=(",", ":"))
+        if key not in self._index:
+            self._index[key] = len(self.items)
+            self.items.append(geom)
+        return self._index[key]
+
+
+# --------------------------------------------------------------------------- #
+# Journal sources
+# --------------------------------------------------------------------------- #
+def _journal(source, start, end):
+    """Each entity's state at the start, plus every change during the event —
+    everything the player needs to answer "as at T" for any T in the window."""
+    before = history.state_at(source, start)
+    during = history.states_between(source, start + timedelta(seconds=1), end)
+    frames = [f for f in (before, during) if f is not None and not f.empty]
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df["_ts"] = pd.to_datetime(df["effective_ts"], errors="coerce")
+    df = df.dropna(subset=["_ts"]).sort_values(["entity_key", "_ts"], kind="stable")
+    return df
+
+
+def _row_dict(row):
+    return {k: (None if (isinstance(v, float) and pd.isna(v)) else v)
+            for k, v in row.items()}
+
+
+def _fire_hover(r, kind):
+    title = _text(r.get("location")) or _text(r.get("headline")) or "Incident"
+    bits = [b for b in (kind, _text(r.get("category2")) or _text(r.get("event")),
+                        _text(r.get("status")), _text(r.get("size"))) if b]
+    return "<b>%s</b><br>%s" % (html.escape(title), html.escape(" · ".join(bits)))
+
+
+def fire_entities(start, end, geoms):
+    """VicEmergency warnings + incidents as change lists.
+
+    State row: [t, active, kind, lat, lon, geom index, hover]."""
+    df = _journal(history.FIRE, start, end)
+    if df.empty:
+        return []
+    out = []
+    for key, grp in df.groupby("entity_key", sort=False):
+        states = []
+        for _, row in grp.iterrows():
+            r = _row_dict(row)
+            if r.get("feed_type") == "burn-area":
+                states = []
+                break
+            kind = fire_page._kind(r)
+            states.append([
+                max(_minutes(row["_ts"].to_pydatetime(), start), -1),
+                1 if r.get("active") == 1 else 0, kind,
+                _num(r.get("latitude")), _num(r.get("longitude")),
+                geoms.add(r.get("geometry")), _fire_hover(r, kind)])
+        if states:
+            out.append({"k": str(key), "s": _collapse(states)})
+    return out
+
+
+def _collapse(states):
+    """Clamp everything before the start to t=-1 and keep only the last such
+    state; later states keep their order."""
+    pre = [s for s in states if s[0] < 0]
+    post = [s for s in states if s[0] >= 0]
+    return (pre[-1:] if pre else []) + post
+
+
+def road_entities(start, end, geoms, causes=ROAD_CAUSES):
+    """Weather-related road disruptions that STARTED during the event.
+
+    State row: [t, active, closure, lat, lon, geom index, hover]."""
+    df = _journal(history.ROADS, start, end)
+    if df.empty:
+        return []
+    wanted = set(causes)
+    out = []
+    for key, grp in df.groupby("entity_key", sort=False):
+        first = grp.iloc[0]
+        began = _dt(first.get("start_time")) or first["_ts"].to_pydatetime()
+        if began < start or began > end:
+            continue
+        rows = [_row_dict(r) for _, r in grp.iterrows()]
+        if not any(roads_data.causes_of(r.get("disruption_type"),
+                                        r.get("description")) & wanted
+                   for r in rows):
+            continue
+        states = []
+        for (_, row), r in zip(grp.iterrows(), rows):
+            closure = 1 if r.get("is_closure") in (1, True, "1") else 0
+            road = _text(r.get("road_name")) or _text(r.get("location")) or "Road"
+            bits = [b for b in (_text(r.get("disruption_type")),
+                                "Closed" if closure else _text(r.get("lanes_affected")),
+                                _text(r.get("location")), _text(r.get("lga"))) if b]
+            hover = "<b>%s</b><br>%s" % (html.escape(road),
+                                         html.escape(" · ".join(bits)))
+            states.append([
+                max(_minutes(row["_ts"].to_pydatetime(), start), -1),
+                1 if r.get("active") == 1 else 0, closure,
+                _num(r.get("latitude")), _num(r.get("longitude")),
+                geoms.add(r.get("geometry")), hover])
+        out.append({"k": str(key), "s": _collapse(states)})
+    return out
+
+
+def bom_warnings(start, end):
+    """BoM warnings as [title, [[t, active], ...]] — no geometry, so a list."""
+    df = _journal(history.WEATHER_WARNING, start, end)
+    if df.empty:
+        return []
+    out = []
+    for _, grp in df.groupby("entity_key", sort=False):
+        title = None
+        states = []
+        for _, row in grp.iterrows():
+            r = _row_dict(row)
+            title = _text(r.get("title")) or _text(r.get("short_title")) or title
+            states.append([max(_minutes(row["_ts"].to_pydatetime(), start), -1),
+                           1 if r.get("active") == 1 else 0])
+        out.append({"title": title or "BoM warning", "s": _collapse(states)})
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Flood gauges
+# --------------------------------------------------------------------------- #
+def _classify(height, levels):
+    return _CLASS_OF_PRIORITY[flood_data.classify_station(height, levels)[0]]
+
+
+def flood_gauges(start, end):
+    """Every gauge with a reading in the window.
+
+    Each carries its class CHANGES for the map (a gauge that never moves is two
+    numbers, not two thousand), and — only if it reached Minor during the event
+    — its readings for the graph."""
+    lead = start - timedelta(hours=GRAPH_LEAD_HOURS)
+    df = database.read_df(
+        "SELECT station_name, catchment, height_m, timestamp "
+        "FROM flood_observations WHERE timestamp >= ? AND timestamp <= ? "
+        "ORDER BY timestamp",
+        [lead.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")])
+    if df.empty:
+        return []
+    df["height_m"] = pd.to_numeric(df["height_m"], errors="coerce")
+    df["ts"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df.dropna(subset=["height_m", "ts"])
+    df["key"] = df["station_name"].astype(str).str.strip().str.lower()
+    levels = flood_data.load_flood_levels()
+    coords = database.read_df(
+        "SELECT station_key, latitude, longitude FROM gauge_coords "
+        "WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+    coords = {r["station_key"]: (float(r["latitude"]), float(r["longitude"]))
+              for _, r in coords.iterrows()}
+
+    out = []
+    for key, grp in df.groupby("key", sort=False):
+        grp = grp.drop_duplicates(subset=["ts"], keep="last")
+        lv = levels.get(key)
+        minutes = [_minutes(t.to_pydatetime(), start) for t in grp["ts"]]
+        heights = [round(float(h), 3) for h in grp["height_m"]]
+        classes = [_classify(h, lv) for h in heights]
+        in_event = [c for m, c in zip(minutes, classes) if m >= 0]
+        peak = max(in_event) if in_event else NO_DATA
+        # The class carried into the event is the last reading before the
+        # start, if it is recent enough to count.
+        changes, last_cls, last_t = [], None, None
+        for m, c in zip(minutes, classes):
+            if last_t is not None and m - last_t > STALE_MINUTES:
+                changes.append([last_t + STALE_MINUTES, NO_DATA])
+                last_cls = NO_DATA
+            if c != last_cls:
+                changes.append([m, c])
+                last_cls = c
+            last_t = m
+        if last_t is not None and _minutes(end, start) - last_t > STALE_MINUTES:
+            changes.append([last_t + STALE_MINUTES, NO_DATA])
+        pre = [c for c in changes if c[0] < 0]
+        changes = ([[-1, pre[-1][1]]] if pre else []) + [c for c in changes if c[0] >= 0]
+        if not changes:
+            continue
+        latlon = coords.get(key)
+        name = str(grp["station_name"].iloc[-1]).strip()
+        catchment = grp["catchment"].dropna()
+        gauge = {
+            "name": name,
+            "river": (str(catchment.mode().iloc[0]).strip()
+                      if not catchment.empty else "Other gauges"),
+            "lat": latlon[0] if latlon else None,
+            "lon": latlon[1] if latlon else None,
+            "lv": [_num(lv.get("minor")), _num(lv.get("moderate")),
+                   _num(lv.get("major"))] if lv else [None, None, None],
+            "peak": peak,
+            "c": changes,
+        }
+        if peak >= MINOR:
+            gauge["r"] = [[m, h] for m, h in zip(minutes, heights)]
+            peak_h = max(h for m, h in zip(minutes, heights) if m >= 0)
+            gauge["peak_h"] = peak_h
+            gauge["peak_t"] = next(m for m, h in zip(minutes, heights)
+                                   if m >= 0 and h == peak_h)
+        out.append(gauge)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Series + timeline
+# --------------------------------------------------------------------------- #
+def power_series(start, end):
+    lead = start - timedelta(minutes=POWER_STALE_MINUTES)
+    df = database.read_df(
+        "SELECT timestamp, customers_off FROM power_timeseries "
+        "WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+        [lead.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")])
+    out = []
+    for _, r in df.iterrows():
+        when, value = _dt(r["timestamp"]), _num(r["customers_off"])
+        if when is not None and value is not None:
+            out.append([_minutes(when, start), int(value)])
+    return out
+
+
+def timeline(start, end):
+    out = []
+    for e in replay.timeline(start, end, limit=TIMELINE_LIMIT):
+        if e.get("ts") is None:
+            continue
+        out.append({"t": _minutes(e["ts"], start), "sev": e["severity"],
+                    "label": e["severity_label"], "colour": e["colour"],
+                    "hazard": e.get("hazard_label"), "h": e["headline"],
+                    "lat": e.get("latitude"), "lon": e.get("longitude")})
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Package + render
+# --------------------------------------------------------------------------- #
+def _section(name, fn, default):
+    """One broken source costs only its own layer, never the whole export."""
+    try:
+        return fn()
+    except Exception:
+        log.exception("Replay export: %s unavailable", name)
+        return default
+
+
+def build_package(tag_id):
+    """The event as one JSON-able dict, or None for an unknown tag."""
+    window = replay.event_window(tag_id)
+    if not window:
+        return None
+    start, end = window["start"], window["end"]
+    geoms = _Geoms()
+    package = {
+        "meta": {
+            "name": window["name"],
+            "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
+            "end": end.strftime("%Y-%m-%dT%H:%M:%S"),
+            "minutes": max(_minutes(end, start), 1),
+            "ongoing": window["ongoing"],
+            "generated": datetime.now().strftime("%d %b %Y %H:%M"),
+            "coverage": replay.coverage_note(start),
+            "road_causes": [roads_data.CAUSE_LABELS[c] for c in ROAD_CAUSES],
+            "stale_minutes": STALE_MINUTES,
+            "power_stale_minutes": POWER_STALE_MINUTES,
+        },
+        "colours": dict(fire_page.KIND_COLOURS),
+        "fire": _section("fire", lambda: fire_entities(start, end, geoms), []),
+        "roads": _section("roads", lambda: road_entities(start, end, geoms), []),
+        "bom": _section("bom", lambda: bom_warnings(start, end), []),
+        "gauges": _section("flood", lambda: flood_gauges(start, end), []),
+        "power": _section("power", lambda: power_series(start, end), []),
+        "timeline": _section("timeline", lambda: timeline(start, end), []),
+    }
+    package["geoms"] = geoms.items
+    return package
+
+
+def _plotly_js():
+    from plotly.offline import get_plotlyjs
+    return get_plotlyjs()
+
+
+def _safe_json(obj):
+    """JSON that cannot close the <script> it sits in."""
+    text = json.dumps(obj, separators=(",", ":"), ensure_ascii=False, default=str)
+    return (text.replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("&", "\\u0026").replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029"))
+
+
+def render_html(package):
+    page = TEMPLATE.read_text(encoding="utf-8")
+    title = html.escape("Replay — %s" % package["meta"]["name"])
+    # Plain replace, in this order: the data goes in LAST so no token inside
+    # it (or inside plotly.js) can ever be substituted.
+    page = page.replace("{{TITLE}}", title)
+    page = page.replace("{{PLOTLY_JS}}", _plotly_js().replace("</script", "<\\/script"))
+    return page.replace("{{REPLAY_DATA}}", _safe_json(package))
+
+
+def filename(package):
+    safe = "".join(c if c.isalnum() or c in "-_" else "_"
+                   for c in package["meta"]["name"]).strip("_") or "event"
+    return "replay_%s_%s.html" % (safe[:60], package["meta"]["start"][:10])
+
+
+def export(tag_id):
+    """(filename, html) for an event, cached briefly so a debrief room all
+    pressing Download does not rebuild it each time. None for an unknown tag."""
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(tag_id)
+        if hit and now - hit[0] < CACHE_SECONDS:
+            return hit[1]
+        package = build_package(tag_id)
+        if package is None:
+            return None
+        result = (filename(package), render_html(package))
+        for key in [k for k, v in _cache.items() if now - v[0] >= CACHE_SECONDS]:
+            del _cache[key]
+        _cache[tag_id] = (now, result)
+        return result
+
+
+def clear_cache():
+    with _cache_lock:
+        _cache.clear()

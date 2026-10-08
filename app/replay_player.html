@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<!-- Passive Monitor event replay. Self-contained: the event data, the player
+     and Plotly are all in this file. Only the basemap tiles need internet. -->
+<style>
+:root {
+  --bg: #0f1419; --panel: #182029; --panel2: #1f2933; --text: #e6edf3;
+  --muted: #8b98a5; --border: #2d3a46; --accent: #4ea1ff; --on-accent: #fff;
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f8; --panel: #ffffff; --panel2: #eef2f6; --text: #1b2733;
+  --muted: #5b6b7a; --border: #d5dde5; --accent: #1f6fd1; --on-accent: #fff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { padding: 14px 16px 6px; display: flex; flex-wrap: wrap; gap: 8px 24px;
+  align-items: baseline; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 16px; margin: 18px 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.wrap { padding: 0 16px 16px; }
+.controls { position: sticky; top: 0; z-index: 20; background: var(--bg);
+  border-bottom: 1px solid var(--border); padding: 8px 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.clock { font-size: 22px; font-weight: 600; min-width: 230px;
+  font-variant-numeric: tabular-nums; }
+button, select { background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+  font: inherit; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--on-accent);
+  border-color: var(--accent); min-width: 84px; font-weight: 600; }
+#scrub { width: 100%; margin: 8px 0 2px; accent-color: var(--accent); height: 22px; }
+.ticks { position: relative; height: 16px; font-size: 11px; color: var(--muted); }
+.ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ticks span:first-child { transform: none; }
+.ticks span.last { transform: translateX(-100%); }
+.ticks i { position: absolute; top: -10px; width: 3px; height: 8px;
+  transform: translateX(-50%); border-radius: 1px; }
+.kpis { display: grid; gap: 8px; margin: 12px 0;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; border-left: 4px solid var(--kc, var(--border)); }
+.kpi b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.main { display: flex; gap: 12px; flex-wrap: wrap; }
+.mapcard { flex: 3 1 560px; min-width: 0; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+#map { height: 66vh; min-height: 380px; }
+.side { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; }
+.panel h3 { margin: 0 0 6px; font-size: 14px; }
+.layers label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0;
+  font-size: 13px; cursor: pointer; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.sw.tri { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.sw.bar { border-radius: 2px; height: 4px; width: 14px; }
+#timeline { max-height: 34vh; overflow-y: auto; }
+.tl { display: block; width: 100%; text-align: left; margin: 0 0 4px; padding: 6px 8px;
+  border-left: 4px solid var(--c); background: var(--panel2); }
+.tl.past { opacity: .55; }
+.tl.now { outline: 2px solid var(--accent); opacity: 1; }
+.tl .when { font-weight: 600; font-size: 12px; }
+.tl .h { font-size: 12px; }
+#bom { max-height: 20vh; overflow-y: auto; font-size: 12px; }
+#bom div { padding: 3px 0; border-bottom: 1px solid var(--border); }
+.river { margin-top: 6px; }
+.gauges { display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.gcard { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px 4px; position: relative; scroll-margin-top: 130px; }
+.gcard.flash { outline: 2px solid var(--accent); }
+.ghead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ghead b { font-size: 13px; }
+.badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+  color: #000; white-space: nowrap; }
+.gnow { font-size: 12px; font-variant-numeric: tabular-nums; }
+.gplot { height: 220px; position: relative; }
+.cursor { position: absolute; top: 6px; bottom: 30px; width: 2px; background: var(--accent);
+  pointer-events: none; display: none; z-index: 5; }
+details { margin: 4px 0; }
+footer { padding: 16px; font-size: 12px; color: var(--muted); }
+kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+@media (max-width: 640px) { .clock { font-size: 18px; min-width: 0; } #map { height: 52vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <span class="muted small" id="window"></span>
+  <span class="muted small" id="generated"></span>
+</header>
+
+<div class="controls">
+  <div class="row">
+    <div class="clock" id="clock">—</div>
+    <button class="primary" id="play" title="Space">▶ Play</button>
+    <button data-step="-60" title="Shift + ←">◀ 1h</button>
+    <button data-step="-15" title="←">◀ 15m</button>
+    <button data-step="15" title="→">15m ▶</button>
+    <button data-step="60" title="Shift + →">1h ▶</button>
+    <label class="small muted">Speed
+      <select id="speed">
+        <option value="1">1 min / sec</option>
+        <option value="5">5 min / sec</option>
+        <option value="15" selected>15 min / sec</option>
+        <option value="30">30 min / sec</option>
+        <option value="60">1 hour / sec</option>
+        <option value="180">3 hours / sec</option>
+      </select></label>
+    <span class="muted small" id="position"></span>
+  </div>
+  <input type="range" id="scrub" min="0" max="1" step="1" value="0" aria-label="Replay time">
+  <div class="ticks" id="ticks"></div>
+</div>
+
+<div class="wrap">
+  <details class="small muted"><summary>About this replay</summary>
+    <p id="coverage"></p>
+    <p>Everything shown is what Passive Monitor had recorded at each moment — nothing
+    is back-dated or inferred. Road disruptions are limited to weather-related causes
+    (<span id="causes"></span>) that started during the event. Flood graphs are shown
+    for every gauge that reached Minor or above during the event, grouped by river
+    basin. Trend lines are observations, not forecasts.</p>
+    <p>Keys: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> 15 min ·
+    <kbd>Shift</kbd>+arrows 1 hour · <kbd>Home</kbd>/<kbd>End</kbd>. Click a gauge on the
+    map to jump to its graph; click a graph or a timeline entry to jump the clock.</p>
+  </details>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="main">
+    <div class="mapcard"><div id="map"></div></div>
+    <div class="side">
+      <div class="panel layers">
+        <h3>Map layers</h3>
+        <div id="layers"></div>
+        <div class="row" style="margin-top:6px">
+          <label class="small muted">Basemap
+            <select id="basemap">
+              <option value="open-street-map">Streets</option>
+              <option value="carto-positron">Light</option>
+              <option value="carto-darkmatter">Dark</option>
+              <option value="white-bg">None (offline)</option>
+            </select></label>
+          <button id="theme" class="small">☀ / ☾</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Intelligence timeline</h3>
+        <label class="small muted"><input type="checkbox" id="follow" checked> follow the clock</label>
+        <div id="timeline"></div>
+      </div>
+      <div class="panel">
+        <h3>BoM warnings current <span class="muted small" id="bomcount"></span></h3>
+        <div id="bom"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Flood gauges that reached Minor or above</h2>
+  <div class="muted small" id="gauge-note"></div>
+  <div id="rivers"></div>
+</div>
+<footer>Passive Monitor event replay · exported <span id="footer-gen"></span> ·
+  sources: BoM, VicEmergency, Transport Victoria (as recorded at the time).</footer>
+
+<script>
+// Opened from disk (file://), Chrome refuses to start a MODULE worker, and
+// Plotly's map engine (MapLibre) runs its tile/geometry work in one — so the
+// map would never load. MapLibre's worker is a single self-contained bundle
+// whose only module syntax is its trailing export, so it is restarted here as
+// an ordinary worker. Served over http(s) nothing is changed.
+(function () {
+  if (location.protocol !== "file:" || !window.Worker) return;
+  var Native = window.Worker;
+  function text(url) { var x = new XMLHttpRequest(); x.open("GET", url, false); x.send(); return x.responseText; }
+  function Shim(url, opts) {
+    if (opts && opts.type === "module" && String(url).indexOf("blob:") === 0) {
+      try {
+        var src = text(String(url)), m = src.match(/^\s*import\s+["'](blob:[^"']+)["'];?\s*$/);
+        if (m) src = text(m[1]);
+        var tail = /export\s*\{[^}]*\}\s*;?(\s*\/\*[\s\S]*?\*\/)?\s*$/;
+        if (tail.test(src) && !/^\s*import[\s{*"']/m.test(src)) {
+          src = src.replace(tail, "$1");
+          return new Native(URL.createObjectURL(new Blob([src], {type: "text/javascript"})));
+        }
+      } catch (e) { /* fall back to the native worker */ }
+    }
+    return new Native(url, opts);
+  }
+  Shim.prototype = Native.prototype;
+  window.Worker = Shim;
+})();
+</script>
+<script>{{PLOTLY_JS}}</script>
+<script type="application/json" id="replay-data">{{REPLAY_DATA}}</script>
+<script>
+(function () {
+"use strict";
+var D = JSON.parse(document.getElementById("replay-data").textContent);
+var M = D.meta, TOTAL = M.minutes;
+var $ = function (id) { return document.getElementById(id); };
+
+// ---- time: every stamp is wall-clock local time stored as minutes from start.
+// Held as "UTC" internally so Plotly's date axes show the same wall clock as
+// the labels, whatever time zone the viewer's computer is in.
+var p = M.start.match(/\d+/g).map(Number);
+var START_MS = Date.UTC(p[0], p[1] - 1, p[2], p[3], p[4], p[5] || 0);
+var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function msAt(m) { return START_MS + m * 60000; }
+function pad(n) { return (n < 10 ? "0" : "") + n; }
+function hhmm(m) { var d = new Date(msAt(m)); return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()); }
+function dayLabel(m) { var d = new Date(msAt(m)); return DAYS[d.getUTCDay()] + " " + d.getUTCDate() + " " + MONTHS[d.getUTCMonth()]; }
+function fmt(m) { return dayLabel(m) + "  " + hhmm(m); }
+function dur(m) {
+  m = Math.max(0, Math.round(m));
+  var d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return d ? d + "d " + h + "h" : h ? h + "h " + pad(mm) + "m" : mm + "m";
+}
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+  return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]; }); }
+
+// Index of the last state at or before t (-1 = not yet).
+function at(states, t) {
+  var lo = 0, hi = states.length - 1, ans = -1;
+  while (lo <= hi) { var mid = (lo + hi) >> 1;
+    if (states[mid][0] <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+  return ans;
+}
+
+// ---- static header ---------------------------------------------------------
+$("title").textContent = M.name;
+document.title = "Replay — " + M.name;
+$("window").textContent = fmt(0) + " → " + fmt(TOTAL) + " (" + dur(TOTAL) + ")" +
+  (M.ongoing ? " · event was still ongoing when exported" : "");
+$("generated").textContent = "Exported " + M.generated;
+$("footer-gen").textContent = M.generated;
+$("coverage").textContent = M.coverage;
+$("causes").textContent = M.road_causes.join(", ").toLowerCase();
+
+// ---- flood classes -----------------------------------------------------------
+var CLS = {3: ["Major", "#d62728"], 2: ["Moderate", "#ff7f0e"], 1: ["Minor", "#e6c700"],
+           0: ["Below Minor", "#5b8def"], "-1": ["No data", "#777"]};
+var C = D.colours;
+var LAYERS = [
+  ["Emergency Warning", "tri", C["Emergency Warning"], true],
+  ["Watch and Act", "tri", C["Watch and Act"], true],
+  ["Advice", "tri", C["Advice"], true],
+  ["Fire", "", C["Fire"], true],
+  ["Other incident", "", C["Other incident"], true],
+  ["Met (weather)", "", C["Met (weather)"], true],
+  ["Road closures", "bar", "#d62728", true],
+  ["Other road disruptions", "bar", "#ff9f1c", true],
+  ["Gauges ≥ Minor", "", "#e6c700", true],
+  ["Gauges below Minor", "", "#5b8def", false]
+];
+var on = {};
+$("layers").innerHTML = LAYERS.map(function (l, i) {
+  on[l[0]] = l[3];
+  return '<label><input type="checkbox" data-layer="' + i + '"' + (l[3] ? " checked" : "") +
+    '><span class="sw ' + l[1] + '" style="background:' + l[2] + '"></span>' + esc(l[0]) + "</label>";
+}).join("");
+$("layers").addEventListener("change", function (e) {
+  var i = e.target.getAttribute("data-layer");
+  if (i !== null) { on[LAYERS[+i][0]] = e.target.checked; drawMap(true); }
+});
+
+// ---- geometry helpers ---------------------------------------------------------
+function polys(g) {
+  if (!g) return [];
+  if (g.type === "Polygon" || g.type === "MultiPolygon") return [g];
+  if (g.type === "GeometryCollection") return [].concat.apply([], (g.geometries || []).map(polys));
+  return [];
+}
+function lines(g) {
+  if (!g) return [];
+  if (g.type === "LineString") return [g.coordinates];
+  if (g.type === "MultiLineString") return g.coordinates;
+  if (g.type === "GeometryCollection") return [].concat.apply([], (g.geometries || []).map(lines));
+  return [];
+}
+function fc(geomIdx) {
+  var feats = [];
+  geomIdx.forEach(function (i) { polys(D.geoms[i]).forEach(function (g) {
+    feats.push({type: "Feature", properties: {}, geometry: g}); }); });
+  return {type: "FeatureCollection", features: feats};
+}
+
+// ---- state at t ---------------------------------------------------------------
+function snapshot(t) {
+  var s = {fire: [], roads: [], gauges: [], bom: [], sig: []};
+  D.fire.forEach(function (e, i) {
+    var k = at(e.s, t); s.sig.push(k);
+    if (k >= 0 && e.s[k][1]) s.fire.push(e.s[k]);
+  });
+  D.roads.forEach(function (e, i) {
+    var k = at(e.s, t); s.sig.push(k);
+    if (k >= 0 && e.s[k][1]) s.roads.push(e.s[k]);
+  });
+  D.gauges.forEach(function (g, i) {
+    var k = at(g.c, t), cls = k >= 0 ? g.c[k][1] : -1;
+    s.sig.push(cls); s.gauges.push(cls);
+  });
+  D.bom.forEach(function (w) {
+    var k = at(w.s, t);
+    if (k >= 0 && w.s[k][1]) s.bom.push(w.title);
+  });
+  s.sig = s.sig.join(",");
+  return s;
+}
+
+// ---- KPIs -----------------------------------------------------------------------
+function kpis(t, s) {
+  var n = {"Emergency Warning": 0, "Watch and Act": 0, "Advice": 0}, inc = 0;
+  s.fire.forEach(function (r) { if (r[2] in n) n[r[2]]++; else inc++; });
+  var g = [0, 0, 0];
+  s.gauges.forEach(function (c) { if (c >= 1) g[0]++; if (c >= 2) g[1]++; if (c >= 3) g[2]++; });
+  var closures = 0; s.roads.forEach(function (r) { if (r[2]) closures++; });
+  var k = at(D.power, t), power = "—";
+  if (k >= 0 && t - D.power[k][0] <= M.power_stale_minutes) power = D.power[k][1].toLocaleString();
+  var cards = [
+    ["Emergency Warnings", n["Emergency Warning"], C["Emergency Warning"]],
+    ["Watch and Act", n["Watch and Act"], C["Watch and Act"]],
+    ["Advice", n["Advice"], C["Advice"]],
+    ["Incidents", inc, C["Other incident"]],
+    ["Gauges ≥ Minor", g[0], "#e6c700"],
+    ["Gauges ≥ Moderate", g[1], "#ff7f0e"],
+    ["Gauges at Major", g[2], "#d62728"],
+    ["Weather road closures", closures, "#d62728"],
+    ["Other weather road disruptions", s.roads.length - closures, "#ff9f1c"],
+    ["BoM warnings", s.bom.length, "#9b59b6"],
+    ["Customers off (power)", power, "#8b98a5"]
+  ];
+  $("kpis").innerHTML = cards.map(function (c) {
+    return '<div class="kpi" style="--kc:' + c[2] + '"><b>' + c[1] + "</b><span>" + esc(c[0]) + "</span></div>";
+  }).join("");
+  $("bomcount").textContent = "(" + s.bom.length + ")";
+  $("bom").innerHTML = s.bom.length ? s.bom.map(function (b) { return "<div>" + esc(b) + "</div>"; }).join("")
+    : '<span class="muted">None current.</span>';
+}
+
+// ---- map ----------------------------------------------------------------------------
+var mapEl = $("map");
+var dark = !(window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
+// Opening view: framed on where this event happened (flooded gauges,
+// warnings, weather roads), falling back to the whole state.
+var HOME = (function () {
+  var la = [], lo = [];
+  D.gauges.forEach(function (g) { if (g.r && g.lat != null) { la.push(g.lat); lo.push(g.lon); } });
+  D.fire.concat(D.roads).forEach(function (e) { e.s.forEach(function (r) {
+    if (r[1] && r[3] != null && (D.roads.indexOf(e) >= 0 || r[2] in {"Emergency Warning": 1, "Watch and Act": 1, "Advice": 1})) {
+      la.push(r[3]); lo.push(r[4]); } }); });
+  if (!la.length) return {center: {lat: -37.0, lon: 145.0}, zoom: 5.6};
+  var s = Math.min.apply(null, la), n = Math.max.apply(null, la);
+  var w = Math.min.apply(null, lo), e = Math.max.apply(null, lo);
+  var px = Math.max(320, mapEl.clientWidth || 800), py = Math.max(320, mapEl.clientHeight || 500);
+  var zx = Math.log2(360 * px / (512 * Math.max(e - w, 0.05) * 1.4));
+  var zy = Math.log2(180 * py / (512 * Math.max(n - s, 0.05) * 1.4));
+  return {center: {lat: (s + n) / 2, lon: (w + e) / 2}, zoom: Math.max(5, Math.min(10, Math.min(zx, zy)))};
+})();
+var view = null, lastSig = null, lastDraw = 0, mapReady = false, focus = null;
+
+function drawMap(force) {
+  var s = current.snap;
+  var sig = s.sig + "|" + JSON.stringify(on) + "|" + $("basemap").value + "|" + dark + "|" + (focus ? focus.t + focus.i : "");
+  if (!force && sig === lastSig) return;
+  var now = performance.now();
+  if (!force && playing && now - lastDraw < 220) { pendingDraw = true; return; }
+  lastSig = sig; lastDraw = now; pendingDraw = false;
+
+  var traces = [], layers = [];
+  // Warnings: area fill + outline, hover on an invisible centre marker; a
+  // warning with no area keeps a visible marker.
+  ["Advice", "Watch and Act", "Emergency Warning"].forEach(function (kind) {
+    if (!on[kind]) return;
+    var rows = s.fire.filter(function (r) { return r[2] === kind; });
+    var withArea = rows.filter(function (r) { return r[5] != null && polys(D.geoms[r[5]]).length; });
+    if (withArea.length) {
+      var src = fc(withArea.map(function (r) { return r[5]; }));
+      layers.push({sourcetype: "geojson", source: src, type: "fill", color: C[kind], opacity: 0.35, below: "traces"});
+      layers.push({sourcetype: "geojson", source: src, type: "line", color: C[kind], line: {width: 2}, below: "traces"});
+    }
+    var pts = rows.filter(function (r) { return r[3] != null; });
+    if (!pts.length) return;
+    // Legend-only swatch: the hover markers of area warnings are invisible,
+    // and a legend drawn from them would be a faded ghost.
+    traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind,
+      lat: [null], lon: [null], hoverinfo: "skip", marker: {size: 11, color: C[kind]}});
+    traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind, showlegend: false,
+      lat: pts.map(function (r) { return r[3]; }), lon: pts.map(function (r) { return r[4]; }),
+      text: pts.map(function (r) { return r[6]; }), hoverinfo: "text",
+      marker: {size: pts.map(function (r) { return withArea.indexOf(r) >= 0 ? 16 : 11; }), color: C[kind],
+        opacity: pts.map(function (r) { return withArea.indexOf(r) >= 0 ? 0 : 1; })}});
+  });
+  // Incidents.
+  ["Fire", "Other incident", "Met (weather)"].forEach(function (kind) {
+    if (!on[kind]) return;
+    var rows = s.fire.filter(function (r) { return r[2] === kind; });
+    var areas = rows.filter(function (r) { return r[5] != null; }).map(function (r) { return r[5]; });
+    if (areas.length) layers.push({sourcetype: "geojson", source: fc(areas), type: "fill", color: C[kind], opacity: 0.2, below: "traces"});
+    var pts = rows.filter(function (r) { return r[3] != null; });
+    if (pts.length) traces.push({type: "scattermap", mode: "markers", name: kind,
+      lat: pts.map(function (r) { return r[3]; }), lon: pts.map(function (r) { return r[4]; }),
+      text: pts.map(function (r) { return r[6]; }), hoverinfo: "text", marker: {size: 10, color: C[kind]}});
+  });
+  // Roads: the impacted segment as a line; a point only when there is no line.
+  [[1, "Road closures", "#d62728", 5], [0, "Other road disruptions", "#ff9f1c", 3]].forEach(function (cfg) {
+    if (!on[cfg[1]]) return;
+    var rows = s.roads.filter(function (r) { return r[2] === cfg[0]; });
+    var la = [], lo = [], tx = [], pla = [], plo = [], ptx = [];
+    rows.forEach(function (r) {
+      var segs = r[5] != null ? lines(D.geoms[r[5]]) : [];
+      if (segs.length) segs.forEach(function (seg) {
+        seg.forEach(function (c) { lo.push(c[0]); la.push(c[1]); tx.push(r[6]); });
+        lo.push(null); la.push(null); tx.push(null);
+      });
+      else if (r[3] != null) { pla.push(r[3]); plo.push(r[4]); ptx.push(r[6]); }
+    });
+    if (la.length) traces.push({type: "scattermap", mode: "lines", name: cfg[1], lat: la, lon: lo, text: tx,
+      hoverinfo: "text", line: {width: cfg[3], color: cfg[2]}});
+    if (pla.length) traces.push({type: "scattermap", mode: "markers", name: cfg[1], showlegend: !la.length,
+      lat: pla, lon: plo, text: ptx, hoverinfo: "text", marker: {size: 9, color: cfg[2]}});
+  });
+  // Flood gauges, below-Minor first so the flooding ones sit on top.
+  [[0, 6], [1, 11], [2, 12], [3, 13]].forEach(function (cfg) {
+    var cls = cfg[0];
+    if (cls === 0 ? !on["Gauges below Minor"] : !on["Gauges ≥ Minor"]) return;
+    var idx = [];
+    D.gauges.forEach(function (g, i) { if (g.lat != null && s.gauges[i] === cls) idx.push(i); });
+    if (!idx.length) return;
+    traces.push({type: "scattermap", mode: "markers", name: "Gauge: " + CLS[cls][0],
+      lat: idx.map(function (i) { return D.gauges[i].lat; }), lon: idx.map(function (i) { return D.gauges[i].lon; }),
+      customdata: idx, hoverinfo: "text",
+      text: idx.map(function (i) { var g = D.gauges[i], h = heightAt(g, current.t);
+        return "<b>" + esc(g.name) + "</b><br>" + CLS[cls][0] + (h != null ? " · " + h.toFixed(2) + " m" : "") +
+          (g.r ? "<br><i>click for graph</i>" : ""); }),
+      marker: {size: cfg[1], color: CLS[cls][1]}});
+  });
+  if (focus && focus.lat != null) traces.push({type: "scattermap", mode: "markers", name: "Selected entry",
+    lat: [focus.lat], lon: [focus.lon], hoverinfo: "skip", showlegend: false,
+    marker: {size: 30, color: "#4ea1ff", opacity: 0.45}});
+  if (!traces.length) traces.push({type: "scattermap", lat: [], lon: [], showlegend: false});
+
+  var style = $("basemap").value;
+  var layout = {
+    margin: {l: 0, r: 0, t: 0, b: 0}, paper_bgcolor: "rgba(0,0,0,0)",
+    font: {color: dark ? "#e6edf3" : "#1b2733"}, showlegend: true,
+    legend: {x: 0.01, y: 0.99, bgcolor: dark ? "rgba(15,20,25,.75)" : "rgba(255,255,255,.8)", font: {size: 11}},
+    hoverlabel: {align: "left"},
+    map: {style: style, center: (view || HOME).center, zoom: (view || HOME).zoom, layers: layers}
+  };
+  commitMap(traces, layout);
+}
+
+// One map draw at a time. MapLibre rejects a second update while the first is
+// still loading its style ("Style is not done loading") and the map then never
+// draws, so a request arriving mid-draw is parked and the LATEST state drawn
+// when the current one finishes.
+var mapBusy = false, mapQueued = false;
+function commitMap(traces, layout) {
+  if (mapBusy) { mapQueued = true; lastSig = null; return; }
+  mapBusy = true;
+  var cfg = {responsive: true, scrollZoom: true, displaylogo: false,
+    modeBarButtonsToRemove: ["select2d", "lasso2d"]};
+  var first = !mapReady;
+  var done = function () {
+    mapBusy = false;
+    if (first) bindMap();
+    if (mapQueued) { mapQueued = false; drawMap(true); }
+  };
+  Promise.resolve(first ? Plotly.newPlot(mapEl, traces, layout, cfg)
+                        : Plotly.react(mapEl, traces, layout, cfg)).then(done, done);
+  mapReady = true;
+}
+
+function bindMap() {
+    mapEl.on("plotly_relayout", function () {
+      var m = mapEl._fullLayout && mapEl._fullLayout.map;
+      if (m) view = {center: {lat: m.center.lat, lon: m.center.lon}, zoom: m.zoom};
+    });
+    mapEl.on("plotly_click", function (ev) {
+      var pt = ev.points && ev.points[0];
+      if (pt && pt.customdata != null && D.gauges[pt.customdata].r) showGauge(pt.customdata);
+    });
+}
+
+function heightAt(g, t) {
+  if (!g.r) return null;
+  var k = at(g.r, t);
+  return k >= 0 && t - g.r[k][0] <= M.stale_minutes ? g.r[k][1] : null;
+}
+
+// ---- flood graphs, grouped by river ---------------------------------------------
+var flooded = [];
+D.gauges.forEach(function (g, i) { if (g.r) flooded.push(i); });
+var rivers = {};
+flooded.forEach(function (i) { var r = D.gauges[i].river; (rivers[r] = rivers[r] || []).push(i); });
+var riverNames = Object.keys(rivers).sort(function (a, b) {
+  var pa = Math.max.apply(null, rivers[a].map(function (i) { return D.gauges[i].peak; }));
+  var pb = Math.max.apply(null, rivers[b].map(function (i) { return D.gauges[i].peak; }));
+  return pb - pa || a.localeCompare(b);
+});
+$("gauge-note").textContent = flooded.length
+  ? flooded.length + " gauge" + (flooded.length === 1 ? "" : "s") + " on " + riverNames.length +
+    " river" + (riverNames.length === 1 ? "" : "s") + " — most severe river first. The blue line follows the replay clock."
+  : "No gauge reached Minor during this event.";
+var cards = {};
+$("rivers").innerHTML = riverNames.map(function (r) {
+  var ids = rivers[r].sort(function (a, b) { return D.gauges[b].peak - D.gauges[a].peak ||
+    D.gauges[a].name.localeCompare(D.gauges[b].name); });
+  var peak = Math.max.apply(null, ids.map(function (i) { return D.gauges[i].peak; }));
+  return '<div class="river"><h2><span class="badge" style="background:' + CLS[peak][1] + '">' + CLS[peak][0] +
+    "</span> " + esc(r) + ' <span class="muted small">' + ids.length + " gauge" + (ids.length === 1 ? "" : "s") +
+    '</span></h2><div class="gauges">' + ids.map(function (i) {
+      var g = D.gauges[i];
+      return '<div class="gcard" id="g' + i + '"><div class="ghead"><b>' + esc(g.name) + "</b>" +
+        '<span class="badge" style="background:' + CLS[g.peak][1] + '">Peak ' + CLS[g.peak][0] + "</span></div>" +
+        '<div class="muted small">Peak ' + g.peak_h.toFixed(2) + " m at " + fmt(g.peak_t) +
+        ' · <span class="gnow" id="gn' + i + '"></span></div>' +
+        '<div class="gplot" id="gp' + i + '"><div class="cursor" id="gc' + i + '"></div></div></div>';
+    }).join("") + "</div></div>";
+}).join("");
+
+function plotGauge(i) {
+  if (cards[i]) return;
+  var g = D.gauges[i], el = $("gp" + i);
+  var x = g.r.map(function (r) { return msAt(r[0]); }), y = g.r.map(function (r) { return r[1]; });
+  var shapes = [], ann = [];
+  [[0, "Minor", "#e6c700"], [1, "Moderate", "#ff7f0e"], [2, "Major", "#d62728"]].forEach(function (lv) {
+    var v = g.lv[lv[0]];
+    if (v == null) return;
+    shapes.push({type: "line", xref: "paper", x0: 0, x1: 1, y0: v, y1: v, line: {color: lv[2], width: 1.5, dash: "dash"}});
+    ann.push({xref: "paper", x: 1, y: v, text: lv[1] + " " + v.toFixed(2), showarrow: false,
+      xanchor: "right", yanchor: "bottom", font: {size: 10, color: lv[2]}});
+  });
+  // The event window, shaded, so the lead-in reads as context.
+  shapes.push({type: "rect", xref: "x", yref: "paper", x0: msAt(0), x1: msAt(TOTAL), y0: 0, y1: 1,
+    fillcolor: dark ? "rgba(78,161,255,0.06)" : "rgba(31,111,209,0.06)", line: {width: 0}, layer: "below"});
+  var lvs = g.lv.filter(function (v) { return v != null; });
+  var lo = Math.min.apply(null, y.concat(lvs.slice(0, 1))), hi = Math.max.apply(null, y.concat(lvs));
+  var padY = Math.max(0.1, (hi - lo) * 0.08);
+  Plotly.newPlot(el, [{x: x, y: y, type: "scatter", mode: "lines", line: {color: dark ? "#9cc9ff" : "#1f6fd1", width: 2},
+    hovertemplate: "%{x|%a %d %b %H:%M}<br>%{y:.2f} m<extra></extra>"}], {
+    margin: {l: 44, r: 8, t: 6, b: 30}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: {color: dark ? "#c9d4df" : "#33414e", size: 11}, showlegend: false, shapes: shapes, annotations: ann,
+    xaxis: {type: "date", gridcolor: dark ? "#2d3a46" : "#e3e8ee", tickformat: "%d %b\n%H:%M"},
+    yaxis: {title: {text: "m"}, gridcolor: dark ? "#2d3a46" : "#e3e8ee", range: [lo - padY, hi + padY]}
+  }, {displayModeBar: false, responsive: true});
+  el.on("plotly_click", function (ev) {
+    var pt = ev.points && ev.points[0];
+    if (pt) seek(Math.round((new Date(pt.x).getTime() - START_MS) / 60000), true);
+  });
+  cards[i] = true;
+  moveCursor(i);
+}
+var observer = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+  es.forEach(function (e) { if (e.isIntersecting) plotGauge(+e.target.id.slice(2)); });
+}, {rootMargin: "300px"}) : null;
+flooded.forEach(function (i) { if (observer) observer.observe($("gp" + i)); else plotGauge(i); });
+
+function moveCursor(i) {
+  var g = D.gauges[i], h = heightAt(g, current.t), k = at(g.c, current.t);
+  var cls = k >= 0 ? g.c[k][1] : -1;
+  $("gn" + i).innerHTML = h != null ? "Now " + h.toFixed(2) + ' m <span class="badge" style="background:' +
+    CLS[cls][1] + '">' + CLS[cls][0] + "</span>" : "Now: no reading";
+  if (!cards[i]) return;
+  var el = $("gp" + i), xa = el._fullLayout && el._fullLayout.xaxis, cur = $("gc" + i);
+  if (!xa) return;
+  var px = xa.l2p(msAt(current.t));
+  if (px < 0 || px > xa._length) { cur.style.display = "none"; return; }
+  cur.style.display = "block";
+  cur.style.left = (xa._offset + px - 1) + "px";
+}
+function showGauge(i) {
+  var c = $("g" + i);
+  c.scrollIntoView({behavior: "smooth", block: "center"});
+  c.classList.add("flash");
+  setTimeout(function () { c.classList.remove("flash"); }, 2000);
+}
+
+// ---- timeline -----------------------------------------------------------------------
+$("timeline").innerHTML = D.timeline.length ? D.timeline.map(function (e, i) {
+  return '<button class="tl" id="tl' + i + '" data-i="' + i + '" style="--c:' + e.colour + '"><div class="when">' +
+    fmt(e.t) + " · " + esc(e.label) + (e.hazard ? " · " + esc(e.hazard) : "") + '</div><div class="h">' +
+    esc(e.h) + "</div></button>";
+}).join("") : '<span class="muted small">No Intelligence Feed entries during this event.</span>';
+$("timeline").addEventListener("click", function (ev) {
+  var b = ev.target.closest(".tl");
+  if (!b) return;
+  var e = D.timeline[+b.getAttribute("data-i")];
+  focus = {t: e.t, i: b.getAttribute("data-i"), lat: e.lat, lon: e.lon};
+  if (e.lat != null) view = {center: {lat: e.lat, lon: e.lon}, zoom: Math.max(view ? view.zoom : 0, 8)};
+  seek(e.t, true);
+});
+var tlTimes = D.timeline.map(function (e) { return [e.t]; }), lastTl = -2;
+function markTimeline(t) {
+  var k = at(tlTimes, t);
+  if (k === lastTl) return;
+  D.timeline.forEach(function (e, i) {
+    var b = $("tl" + i); b.classList.toggle("past", i < k); b.classList.toggle("now", i === k);
+  });
+  lastTl = k;
+  if (k >= 0 && $("follow").checked) {
+    var b = $("tl" + k), box = $("timeline");
+    box.scrollTop = b.offsetTop - box.offsetTop - box.clientHeight / 3;
+  }
+}
+
+// ---- scrub bar ticks: timeline entries as coloured marks + time labels ------------------
+(function () {
+  var html = "", n = 6;
+  for (var j = 0; j <= n; j++) {
+    var m = Math.round(TOTAL * j / n);
+    html += '<span' + (j === n ? ' class="last"' : "") + ' style="left:' + (100 * j / n) + '%">' + (TOTAL > 1440 ? dayLabel(m) + " " : "") + hhmm(m) + "</span>";
+  }
+  D.timeline.forEach(function (e) {
+    if (e.sev >= 2 && e.t >= 0 && e.t <= TOTAL)
+      html += '<i title="' + esc(e.h) + '" style="left:' + (100 * e.t / TOTAL) + '%;background:' + e.colour + '"></i>';
+  });
+  $("ticks").innerHTML = html;
+})();
+
+// ---- clock + playback ------------------------------------------------------------------
+var scrub = $("scrub");
+scrub.max = TOTAL;
+var current = {t: 0, snap: null}, playing = false, pendingDraw = false, lastFrame = 0;
+
+function render() {
+  var t = current.t;
+  current.snap = snapshot(t);
+  $("clock").textContent = fmt(t);
+  $("position").textContent = dur(t) + " into the event of " + dur(TOTAL);
+  scrub.value = Math.round(t);
+  kpis(t, current.snap);
+  markTimeline(t);
+  flooded.forEach(moveCursor);
+  drawMap(false);
+}
+function seek(t, stop) {
+  if (stop) setPlaying(false);
+  current.t = Math.max(0, Math.min(TOTAL, t));
+  render();
+}
+function setPlaying(v) {
+  playing = v && current.t < TOTAL;
+  $("play").textContent = playing ? "❚❚ Pause" : "▶ Play";
+  if (playing) { lastFrame = performance.now(); requestAnimationFrame(frame); }
+  else if (pendingDraw) drawMap(true);
+}
+function frame(now) {
+  if (!playing) return;
+  var dt = Math.min(0.25, (now - lastFrame) / 1000);   // a background tab never leaps
+  lastFrame = now;
+  current.t = Math.min(TOTAL, current.t + dt * Number($("speed").value));
+  render();
+  if (pendingDraw) drawMap(false);
+  if (current.t >= TOTAL) { setPlaying(false); drawMap(true); return; }
+  requestAnimationFrame(frame);
+}
+$("play").addEventListener("click", function () {
+  if (!playing && current.t >= TOTAL) current.t = 0;
+  setPlaying(!playing);
+});
+Array.prototype.forEach.call(document.querySelectorAll("[data-step]"), function (b) {
+  b.addEventListener("click", function () { seek(current.t + Number(b.getAttribute("data-step")), false); });
+});
+scrub.addEventListener("input", function () { seek(Number(scrub.value), false); });
+$("basemap").addEventListener("change", function () { drawMap(true); });
+
+// Basemap tiles are the one thing this file fetches. A map whose tile style
+// cannot load never finishes loading at all, so it starts on the tile-free
+// background and moves to streets only once a tile has actually arrived —
+// offline, the replay keeps working on the plain background.
+var TILE_PROBE = "https://tile.openstreetmap.org/0/0/0.png";
+function probeTiles() {
+  var img = new Image(), settled = false;
+  var fail = function () {
+    if (settled) return; settled = true;
+    Array.prototype.forEach.call($("basemap").options, function (o) {
+      if (o.value !== "white-bg") { o.disabled = true; o.textContent += " (offline)"; } });
+  };
+  img.onload = function () {
+    if (settled) return; settled = true;
+    $("basemap").value = dark ? "carto-darkmatter" : "open-street-map";
+    drawMap(true);
+  };
+  img.onerror = fail;
+  setTimeout(fail, 8000);
+  img.src = TILE_PROBE + "?" + Date.now();
+}
+$("theme").addEventListener("click", function () {
+  dark = !dark; applyTheme();
+  Object.keys(cards).forEach(function (i) { Plotly.purge($("gp" + i)); delete cards[i]; plotGauge(+i); });
+  drawMap(true);
+});
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  var b = $("basemap").value;
+  if (b === "open-street-map" || b === "carto-darkmatter")
+    $("basemap").value = dark ? "carto-darkmatter" : "open-street-map";
+}
+document.addEventListener("keydown", function (e) {
+  if (e.target.tagName === "INPUT" && e.target.type !== "checkbox" && e.target.type !== "range") return;
+  if (e.target.tagName === "SELECT") return;
+  var step = e.shiftKey ? 60 : 15;
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); seek(current.t + step, false); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); seek(current.t - step, false); }
+  else if (e.key === "Home") { e.preventDefault(); seek(0, true); }
+  else if (e.key === "End") { e.preventDefault(); seek(TOTAL, true); }
+});
+
+$("basemap").value = "white-bg";
+applyTheme();
+render();
+probeTiles();
+})();
+</script>
+</body>
+</html>
