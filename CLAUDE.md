@@ -992,6 +992,18 @@ what should I be watching* — and is useful **on its own, before anyone generat
   profile isolation, a failed start cleaning up and carrying the log pointer, driver pruning, and
   the launcher refusing rather than crashing with no display. No real browser is started.
 
+## CPU on the VPS — profiler + idle Chrome (2026-10-08)
+- **`/admin/cpu?seconds=N`** (admin only, `app/cpu_profile.py`): samples every thread for N s
+  (default 10, max 30) and returns plain text with per-thread CPU% from `/proc/self/task/<tid>/stat`,
+  plus the most common stacks of each busy thread. Nothing runs until it is requested. Python
+  pinned at ~100% is the GIL ceiling, so `top` can't say which collector or callback is to blame;
+  this does. Waitress request threads show the Dash callback they are running.
+- **Power Chrome idles between cycles.** The dashboard tab is set to `about:blank` once it has been
+  read (`_park_dashboard`). Left loaded, it kept polling and software-repainting under Xvfb for the
+  whole interval. The session tab is never navigated. chromedriver's default
+  `--disable-background-timer-throttling` is removed via `excludeSwitches`, so Chrome can throttle
+  the parked session tab in the background.
+
 ## CFA Pager module (built 2026-09-24)
 - **Source:** `mazzanet.net.au/cfa/pager-cfa.php`, scraped **with the site owner's permission**. One
   plain GET per cycle (`pager.interval_minutes`=4, `pager.autostart`=true), identifying User-Agent,
