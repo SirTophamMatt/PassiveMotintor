@@ -436,16 +436,21 @@ def register_callbacks(app):
         roads_c = roads_data.latest_counts()
         storm_c = storm_data.latest_counts()
         power_t = power_data.latest_totals() or {}
-        warnings = fire_c["emergency"] + fire_c["watch_act"] + fire_c["advice"]
         customers_off = power_t.get("customers_off")
         flooding = flood_data.flooding_station_count()
 
         kpis = [
             ui.kpi_card("Active Fires", str(fire_c["active_fires"]),
                         "#ff5722" if fire_c["active_fires"] else "#2ca02c"),
-            ui.kpi_card("Fire Warnings", str(warnings),
-                        "#d62728" if fire_c["emergency"] else
-                        ("#ff7f0e" if warnings else None)),
+            # One card per level and none of them labelled "fire": these are
+            # every VicEmergency warning (flood and storm too), and summing the
+            # levels lets one stand in for another.
+            ui.kpi_card("Emergency Warnings", str(fire_c["emergency"]),
+                        "#d62728" if fire_c["emergency"] else None),
+            ui.kpi_card("Watch & Act", str(fire_c["watch_act"]),
+                        "#ff7f0e" if fire_c["watch_act"] else None),
+            ui.kpi_card("Advice", str(fire_c["advice"]),
+                        "#e6c700" if fire_c["advice"] else None),
             ui.kpi_card("Gauges ≥ Minor", str(flooding),
                         "#e6c700" if flooding else None),
             ui.kpi_card("Road Closures", str(roads_c["closures"]),

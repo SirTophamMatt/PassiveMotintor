@@ -567,7 +567,7 @@ CREATE TABLE IF NOT EXISTS intel_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,             -- when the change became true (SOURCE time)
     detected_at TEXT NOT NULL,    -- when the detector noticed it
-    hazard TEXT NOT NULL,         -- fire|flood|power|storm|weather|roads|rainfall
+    hazard TEXT NOT NULL,         -- fire|warning|flood|power|storm|weather|roads|rainfall
     entity_key TEXT,              -- stable id within the hazard
     entity_name TEXT,             -- display name ("Snowy River at Orbost")
     kind TEXT NOT NULL,           -- growth|threshold|escalation|new|cleared|...
@@ -793,6 +793,15 @@ def init_db():
         for col, decl in AWS_WEATHER_COLUMNS:
             _ensure_column(conn, "rainfall_aws", col, decl)
         _migrate_events_to_tags(conn)
+        # Intelligence Feed (2026-10-08): community warnings used to be filed
+        # under the "fire" hazard, so every Advice — flood ones included —
+        # read as a fire. They have their own "warning" hazard now; move the
+        # entries and the level history the detector compares against.
+        # Idempotent: nothing matches once moved.
+        conn.execute("UPDATE intel_events SET hazard = 'warning' "
+                     "WHERE hazard = 'fire' AND metric = 'warning_level'")
+        conn.execute("UPDATE intel_metrics SET hazard = 'warning' "
+                     "WHERE hazard = 'fire' AND metric = 'warning_level'")
         conn.commit()
     finally:
         conn.close()

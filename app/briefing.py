@@ -298,9 +298,11 @@ def _situation(cfg):
     kpis += [
         Kpi("Active Fires", str(fire["active_fires"]), "Fire", "#ff5722",
             alert=bool(fire["active_fires"])),
-        Kpi("Emergency Warnings", str(fire["emergency"]), "Fire", "#d62728",
+        # Warnings sit in their own group: a warning (whatever its hazard) is
+        # not a fire, so it is never shown as part of the fire figures.
+        Kpi("Emergency Warnings", str(fire["emergency"]), "Warnings", "#d62728",
             alert=bool(fire["emergency"])),
-        Kpi("Watch & Act", str(fire["watch_act"]), "Fire", "#ff7f0e",
+        Kpi("Watch & Act", str(fire["watch_act"]), "Warnings", "#ff7f0e",
             alert=bool(fire["watch_act"])),
     ]
 
@@ -485,7 +487,9 @@ def _consequences(cfg, changes, limit=6):
         if len(out) >= limit:
             break
         members = cluster["members"]
-        if len({m.hazard for m in members}) < 2:
+        # A warning is a statement ABOUT a hazard, not a second hazard: a
+        # fire and its own Watch and Act is still one hazard at that spot.
+        if len({m.hazard for m in members if m.hazard != "warning"}) < 2:
             continue  # single-hazard: the change already says it all
         lines = []
         for member in members:
