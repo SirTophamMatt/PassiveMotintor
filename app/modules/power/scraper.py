@@ -100,7 +100,13 @@ class PowerScraper:
         options.add_argument("--window-size=1920,1080")
         # reduce automation fingerprint (keeps the session alive)
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # chromedriver also adds --disable-background-timer-throttling by
+        # default, which lets the parked EM-COP session tab run its timers at
+        # full speed for the whole 5 minutes between cycles. Dropping it lets
+        # Chrome throttle that background tab like a normal browser would.
+        options.add_experimental_option(
+            "excludeSwitches",
+            ["enable-automation", "disable-background-timer-throttling"])
         options.add_experimental_option("useAutomationExtension", False)
         # Sandbox switches, the throwaway profile and the verbose driver
         # log are chrome.start's job (shared with the EM-COP quick-launch).
@@ -170,6 +176,18 @@ class PowerScraper:
             self.driver.switch_to.new_window("tab")
             self._dashboard_handle = self.driver.current_window_handle
             self.driver.get(self.cfg["emcop"]["power_url"])
+
+    def _park_dashboard(self):
+        """Blank the dashboard tab once it has been read. Left loaded, the
+        dashboard keeps polling and repainting (software-rendered under Xvfb)
+        for the whole interval, which kept a Chrome renderer busy on the
+        server between cycles. The next cycle reloads it anyway. Only the
+        dashboard tab — the session tab must never navigate away."""
+        try:
+            self.driver.switch_to.default_content()
+            self.driver.get("about:blank")
+        except Exception:
+            log.debug("Could not park the dashboard tab", exc_info=True)
 
     def stop(self):
         with self._lock:
@@ -400,6 +418,7 @@ class PowerScraper:
                 self._switch_to_dashboard()
                 totals = self._scrape_totals()
                 outages = self._scrape_outage_table()
+                self._park_dashboard()
             except DashboardNotFoundError:
                 # session is fine, the URL is wrong — keep it for next cycle
                 raise

@@ -241,6 +241,24 @@ def _register_health(app):
         return flask.jsonify(payload), (200 if db_ok else 503)
 
 
+def _register_cpu_profile(app):
+    """Admin-only: `/admin/cpu?seconds=N` samples every thread for N seconds
+    (default 10, max 30) and returns which ones are using CPU and in what code
+    — the answer to "the host says python is pegged at 100%"."""
+    @app.server.route("/admin/cpu")
+    def cpu_profile_route():
+        if not auth.is_admin():
+            return flask.Response("Admin login required.", status=403,
+                                  mimetype="text/plain")
+        from app import cpu_profile
+        try:
+            seconds = float(flask.request.args.get("seconds", 10))
+        except ValueError:
+            seconds = 10
+        return flask.Response(cpu_profile.profile(seconds),
+                              mimetype="text/plain")
+
+
 def create_app(autostart=False):
     setup_logging()
     database.init_db()
@@ -275,6 +293,7 @@ def create_app(autostart=False):
     app.server.secret_key = os.environ.get("UM_SECRET_KEY") or secrets.token_hex(32)
 
     _register_health(app)
+    _register_cpu_profile(app)
 
     # Read-only spatial API (GeoJSON) for external mapping clients — God's Eye
     # View consumes it. A plain Flask route like /health, so it sits outside the
