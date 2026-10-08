@@ -371,6 +371,24 @@ CREATE TABLE IF NOT EXISTS fire_incidents (
 );
 CREATE INDEX IF NOT EXISTS idx_fire_incidents_active ON fire_incidents (resolved, feed_type);
 
+-- Burn-area shape history (app/fire_areas.py), for the fire wall's growth /
+-- reduction highlight. One row per fire polygon (a Fire incident's own area or
+-- a burn-area feature) each time its SHAPE changes — change-only, keyed on a
+-- hash of the polygon parts, so a static polygon costs one row for its life.
+-- `geometry` is the polygons only (MultiPolygon GeoJSON): an incident's centre
+-- point moving is not the fire growing.
+CREATE TABLE IF NOT EXISTS fire_area_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,   -- when we noticed the shape (local time)
+    geometry TEXT NOT NULL,
+    geom_hash TEXT NOT NULL,
+    area_ha REAL
+);
+CREATE INDEX IF NOT EXISTS idx_fire_area_hist ON fire_area_history (source_id, recorded_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fire_area_hist_unique
+    ON fire_area_history (source_id, recorded_at, geom_hash);
+
 -- One aggregate row per collection cycle: KPI history for trend graphs and the
 -- continuity heartbeat (proves the collector ran even with no active events).
 CREATE TABLE IF NOT EXISTS fire_timeseries (

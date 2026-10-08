@@ -103,6 +103,9 @@ def _panel():
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-fire-status", className="muted",
                          style={"marginTop": "8px"}),
+                dcc.Link("▶ Run the fire wall test (simulated fires) →",
+                         href="/wall/fire/test", className="display-panel-link",
+                         style={"display": "block", "marginTop": "8px"}),
             ], className="panel"),
             html.Div([
                 html.H4("Weather collection"),

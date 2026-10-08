@@ -35,6 +35,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/feedback.py` (model, UI-free) + `app/feedback_ui.py` (the shell widget) —
   bug reports and suggestions; `app/mailer.py` — SMTP sending; `app/geoip.py` — coarse
   visitor geolocation from a truncated IP
+- `app/fire_areas.py` — fire wall model: burn-area shape history/change + areas of operation;
+  `app/fire_demo.py` — the in-memory simulated scenario behind `/wall/fire/test`
 - `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
   Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
@@ -1159,6 +1161,63 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - Sandbox note: with OSM tiles blocked, Plotly's map never finishes loading and dcc.Graph queues
   every later update — the map looks frozen. Stub the tile requests when browser-testing.
 - Tests: `tests/test_flood_wall.py`.
+
+## Fire wall — /wall/fire (built 2026-10-08)
+- **Map first.** `app/pages/fire_wall.py` (public, a `wall.SCENARIOS` row). The map fills the page and
+  rotates its focus through each **area of operation**, plus (optionally) a statewide view; the area in
+  focus is a card over the map, every area is listed beside it, and clicking one **pins** the map there
+  (▶ Resume rotation). Tiles: fire incidents, areas, the three FIRE-related warning levels (never
+  summed), burnt area (ha), areas growing in the window. Options (rotation, statewide in rotation,
+  link distance 2/5/10/20 km, change window 1–24 h) and layer chips persist per browser.
+- **Model `app/fire_areas.py`** (UI-free). `build_areas` links fire incidents, fire warnings
+  (`is_fire_warning`: "fire"/"burn" in event/category/headline) and moving burn areas that intersect or
+  sit within `link_km` (shapely STRtree `dwithin`, union-find) — a warning polygon over two fires joins
+  them. Other incidents / non-fire warnings / static recent burn areas attach to the NEAREST area as
+  context but never link two areas (a line of trees down must not chain two fires 40 km apart). A
+  non-fire warning alone is not an area. Focus view = convex hull of the members + 1 km → `focus_view`
+  (MapLibre 512-px world, zoom clamped 6–12).
+- **Burn-area history `fire_area_history`** — written by the fire collector (`scraper._record_areas`,
+  wrapped, never fatal) via `fire_areas.record`: one row per Fire-incident polygon or `burn-area`
+  feature each time its SHAPE changes (hash of the polygon parts only — a moved centre point is not
+  growth). It starts when it starts: the first shape is a baseline, never "growth".
+- **Change.** `area_changes` diffs the newest shape against the shape at the window's start (or the
+  first one seen inside it) → **growth = red**, **reduction = blue** (perimeter re-mapped smaller); the
+  newest single step, when inside the window, is drawn again as `wd-pulse:<deadline>` layers so
+  `assets/map_pulse.js` makes it **breathe** for `fire_wall.PULSE_SECONDS` (600 — longer than a new
+  warning's 180 s because a wall is glanced at). Noise filter: a morphological opening of `SLIVER_M`
+  (10 m) drops re-digitising slivers, parts under `MIN_CHANGE_HA` (0.5) are dropped. Maths is in a local
+  equirectangular projection about Victoria (affine, so differences are exact; area ±~2%).
+- **Historical burn areas** (the ~60 DELWP footprints) are only a toggle (off). A burn-area feature
+  joins an area when the feed dates it within `BURN_AREA_RECENT_DAYS` (7), and seeds one on its own
+  only when its shape moved inside the window. NOT yet confirmed against a live fire season whether
+  VicEmergency publishes a going fire's perimeter on the incident or as a separate burn-area feature
+  — both paths are handled.
+- **Takeover** (per browser, first snapshot only seeds — `fire_areas.events`/`detect_new`): a burn-area
+  step that GREW, or a Watch and Act / Emergency Warning inside an area (keyed by level, so an
+  escalation is new) takes the map for `TAKEOVER_SECONDS` (45) under a pulsing banner, Emergency first,
+  then growth; a NEW badge stays on the area card for 15 min. New small fires alone never take over.
+- **graph_calm.js `wdFocus`.** keepView held a map at any view it had seen before, so rotating BACK to
+  an area did not move it. A figure can now send `layout.meta.wdFocus`: the requested view is
+  honoured whenever the focus changes; within one focus the viewer's pan/zoom is kept as before.
+- **Dash gotcha:** the area list must NOT be an output of a callback that depends on the pin (cards →
+  pin → render → list closes a loop). The list has its own callback and the focused card is marked
+  client-side (`HIGHLIGHT_JS`, `data-key`). Browser-testing gotcha: with a Python `page.route` stub,
+  `time.sleep` stalls every request — use `page.wait_for_timeout`.
+- **Cost:** `fire_areas.current` is cached 45 s per (link km, window) for every viewer; history reads
+  are bounded to the window (+ one baseline row per polygon). Dep: `shapely>=2` (binary wheels).
+- **Test run `/wall/fire/test`** (admin only — fake Emergency Warnings on a public page could be
+  screenshotted as real; Admin → Fire collection has the link). `app/fire_demo.py` generates a
+  scenario from the clock, entirely IN MEMORY — nothing is written to the DB, so the feed, webhooks,
+  ticker and sounds never see it — and hands it to the same `fire_areas.assemble`/`_change_for` the
+  live wall uses. An 18-min cycle, one shape per 3 min: TEST Fire Alpha grows east every step, Bravo
+  is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
+  Emergency Warning (step 5), a tree down attaches as context, Grass Fire Charlie is a second area
+  and a flood Advice is (correctly) not one. Striped TEST RUN badge + a header line with the step and
+  next change. `fire_wall.snapshot()` re-checks `auth.is_admin()` in every callback, so a direct
+  POST with `fiw-test=true` still gets live data.
+- **`is_fire_warning` reads the hazard fields** (`event`/`category2`) and only falls back to the
+  headline when there is no hazard — the test run's "flood Advice (not a fire)" headline exposed it.
+- Tests: `tests/test_fire_wall.py`.
 
 ## Newsroom wall — /wall/news (built 2026-10-02)
 - **The Intelligence Feed as a live TV news desk** (`app/pages/news_wall.py`, public, a `wall.SCENARIOS`
