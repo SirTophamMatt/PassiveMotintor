@@ -701,6 +701,10 @@ reaching for live data would leave the replay map empty.
   `rp-fill-*`/`rp-line-*`, inserted below the first `plotly-trace-layer-`) and only `setData`s them
   when their geometry set changes (`syncFills`, re-added on `styledata` after a basemap switch).
   Measured: areas present on every animation frame of playback.
+- **Options behind one button (2026-10-09):** map layers, basemap, theme and the incident
+  agency/type filters live in a `⚙ Options` popover in the sticky controls bar (closes on ✕,
+  Escape or a click outside; keys typed inside it never drive playback), so the map and the
+  timeline sit side by side.
 - **Diagnosis:** `/replay/export/diagnose/<tag>?at=YYYY-MM-DD HH:MM` (admin, plain text) puts the
   recorded counts beside the journal's reconstruction by feed type / level / type / agency.
 - Tests: `tests/test_replay_export.py`.

@@ -64,7 +64,15 @@ button.primary { background: var(--accent); color: var(--on-accent);
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .sw.tri { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .sw.bar { border-radius: 2px; height: 4px; width: 14px; }
-#timeline { max-height: 34vh; overflow-y: auto; }
+#timeline { max-height: 44vh; overflow-y: auto; }
+.options { position: absolute; right: 16px; top: 100%; z-index: 30; width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 140px); overflow-y: auto; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); padding: 10px 12px; }
+.options[hidden] { display: none; }
+.options-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.options-body { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.options-body .panel { background: var(--panel2); }
+#opts-btn[aria-expanded="true"] { border-color: var(--accent); }
 .tl { display: block; width: 100%; text-align: left; margin: 0 0 4px; padding: 6px 8px;
   border-left: 4px solid var(--c); background: var(--panel2); }
 .tl.past { opacity: .55; }
@@ -118,6 +126,35 @@ kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-
         <option value="180">3 hours / sec</option>
       </select></label>
     <span class="muted small" id="position"></span>
+    <button id="opts-btn" aria-expanded="false" aria-controls="options" style="margin-left:auto">⚙ Options</button>
+  </div>
+  <div id="options" class="options" hidden>
+    <div class="options-head"><b>Options</b>
+      <button id="opts-close" class="small" aria-label="Close options">✕</button></div>
+    <div class="options-body">
+      <div class="panel layers">
+        <h3>Map layers</h3>
+        <div id="layers"></div>
+        <div class="row" style="margin-top:6px">
+          <label class="small muted">Basemap
+            <select id="basemap">
+              <option value="open-street-map">Streets</option>
+              <option value="carto-positron">Light</option>
+              <option value="carto-darkmatter">Dark</option>
+              <option value="white-bg">None (offline)</option>
+            </select></label>
+          <button id="theme" class="small">☀ / ☾</button>
+        </div>
+      </div>
+      <div class="panel layers">
+        <h3>Incidents shown</h3>
+        <div class="small muted">Warnings are always shown; these filter VicEmergency incidents only.</div>
+        <div class="small muted" style="margin-top:6px">Agency</div>
+        <div id="agencies"></div>
+        <div class="small muted" style="margin-top:6px">Type <span id="type-all"></span></div>
+        <div id="itypes" class="itypes"></div>
+      </div>
+    </div>
   </div>
   <input type="range" id="scrub" min="0" max="1" step="1" value="0" aria-label="Replay time">
   <div class="ticks" id="ticks"></div>
@@ -141,28 +178,6 @@ kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-
   <div class="main">
     <div class="mapcard"><div id="map"></div></div>
     <div class="side">
-      <div class="panel layers">
-        <h3>Map layers</h3>
-        <div id="layers"></div>
-        <div class="row" style="margin-top:6px">
-          <label class="small muted">Basemap
-            <select id="basemap">
-              <option value="open-street-map">Streets</option>
-              <option value="carto-positron">Light</option>
-              <option value="carto-darkmatter">Dark</option>
-              <option value="white-bg">None (offline)</option>
-            </select></label>
-          <button id="theme" class="small">☀ / ☾</button>
-        </div>
-      </div>
-      <div class="panel layers">
-        <h3>Incidents shown</h3>
-        <div class="small muted">Warnings are always shown; these filter VicEmergency incidents only.</div>
-        <div class="small muted" style="margin-top:6px">Agency</div>
-        <div id="agencies"></div>
-        <div class="small muted" style="margin-top:6px">Type <span id="type-all"></span></div>
-        <div id="itypes" class="itypes"></div>
-      </div>
       <div class="panel">
         <h3>Intelligence timeline</h3>
         <label class="small muted"><input type="checkbox" id="follow" checked> follow the clock</label>
@@ -880,6 +895,18 @@ Array.prototype.forEach.call(document.querySelectorAll("[data-step]"), function 
 scrub.addEventListener("input", function () { seek(Number(scrub.value), false); });
 $("basemap").addEventListener("change", function () { drawMap(true); });
 
+// Options panel: layers, basemap and incident filters live behind one button
+// so the map and the timeline sit side by side.
+function setOptions(open) {
+  $("options").hidden = !open;
+  $("opts-btn").setAttribute("aria-expanded", open ? "true" : "false");
+}
+$("opts-btn").addEventListener("click", function (e) { e.stopPropagation(); setOptions($("options").hidden); });
+$("opts-close").addEventListener("click", function () { setOptions(false); });
+document.addEventListener("click", function (e) {
+  if (!$("options").hidden && !$("options").contains(e.target)) setOptions(false);
+});
+
 // Basemap tiles are the one thing this file fetches. A map whose tile style
 // cannot load never finishes loading at all, so it starts on the tile-free
 // background and moves to streets only once a tile has actually arrived —
@@ -914,6 +941,8 @@ function applyTheme() {
     $("basemap").value = dark ? "carto-darkmatter" : "open-street-map";
 }
 document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && !$("options").hidden) { setOptions(false); $("opts-btn").focus(); return; }
+  if ($("options").contains(e.target)) return;
   if (e.target.tagName === "INPUT" && e.target.type !== "checkbox" && e.target.type !== "range") return;
   if (e.target.tagName === "SELECT") return;
   var step = e.shiftKey ? 60 : 15;
