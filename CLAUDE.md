@@ -686,7 +686,32 @@ reaching for live data would leave the replay map empty.
      basemaps marked offline); map draws are serialised (`commitMap`).
 - Times are wall-clock local held as "UTC" in the browser so Plotly's date axes and the labels
   agree whatever time zone the viewer's laptop is in.
+- **Counts + filters (2026-10-09).** Warning cards lead with what the dashboard RECORDED at the
+  time (`fire_timeseries`, same source as /replay's KPIs) with "N on map" beneath — the map is a
+  reconstruction, the timeseries is what people saw. Incidents carry agency (`agency_of`) and a
+  type (`incident_type`: category1, plus category2 for fires — "Fire – Burn Off"); the player
+  filters incidents by both, with **planned burns and burn-offs off by default** (spring feeds
+  carry hundreds, which swamped a flood debrief's incident count). Warnings are never filtered.
+- **Power:** outages on the map (journal POWER, coords filled from `geocode_cache`) and graphs —
+  statewide customers off (`power_timeseries`) plus the 12 worst-hit locations (step lines from
+  the journal), same cursor/seek as the flood graphs.
+- **Diagnosis:** `/replay/export/diagnose/<tag>?at=YYYY-MM-DD HH:MM` (admin, plain text) puts the
+  recorded counts beside the journal's reconstruction by feed type / level / type / agency.
 - Tests: `tests/test_replay_export.py`.
+
+## Journal timing fix (2026-10-09)
+- **Two writer faults found via the replay export.** `effective_ts` was the feed's `updated`, which
+  does NOT move when an entity merely drops out of the feed or reappears after a blip. So (1) every
+  drop-out tombstone was backdated to the entity's last edit, and (2) a reappearance hashed to its
+  own earlier row at the same `effective_ts` and hit `idx_entity_hist_unique` — silently ignored,
+  leaving a live warning "over" until its next reissue. `record_state` now never stamps a change at
+  or before the entity's last row's time; such changes are stamped when noticed. Batch lookups
+  return `(hash, effective_ts)`.
+- **Old rows are corrected on read** (`history._corrected`): a tombstone whose `effective_ts`
+  equals the previous row's is read at its `recorded_at`. Applied in `state_at` and
+  `states_between` (which now return the corrected `effective_ts`), so /replay, the export and the
+  Op Summary agree. It only moves times LATER, so the `effective_ts <= ?` prefilter still holds.
+  Lost reappearances cannot be recovered. Tests: `tests/test_journal_timing.py`.
 
 ## Briefing Mode — /briefing (Phase B, built 2026-08-10)
 Answers the three questions actually asked at a briefing — *what matters now · what changed ·

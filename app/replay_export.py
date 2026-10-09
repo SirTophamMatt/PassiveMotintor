@@ -42,6 +42,7 @@ from pathlib import Path
 import pandas as pd
 
 from app import database, history, intel_feed, replay
+from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.roads import data as roads_data
 from app.pages import fire as fire_page
@@ -156,15 +157,29 @@ def _row_dict(row):
 
 def _fire_hover(r, kind):
     title = _text(r.get("location")) or _text(r.get("headline")) or "Incident"
-    bits = [b for b in (kind, _text(r.get("category2")) or _text(r.get("event")),
-                        _text(r.get("status")), _text(r.get("size"))) if b]
+    bits = [b for b in (kind, incident_type(r) or _text(r.get("event")),
+                        _text(r.get("status")), _text(r.get("size")),
+                        _text(r.get("source_org"))) if b]
     return "<b>%s</b><br>%s" % (html.escape(title), html.escape(" · ".join(bits)))
+
+
+def incident_type(r):
+    """What an incident is, for the player's type filter: the feed's category,
+    with the sub-category for fires so "Fire – Burn Off" and "Fire – Planned
+    Burn" can be told apart from a going fire. None for a warning."""
+    if fire_data.is_warning(r):
+        return None
+    cat1 = _text(r.get("category1")) or "Unspecified"
+    cat2 = _text(r.get("category2"))
+    if cat2 and cat2.lower() != cat1.lower() and cat1.lower() == "fire":
+        return "%s – %s" % (cat1, cat2)
+    return cat1
 
 
 def fire_entities(start, end, geoms):
     """VicEmergency warnings + incidents as change lists.
 
-    State row: [t, active, kind, lat, lon, geom index, hover]."""
+    State row: [t, active, kind, lat, lon, geom index, hover, agency, type]."""
     df = _journal(history.FIRE, start, end)
     if df.empty:
         return []
@@ -181,7 +196,8 @@ def fire_entities(start, end, geoms):
                 max(_minutes(row["_ts"].to_pydatetime(), start), -1),
                 1 if r.get("active") == 1 else 0, kind,
                 _num(r.get("latitude")), _num(r.get("longitude")),
-                geoms.add(r.get("geometry")), _fire_hover(r, kind)])
+                geoms.add(r.get("geometry")), _fire_hover(r, kind),
+                fire_data.agency_of(r.get("source_org")), incident_type(r)])
         if states:
             out.append({"k": str(key), "s": _collapse(states)})
     return out
@@ -335,6 +351,66 @@ def flood_gauges(start, end):
 # --------------------------------------------------------------------------- #
 # Series + timeline
 # --------------------------------------------------------------------------- #
+def fire_recorded(start, end):
+    """The VicEmergency counts the dashboard RECORDED each cycle
+    (`fire_timeseries`): [t, incidents, fires, emergency, watch&act, advice].
+
+    These are what the dashboard actually showed at the time, so the player's
+    warning cards come from here — the same source the /replay page uses — and
+    the map's reconstruction is reported beside them, not instead of them."""
+    lead = start - timedelta(minutes=POWER_STALE_MINUTES)
+    df = database.read_df(
+        "SELECT timestamp, total_active, active_fires, emergency_warnings, "
+        "watch_act, advice FROM fire_timeseries "
+        "WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+        [lead.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")])
+    out = []
+    for _, r in df.iterrows():
+        when = _dt(r["timestamp"])
+        if when is None:
+            continue
+        vals = [int(_num(r[c]) or 0) for c in ("total_active", "active_fires",
+                "emergency_warnings", "watch_act", "advice")]
+        total, fires, em, wa, adv = vals
+        out.append([_minutes(when, start), max(total - em - wa - adv, 0),
+                    fires, em, wa, adv])
+    return out
+
+
+def power_locations(start, end):
+    """Per-location outages from the journal: [[t, active, customers, lat, lon]].
+
+    Coordinates the journal recorded without (geocoded only later) are filled
+    from the geocode cache — a town's position did not change during the event,
+    the same reasoning as `replay.power_at`."""
+    df = _journal(history.POWER, start, end)
+    if df.empty:
+        return []
+    cache = database.read_df(
+        "SELECT location, latitude, longitude FROM geocode_cache")
+    coords = {r["location"]: (_num(r["latitude"]), _num(r["longitude"]))
+              for _, r in cache.iterrows()}
+    out = []
+    for key, grp in df.groupby("entity_key", sort=False):
+        states, peak = [], 0
+        for _, row in grp.iterrows():
+            r = _row_dict(row)
+            lat, lon = _num(r.get("latitude")), _num(r.get("longitude"))
+            if lat is None and key in coords:
+                lat, lon = coords[key]
+            customers = int(_num(r.get("customers_off")) or 0)
+            active = 1 if r.get("active") == 1 else 0
+            t = max(_minutes(row["_ts"].to_pydatetime(), start), -1)
+            states.append([t, active, customers, lat, lon])
+            if active and t >= -1:
+                peak = max(peak, customers)
+        states = _collapse(states)
+        if states:
+            out.append({"name": str(key), "peak": peak, "s": states})
+    out.sort(key=lambda e: -e["peak"])
+    return out
+
+
 def power_series(start, end):
     lead = start - timedelta(minutes=POWER_STALE_MINUTES)
     df = database.read_df(
@@ -394,11 +470,14 @@ def build_package(tag_id):
             "power_stale_minutes": POWER_STALE_MINUTES,
         },
         "colours": dict(fire_page.KIND_COLOURS),
+        "agencies": [[k, v] for k, v in fire_data.AGENCY_LABELS.items()],
         "fire": _section("fire", lambda: fire_entities(start, end, geoms), []),
         "roads": _section("roads", lambda: road_entities(start, end, geoms), []),
         "bom": _section("bom", lambda: bom_warnings(start, end), []),
         "gauges": _section("flood", lambda: flood_gauges(start, end), []),
         "power": _section("power", lambda: power_series(start, end), []),
+        "outages": _section("outages", lambda: power_locations(start, end), []),
+        "recorded": _section("recorded", lambda: fire_recorded(start, end), []),
         "timeline": _section("timeline", lambda: timeline(start, end), []),
     }
     package["geoms"] = geoms.items
@@ -455,3 +534,78 @@ def export(tag_id):
 def clear_cache():
     with _cache_lock:
         _cache.clear()
+
+
+# --------------------------------------------------------------------------- #
+# Diagnosis — what the journal holds for a moment, against what was recorded
+# --------------------------------------------------------------------------- #
+def diagnose(tag_id, at=None):
+    """Plain-text report for one moment of an event (admin only).
+
+    Puts the dashboard's own recorded counts (`fire_timeseries`) beside the
+    journal's reconstruction, broken down by feed type, level, category and
+    agency, so a replay that disagrees with what people saw can be traced to
+    the data rather than guessed at."""
+    window = replay.event_window(tag_id)
+    if not window:
+        return "Event not found."
+    when = _dt(at) if at else None
+    when = when or window["start"] + (window["end"] - window["start"]) / 2
+    stamp = when.strftime("%Y-%m-%d %H:%M:%S")
+    out = ["Replay diagnosis — %s" % window["name"],
+           "Event: %s -> %s" % (window["start"], window["end"]),
+           "Moment: %s   (add ?at=YYYY-MM-DD HH:MM to choose)" % stamp, ""]
+
+    rec = database.read_df(
+        "SELECT * FROM fire_timeseries WHERE timestamp <= ? "
+        "ORDER BY timestamp DESC LIMIT 1", [stamp])
+    out.append("Recorded by the dashboard at the time (fire_timeseries):")
+    if rec.empty:
+        out.append("  none")
+    else:
+        r = rec.iloc[0]
+        out.append("  at %s: total_active=%s active_fires=%s emergency=%s "
+                   "watch_act=%s advice=%s" % (
+                       r["timestamp"], r.get("total_active"), r.get("active_fires"),
+                       r.get("emergency_warnings"), r.get("watch_act"),
+                       r.get("advice")))
+    out.append("")
+
+    df = history.state_at(history.FIRE, when)
+    out.append("Journal reconstruction at that moment: %d active entities" % len(df))
+    if not df.empty:
+        rows = [_row_dict(r) for _, r in df.iterrows()]
+        tally = {}
+        for r in rows:
+            key = (_text(r.get("feed_type")) or "?",
+                   _text(r.get("warning_level")) if fire_data.is_warning(r)
+                   else incident_type(r),
+                   fire_data.agency_of(r.get("source_org")))
+            tally[key] = tally.get(key, 0) + 1
+        out.append("  %-10s %-40s %-8s %s" % ("feed_type", "level / type",
+                                              "agency", "count"))
+        for (ft, what, agency), n in sorted(tally.items(), key=lambda kv: -kv[1]):
+            out.append("  %-10s %-40s %-8s %d" % (ft, (what or "?")[:40], agency, n))
+        ages = pd.to_datetime(df["effective_ts"], errors="coerce")
+        old = int((ages < pd.Timestamp(when) - pd.Timedelta(days=3)).sum())
+        out.append("  last changed more than 3 days before this moment: %d" % old)
+    out.append("")
+
+    j = database.read_df(
+        "SELECT active, COUNT(*) AS n, COUNT(DISTINCT entity_key) AS entities "
+        "FROM entity_state_history WHERE source = ? AND effective_ts BETWEEN ? AND ? "
+        "GROUP BY active", [history.FIRE, str(window["start"]), str(window["end"])])
+    out.append("Journal rows written during the event (source=fire):")
+    for _, r in j.iterrows():
+        out.append("  %s: %d rows, %d entities" % (
+            "active" if r["active"] else "tombstone", r["n"], r["entities"]))
+    live = database.read_df(
+        "SELECT feed_type, resolved, COUNT(*) AS n FROM fire_incidents "
+        "GROUP BY feed_type, resolved")
+    out.append("")
+    out.append("fire_incidents table now (feed_type, resolved, count):")
+    for _, r in live.iterrows():
+        out.append("  %s  resolved=%s  %d" % (r["feed_type"], r["resolved"], r["n"]))
+    out.append("")
+    out.append("History available from: %s" % history.history_starts())
+    return "\n".join(out)
