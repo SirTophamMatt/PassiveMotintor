@@ -221,6 +221,16 @@ def register_callbacks(app):
         resp.headers["Cache-Control"] = "private, max-age=300"
         return resp
 
+    @app.server.route("%s/diagnose/<int:tag_id>" % EXPORT_ROUTE)
+    def replay_export_diagnose(tag_id):
+        from app import auth
+        if not auth.is_admin():
+            return flask.Response("Admin login required.", status=403,
+                                  mimetype="text/plain")
+        return flask.Response(
+            replay_export.diagnose(tag_id, flask.request.args.get("at")),
+            mimetype="text/plain")
+
     @app.callback(
         Output("replay-open-player", "href"),
         Output("replay-download", "href"),

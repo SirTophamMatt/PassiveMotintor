@@ -90,29 +90,51 @@ def state_hash(state, active=True):
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _last_hash(source, entity_key):
+def _last_state(source, entity_key):
+    """(state_hash, effective_ts) of an entity's latest row, or (None, None)."""
     df = database.read_df(
-        "SELECT state_hash FROM entity_state_history "
+        "SELECT state_hash, effective_ts FROM entity_state_history "
         "WHERE source = ? AND entity_key = ? "
         "ORDER BY effective_ts DESC, id DESC LIMIT 1", [source, str(entity_key)])
-    return None if df.empty else df.iloc[0]["state_hash"]
+    if df.empty:
+        return None, None
+    return df.iloc[0]["state_hash"], df.iloc[0]["effective_ts"]
+
+
+def _last_hash(source, entity_key):
+    return _last_state(source, entity_key)[0]
 
 
 def record_state(source, entity_key, state, effective_ts=None, active=True,
-                 latitude=None, longitude=None, known_hash=None):
+                 latitude=None, longitude=None, known_hash=None, known_ts=None):
     """Record an entity's state if it changed. Returns True if a row was written.
 
-    `known_hash` lets a batch caller supply the entity's last hash it already
-    looked up, so a 1,000-entity cycle does one query instead of 1,001.
+    `known_hash` / `known_ts` let a batch caller supply the entity's last hash
+    and effective time it already looked up, so a 1,000-entity cycle does one
+    query instead of 1,001.
+
+    A change is never stamped at or before the entity's last recorded time.
+    The source time (the feed's `updated`) does not move when an entity merely
+    DROPS OUT of the feed, or comes back after a blip, so using it would
+    backdate a resolution to the last edit — and a reappearance would collide
+    with its own earlier row on the unique index and be silently dropped,
+    leaving a live warning marked over. Those changes are stamped when we
+    noticed them instead.
     """
     digest = state_hash(state, active)
-    previous = known_hash if known_hash is not None else _last_hash(source, entity_key)
+    if known_hash is not None:
+        previous, previous_ts = known_hash, known_ts
+    else:
+        previous, previous_ts = _last_state(source, entity_key)
     if previous == digest:
         return False
+    stamp = _stamp(effective_ts)
+    if previous is not None and previous_ts is not None and stamp <= str(previous_ts):
+        stamp = max(_stamp(), str(previous_ts))
     database.insert_rows("entity_state_history", [{
         "source": source,
         "entity_key": str(entity_key),
-        "effective_ts": _stamp(effective_ts),
+        "effective_ts": stamp,
         "recorded_at": _stamp(),
         "active": 1 if active else 0,
         "state_json": canonical_json(state),
@@ -136,14 +158,15 @@ def _existing_hashes(source, entity_keys):
         return {}
     placeholders = ",".join("?" * len(keys))
     df = database.read_df(
-        "SELECT entity_key, state_hash FROM ("
-        "  SELECT entity_key, state_hash, "
+        "SELECT entity_key, state_hash, effective_ts FROM ("
+        "  SELECT entity_key, state_hash, effective_ts, "
         "         ROW_NUMBER() OVER (PARTITION BY entity_key "
         "                            ORDER BY effective_ts DESC, id DESC) AS rn "
         "  FROM entity_state_history "
         "  WHERE source = ? AND entity_key IN (%s)"
         ") WHERE rn = 1" % placeholders, [source] + keys)
-    return dict(zip(df["entity_key"].astype(str), df["state_hash"]))
+    return {str(k): (h, ts) for k, h, ts in
+            zip(df["entity_key"], df["state_hash"], df["effective_ts"])}
 
 
 def record_batch(source, entities, effective_ts=None):
@@ -164,12 +187,13 @@ def record_batch(source, entities, effective_ts=None):
     written = 0
     for entity in entities:
         key = entity["entity_key"]
+        last_hash, last_ts = known.get(str(key), (None, None))
         if record_state(source, key, entity.get("state") or {},
                         effective_ts=entity.get("effective_ts", effective_ts),
                         active=entity.get("active", True),
                         latitude=entity.get("latitude"),
                         longitude=entity.get("longitude"),
-                        known_hash=known.get(str(key))):
+                        known_hash=last_hash, known_ts=last_ts):
             written += 1
     if written:
         note_history_start(source)
@@ -263,6 +287,24 @@ def _to_datetime(value):
     return None if pd.isna(parsed) else parsed.to_pydatetime()
 
 
+# Rows recorded before the writer stopped backdating (see record_state) can
+# carry a tombstone stamped at the entity's last feed edit rather than when it
+# left the feed. The signature is unambiguous: a resolution whose source time
+# did not move from the previous row. For those the honest time is when we
+# noticed, `recorded_at`. Every reader goes through this, so the live replay,
+# the export and the Operational Summary agree. `effective_ts` can only move
+# LATER here, which keeps the plain `effective_ts <= ?` prefilter (and its
+# index) valid.
+def _corrected(where):
+    return (
+        "SELECT *, CASE WHEN active = 0 AND prev_ts = effective_ts "
+        "               AND recorded_at > effective_ts "
+        "          THEN recorded_at ELSE effective_ts END AS eff FROM ("
+        "  SELECT *, LAG(effective_ts) OVER (PARTITION BY entity_key "
+        "                                    ORDER BY effective_ts, id) AS prev_ts "
+        "  FROM entity_state_history WHERE %s)" % where)
+
+
 def state_at(source, timestamp, include_inactive=False):
     """Every entity's state as it stood at `timestamp`.
 
@@ -278,13 +320,13 @@ def state_at(source, timestamp, include_inactive=False):
     """
     stamp = _stamp(timestamp)
     df = database.read_df(
-        "SELECT entity_key, effective_ts, recorded_at, active, state_json, "
+        "SELECT entity_key, eff AS effective_ts, recorded_at, active, state_json, "
         "       latitude, longitude FROM ("
         "  SELECT *, ROW_NUMBER() OVER (PARTITION BY entity_key "
-        "                               ORDER BY effective_ts DESC, id DESC) AS rn "
-        "  FROM entity_state_history "
-        "  WHERE source = ? AND effective_ts <= ?"
-        ") WHERE rn = 1", [source, stamp])
+        "                               ORDER BY eff DESC, id DESC) AS rn "
+        "  FROM (" + _corrected("source = ? AND effective_ts <= ?") + ") "
+        "  WHERE eff <= ?"
+        ") WHERE rn = 1", [source, stamp, stamp])
     if df.empty:
         return _empty_state_frame()
     if not include_inactive:
@@ -327,10 +369,11 @@ def states_between(source, start, end, include_inactive=True):
     """Every recorded state change for a source within a window, oldest first.
     Used to find the moments where the picture actually changed."""
     df = database.read_df(
-        "SELECT entity_key, effective_ts, recorded_at, active, state_json, "
-        "       latitude, longitude FROM entity_state_history "
-        "WHERE source = ? AND effective_ts BETWEEN ? AND ? "
-        "ORDER BY effective_ts, id", [source, _stamp(start), _stamp(end)])
+        "SELECT entity_key, eff AS effective_ts, recorded_at, active, state_json, "
+        "       latitude, longitude FROM ("
+        + _corrected("source = ? AND effective_ts <= ?") + ") "
+        "WHERE eff BETWEEN ? AND ? ORDER BY eff, id",
+        [source, _stamp(end), _stamp(start), _stamp(end)])
     if df.empty:
         return _empty_state_frame()
     if not include_inactive:

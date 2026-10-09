@@ -256,3 +256,75 @@ def test_player_runs_maplibre_from_disk():
     shim = page.index('location.protocol !== "file:"')
     assert shim < page.index("{{PLOTLY_JS}}")
     assert "window.Worker = Shim" in page
+
+
+# --------------------------------------------------------------------------- #
+# Incident filters, recorded counts, power
+# --------------------------------------------------------------------------- #
+def _incident(key, c1, c2=None, org="VIC/CFA", minutes=10):
+    history.record_state(
+        history.FIRE, key,
+        {"feed_type": "incident", "category1": c1, "category2": c2,
+         "source_org": org, "status": "Going"},
+        effective_ts=at(minutes), latitude=-37.0, longitude=145.0)
+
+
+def test_incidents_carry_agency_and_type(event):
+    _incident("bo", "Fire", "Burn Off")
+    _incident("fl", "Flooding", org="VIC/SES")
+    _incident("pb", "Planned Burn", org="VIC/DEECA")
+    states = {e["k"]: e["s"][0] for e in _package(event)["fire"]}
+    assert states["bo"][7:] == ["cfa", "Fire – Burn Off"]
+    assert states["fl"][7:] == ["ses", "Flooding"]
+    assert states["pb"][7:] == ["ffm", "Planned Burn"]
+
+
+def test_warnings_have_no_incident_type(event):
+    history.record_state(history.FIRE, "w", {"feed_type": "warning",
+                                             "warning_level": "Advice"},
+                         effective_ts=at(5))
+    state = _package(event)["fire"][0]["s"][0]
+    assert state[2] == "Advice" and state[8] is None
+
+
+def test_recorded_counts_come_from_the_dashboard_timeseries(event):
+    database.insert_rows("fire_timeseries", [{
+        "timestamp": stamp(at(30)), "total_active": 300, "active_fires": 200,
+        "emergency_warnings": 1, "watch_act": 2, "advice": 31}])
+    assert _package(event)["recorded"] == [[30, 266, 200, 1, 2, 31]]
+
+
+def test_power_locations_from_the_journal(event):
+    for minutes, customers in ((20, 500), (80, 1500)):
+        history.record_state(history.POWER, "Wangaratta",
+                             {"location": "Wangaratta", "customers_off": customers},
+                             effective_ts=at(minutes))
+    history.record_state(history.POWER, "Wangaratta",
+                         {"location": "Wangaratta", "customers_off": 0},
+                         effective_ts=at(200), active=False)
+    database.insert_rows("geocode_cache", [{"location": "Wangaratta",
+                                            "latitude": -36.36, "longitude": 146.3}])
+    out = _package(event)["outages"][0]
+    assert out["name"] == "Wangaratta" and out["peak"] == 1500
+    assert out["s"][0] == [20, 1, 500, -36.36, 146.3]
+    assert out["s"][-1][1] == 0
+
+
+def test_diagnose_reports_recorded_and_reconstructed(event):
+    database.insert_rows("fire_timeseries", [{
+        "timestamp": stamp(at(30)), "total_active": 3, "active_fires": 1,
+        "emergency_warnings": 0, "watch_act": 0, "advice": 2}])
+    _incident("bo", "Fire", "Burn Off")
+    text = replay_export.diagnose(event, stamp(at(60)))
+    assert "advice=2" in text
+    assert "Fire – Burn Off" in text
+
+
+def test_diagnose_route_is_admin_only(event, monkeypatch):
+    from app import auth
+    from app.factory import create_app
+    client = create_app(autostart=False).server.test_client()
+    assert client.get("/replay/export/diagnose/%d" % event).status_code == 403
+    monkeypatch.setattr(auth, "is_admin", lambda: True)
+    r = client.get("/replay/export/diagnose/%d" % event)
+    assert r.status_code == 200 and "Replay diagnosis" in r.get_data(as_text=True)

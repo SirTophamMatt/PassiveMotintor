@@ -57,6 +57,8 @@ button.primary { background: var(--accent); color: var(--on-accent);
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; }
 .panel h3 { margin: 0 0 6px; font-size: 14px; }
+.itypes { max-height: 150px; overflow-y: auto; }
+.kpi i { display: block; font-style: normal; font-size: 11px; color: var(--muted); }
 .layers label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0;
   font-size: 13px; cursor: pointer; }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
@@ -153,6 +155,14 @@ kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-
           <button id="theme" class="small">☀ / ☾</button>
         </div>
       </div>
+      <div class="panel layers">
+        <h3>Incidents shown</h3>
+        <div class="small muted">Warnings are always shown; these filter VicEmergency incidents only.</div>
+        <div class="small muted" style="margin-top:6px">Agency</div>
+        <div id="agencies"></div>
+        <div class="small muted" style="margin-top:6px">Type <span id="type-all"></span></div>
+        <div id="itypes" class="itypes"></div>
+      </div>
       <div class="panel">
         <h3>Intelligence timeline</h3>
         <label class="small muted"><input type="checkbox" id="follow" checked> follow the clock</label>
@@ -168,6 +178,10 @@ kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-
   <h2>Flood gauges that reached Minor or above</h2>
   <div class="muted small" id="gauge-note"></div>
   <div id="rivers"></div>
+
+  <h2>Power outages</h2>
+  <div class="muted small" id="power-note"></div>
+  <div class="gauges" id="power-graphs"></div>
 </div>
 <footer>Passive Monitor event replay · exported <span id="footer-gen"></span> ·
   sources: BoM, VicEmergency, Transport Victoria (as recorded at the time).</footer>
@@ -261,7 +275,8 @@ var LAYERS = [
   ["Road closures", "bar", "#d62728", true],
   ["Other road disruptions", "bar", "#ff9f1c", true],
   ["Gauges ≥ Minor", "", "#e6c700", true],
-  ["Gauges below Minor", "", "#5b8def", false]
+  ["Gauges below Minor", "", "#5b8def", false],
+  ["Power outages", "", "#8e44ad", true]
 ];
 var on = {};
 $("layers").innerHTML = LAYERS.map(function (l, i) {
@@ -273,6 +288,46 @@ $("layers").addEventListener("change", function (e) {
   var i = e.target.getAttribute("data-layer");
   if (i !== null) { on[LAYERS[+i][0]] = e.target.checked; drawMap(true); }
 });
+
+// ---- incident filters (agency + type) -------------------------------------------
+// Warnings are never filtered: a flood debrief needs every warning, while the
+// incident list during spring carries hundreds of burn-offs and planned burns.
+var WARN = {"Emergency Warning": 1, "Watch and Act": 1, "Advice": 1};
+var agencyOn = {}, typeOn = {}, typeCount = {};
+D.agencies.forEach(function (a) { agencyOn[a[0]] = true; });
+D.fire.forEach(function (e) {
+  var seen = {};
+  e.s.forEach(function (r) { if (r[8] && !seen[r[8]]) { seen[r[8]] = 1; typeCount[r[8]] = (typeCount[r[8]] || 0) + 1; } });
+});
+var TYPES = Object.keys(typeCount).sort(function (a, b) { return typeCount[b] - typeCount[a] || a.localeCompare(b); });
+var NOISE = /planned burn|burn.?off|burn-off/i;
+TYPES.forEach(function (t) { typeOn[t] = !NOISE.test(t); });
+$("agencies").innerHTML = D.agencies.map(function (a) {
+  return '<label><input type="checkbox" data-agency="' + esc(a[0]) + '" checked>' + esc(a[1]) + "</label>";
+}).join("");
+$("itypes").innerHTML = TYPES.length ? TYPES.map(function (t) {
+  return '<label><input type="checkbox" data-type="' + esc(t) + '"' + (typeOn[t] ? " checked" : "") + ">" +
+    esc(t) + ' <span class="muted small">(' + typeCount[t] + ")</span></label>";
+}).join("") : '<span class="muted small">No incidents in this event.</span>';
+$("type-all").innerHTML = TYPES.length ? '· <a href="#" id="types-none">none</a> · <a href="#" id="types-all">all</a>' : "";
+function filtersChanged() { render(); drawMap(true); }
+$("agencies").addEventListener("change", function (e) {
+  var k = e.target.getAttribute("data-agency"); if (k) { agencyOn[k] = e.target.checked; filtersChanged(); } });
+$("itypes").addEventListener("change", function (e) {
+  var k = e.target.getAttribute("data-type"); if (k) { typeOn[k] = e.target.checked; filtersChanged(); } });
+if (TYPES.length) {
+  [["types-none", false], ["types-all", true]].forEach(function (cfg) {
+    $(cfg[0]).addEventListener("click", function (ev) {
+      ev.preventDefault();
+      TYPES.forEach(function (t) { typeOn[t] = cfg[1]; });
+      Array.prototype.forEach.call($("itypes").querySelectorAll("input"), function (i) { i.checked = cfg[1]; });
+      filtersChanged();
+    });
+  });
+}
+function incidentShown(r) {
+  return !!agencyOn[r[7] || "other"] && (r[8] == null || typeOn[r[8]] !== false);
+}
 
 // ---- geometry helpers ---------------------------------------------------------
 function polys(g) {
@@ -297,11 +352,19 @@ function fc(geomIdx) {
 
 // ---- state at t ---------------------------------------------------------------
 function snapshot(t) {
-  var s = {fire: [], roads: [], gauges: [], bom: [], sig: []};
+  var s = {fire: [], warnings: 0, incidents: 0, roads: [], gauges: [], bom: [], power: [], sig: []};
   D.fire.forEach(function (e, i) {
     var k = at(e.s, t); s.sig.push(k);
-    if (k >= 0 && e.s[k][1]) s.fire.push(e.s[k]);
+    if (k < 0 || !e.s[k][1]) return;
+    var r = e.s[k];
+    if (r[2] in WARN) { s.fire.push(r); s.warnings++; }
+    else if (incidentShown(r)) { s.fire.push(r); s.incidents++; }
   });
+  D.outages.forEach(function (o) {
+    var k = at(o.s, t); s.sig.push(k);
+    if (k >= 0 && o.s[k][1] && o.s[k][2] > 0) s.power.push([o.s[k][2], o.s[k][3], o.s[k][4], o.name]);
+  });
+  s.sig.push(JSON.stringify(agencyOn) + JSON.stringify(typeOn));
   D.roads.forEach(function (e, i) {
     var k = at(e.s, t); s.sig.push(k);
     if (k >= 0 && e.s[k][1]) s.roads.push(e.s[k]);
@@ -320,18 +383,29 @@ function snapshot(t) {
 
 // ---- KPIs -----------------------------------------------------------------------
 function kpis(t, s) {
-  var n = {"Emergency Warning": 0, "Watch and Act": 0, "Advice": 0}, inc = 0;
-  s.fire.forEach(function (r) { if (r[2] in n) n[r[2]]++; else inc++; });
+  var n = {"Emergency Warning": 0, "Watch and Act": 0, "Advice": 0}, inc = s.incidents;
+  s.fire.forEach(function (r) { if (r[2] in n) n[r[2]]++; });
+  // What the dashboard recorded at the time (fire_timeseries). The map is a
+  // reconstruction from the change journal; when the two differ, the
+  // recorded figure is the one people saw, so it leads and the map count
+  // sits under it.
+  var rk = at(D.recorded, t), rec = rk >= 0 && t - D.recorded[rk][0] <= 60 ? D.recorded[rk] : null;
+  function lead(recorded, mapped) {
+    if (rec == null) return [mapped, "on map · no recorded count"];
+    return [recorded, recorded === mapped ? "recorded · all on map" : mapped + " on map"];
+  }
+  var em = lead(rec && rec[3], n["Emergency Warning"]), wa = lead(rec && rec[4], n["Watch and Act"]),
+      ad = lead(rec && rec[5], n["Advice"]);
   var g = [0, 0, 0];
   s.gauges.forEach(function (c) { if (c >= 1) g[0]++; if (c >= 2) g[1]++; if (c >= 3) g[2]++; });
   var closures = 0; s.roads.forEach(function (r) { if (r[2]) closures++; });
   var k = at(D.power, t), power = "—";
   if (k >= 0 && t - D.power[k][0] <= M.power_stale_minutes) power = D.power[k][1].toLocaleString();
   var cards = [
-    ["Emergency Warnings", n["Emergency Warning"], C["Emergency Warning"]],
-    ["Watch and Act", n["Watch and Act"], C["Watch and Act"]],
-    ["Advice", n["Advice"], C["Advice"]],
-    ["Incidents", inc, C["Other incident"]],
+    ["Emergency Warnings", em[0], C["Emergency Warning"], em[1]],
+    ["Watch and Act", wa[0], C["Watch and Act"], wa[1]],
+    ["Advice", ad[0], C["Advice"], ad[1]],
+    ["Incidents shown", inc, C["Other incident"], rec ? "of " + rec[1] + " recorded statewide" : "after filters"],
     ["Gauges ≥ Minor", g[0], "#e6c700"],
     ["Gauges ≥ Moderate", g[1], "#ff7f0e"],
     ["Gauges at Major", g[2], "#d62728"],
@@ -341,7 +415,8 @@ function kpis(t, s) {
     ["Customers off (power)", power, "#8b98a5"]
   ];
   $("kpis").innerHTML = cards.map(function (c) {
-    return '<div class="kpi" style="--kc:' + c[2] + '"><b>' + c[1] + "</b><span>" + esc(c[0]) + "</span></div>";
+    return '<div class="kpi" style="--kc:' + c[2] + '"><b>' + c[1] + "</b><span>" + esc(c[0]) + "</span>" +
+      (c[3] ? "<i>" + esc(c[3]) + "</i>" : "") + "</div>";
   }).join("");
   $("bomcount").textContent = "(" + s.bom.length + ")";
   $("bom").innerHTML = s.bom.length ? s.bom.map(function (b) { return "<div>" + esc(b) + "</div>"; }).join("")
@@ -430,6 +505,15 @@ function drawMap(force) {
     if (pla.length) traces.push({type: "scattermap", mode: "markers", name: cfg[1], showlegend: !la.length,
       lat: pla, lon: plo, text: ptx, hoverinfo: "text", marker: {size: 9, color: cfg[2]}});
   });
+  // Power outages, sized by customers off.
+  if (on["Power outages"] && s.power.length) {
+    var pw = s.power.filter(function (p) { return p[1] != null; });
+    if (pw.length) traces.push({type: "scattermap", mode: "markers", name: "Power outages",
+      lat: pw.map(function (p) { return p[1]; }), lon: pw.map(function (p) { return p[2]; }),
+      text: pw.map(function (p) { return "<b>" + esc(p[3]) + "</b><br>" + p[0].toLocaleString() + " customers off"; }),
+      hoverinfo: "text", marker: {size: pw.map(function (p) { return Math.max(7, Math.min(30, 4 + Math.sqrt(p[0]) / 2)); }),
+        color: "#8e44ad", opacity: 0.75}});
+  }
   // Flood gauges, below-Minor first so the flooding ones sit on top.
   [[0, 6], [1, 11], [2, 12], [3, 13]].forEach(function (cfg) {
     var cls = cfg[0];
@@ -560,7 +644,7 @@ function plotGauge(i) {
     if (pt) seek(Math.round((new Date(pt.x).getTime() - START_MS) / 60000), true);
   });
   cards[i] = true;
-  moveCursor(i);
+  if (current) moveCursor(i);
 }
 var observer = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
   es.forEach(function (e) { if (e.isIntersecting) plotGauge(+e.target.id.slice(2)); });
@@ -586,6 +670,80 @@ function showGauge(i) {
   c.classList.add("flash");
   setTimeout(function () { c.classList.remove("flash"); }, 2000);
 }
+
+// ---- power outages: statewide + the worst-hit locations --------------------------------
+var POWER_TOP = 12;
+var powerPlots = [];   // [{el, cur, id}] — drawn lazily like the gauges
+(function () {
+  var html = "", outs = D.outages.filter(function (o) { return o.peak > 0; }).slice(0, POWER_TOP);
+  if (D.power.length) {
+    var peak = Math.max.apply(null, D.power.filter(function (p) { return p[0] >= 0; }).map(function (p) { return p[1]; }).concat([0]));
+    html += '<div class="gcard"><div class="ghead"><b>Statewide customers off</b></div>' +
+      '<div class="muted small">Peak ' + peak.toLocaleString() + ' · <span class="gnow" id="pnS"></span></div>' +
+      '<div class="gplot" id="ppS"><div class="cursor" id="pcS"></div></div></div>';
+    powerPlots.push({id: "S"});
+  }
+  outs.forEach(function (o, i) {
+    html += '<div class="gcard"><div class="ghead"><b>' + esc(o.name) + '</b></div>' +
+      '<div class="muted small">Peak ' + o.peak.toLocaleString() + ' customers · <span class="gnow" id="pn' + i + '"></span></div>' +
+      '<div class="gplot" id="pp' + i + '"><div class="cursor" id="pc' + i + '"></div></div></div>';
+    powerPlots.push({id: String(i), o: o});
+  });
+  $("power-graphs").innerHTML = html;
+  $("power-note").textContent = !D.power.length && !outs.length ? "No power outage data recorded for this event." :
+    (outs.length ? "Statewide total, then the " + outs.length + " locations with the most customers off during the event." : "");
+})();
+
+function powerSeries(p) {
+  if (p.id === "S") return D.power.map(function (r) { return [r[0], r[1]]; });
+  // Step series from the location's change list; a restoration drops to 0.
+  var pts = p.o.s.map(function (r) { return [Math.max(r[0], 0), r[1] ? r[2] : 0]; });
+  if (pts.length && pts[pts.length - 1][0] < TOTAL) pts.push([TOTAL, pts[pts.length - 1][1]]);
+  return pts;
+}
+function plotPower(p) {
+  if (p.drawn) return;
+  var pts = powerSeries(p), el = $("pp" + p.id);
+  Plotly.newPlot(el, [{x: pts.map(function (r) { return msAt(r[0]); }), y: pts.map(function (r) { return r[1]; }),
+    type: "scatter", mode: "lines", line: {color: "#8e44ad", width: 2, shape: p.id === "S" ? "linear" : "hv"},
+    fill: "tozeroy", fillcolor: "rgba(142,68,173,0.15)",
+    hovertemplate: "%{x|%a %d %b %H:%M}<br>%{y:,} customers off<extra></extra>"}], {
+    margin: {l: 52, r: 8, t: 6, b: 30}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: {color: dark ? "#c9d4df" : "#33414e", size: 11}, showlegend: false,
+    shapes: [{type: "rect", xref: "x", yref: "paper", x0: msAt(0), x1: msAt(TOTAL), y0: 0, y1: 1,
+      fillcolor: dark ? "rgba(78,161,255,0.06)" : "rgba(31,111,209,0.06)", line: {width: 0}, layer: "below"}],
+    xaxis: {type: "date", gridcolor: dark ? "#2d3a46" : "#e3e8ee", tickformat: "%d %b\n%H:%M"},
+    yaxis: {title: {text: "customers"}, gridcolor: dark ? "#2d3a46" : "#e3e8ee", rangemode: "tozero"}
+  }, {displayModeBar: false, responsive: true});
+  el.on("plotly_click", function (ev) {
+    var pt = ev.points && ev.points[0];
+    if (pt) seek(Math.round((new Date(pt.x).getTime() - START_MS) / 60000), true);
+  });
+  p.drawn = true;
+  if (current) movePowerCursor(p);
+}
+function movePowerCursor(p) {
+  var pts = powerSeries(p), k = at(pts, current.t), now = $("pn" + p.id);
+  var stale = p.id === "S" && k >= 0 && current.t - pts[k][0] > M.power_stale_minutes;
+  now.textContent = k >= 0 && !stale ? "Now " + pts[k][1].toLocaleString() : "Now: no reading";
+  if (!p.drawn) return;
+  placeCursor($("pp" + p.id), $("pc" + p.id));
+}
+function placeCursor(el, cur) {
+  var xa = el._fullLayout && el._fullLayout.xaxis;
+  if (!xa) return;
+  var px = xa.l2p(msAt(current.t));
+  if (px < 0 || px > xa._length) { cur.style.display = "none"; return; }
+  cur.style.display = "block";
+  cur.style.left = (xa._offset + px - 1) + "px";
+}
+var powerObserver = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+  es.forEach(function (e) {
+    var id = e.target.id.slice(2);
+    powerPlots.forEach(function (p) { if (p.id === id) plotPower(p); });
+  });
+}, {rootMargin: "300px"}) : null;
+powerPlots.forEach(function (p) { if (powerObserver) powerObserver.observe($("pp" + p.id)); else plotPower(p); });
 
 // ---- timeline -----------------------------------------------------------------------
 $("timeline").innerHTML = D.timeline.length ? D.timeline.map(function (e, i) {
@@ -643,6 +801,7 @@ function render() {
   kpis(t, current.snap);
   markTimeline(t);
   flooded.forEach(moveCursor);
+  powerPlots.forEach(movePowerCursor);
   drawMap(false);
 }
 function seek(t, stop) {
@@ -700,6 +859,7 @@ function probeTiles() {
 $("theme").addEventListener("click", function () {
   dark = !dark; applyTheme();
   Object.keys(cards).forEach(function (i) { Plotly.purge($("gp" + i)); delete cards[i]; plotGauge(+i); });
+  powerPlots.forEach(function (p) { if (p.drawn) { Plotly.purge($("pp" + p.id)); p.drawn = false; plotPower(p); } });
   drawMap(true);
 });
 function applyTheme() {
