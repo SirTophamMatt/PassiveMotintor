@@ -64,7 +64,12 @@ ROAD_CAUSES = ("flooding", "weather", "trees")
 # ~11 m. Warning polygons are the bulk of the file; a fifth decimal is
 # invisible at any zoom a debrief uses.
 COORD_DECIMALS = 4
-TIMELINE_LIMIT = 400
+# The Intelligence Feed returns its NEWEST entries first, so one capped query
+# over a whole event kept only its last hours (a 9-day flood exported a
+# timeline starting on day 8). It is read a day at a time instead, Major and
+# Critical first, so every day of the event is represented.
+TIMELINE_MAJOR_PER_DAY = 60
+TIMELINE_NOTABLE_PER_DAY = 30
 
 # Flood classes, most severe = highest number (the player sorts on it).
 NO_DATA, BELOW, MINOR, MODERATE, MAJOR = -1, 0, 1, 2, 3
@@ -426,15 +431,24 @@ def power_series(start, end):
 
 
 def timeline(start, end):
-    out = []
-    for e in replay.timeline(start, end, limit=TIMELINE_LIMIT):
-        if e.get("ts") is None:
-            continue
-        out.append({"t": _minutes(e["ts"], start), "sev": e["severity"],
-                    "label": e["severity_label"], "colour": e["colour"],
-                    "hazard": e.get("hazard_label"), "h": e["headline"],
-                    "lat": e.get("latitude"), "lon": e.get("longitude")})
-    return out
+    entries, seen = [], set()
+    day = start
+    while day < end:
+        nxt = min(day + timedelta(days=1), end)
+        for severity, cap in ((intel_feed.MAJOR, TIMELINE_MAJOR_PER_DAY),
+                              (intel_feed.NOTABLE, TIMELINE_NOTABLE_PER_DAY)):
+            for e in replay.timeline(day, nxt, limit=cap, min_severity=severity):
+                if e.get("ts") is None or e.get("id") in seen:
+                    continue
+                seen.add(e.get("id"))
+                entries.append(e)
+        day = nxt
+    entries.sort(key=lambda e: e["ts"])
+    return [{"t": _minutes(e["ts"], start), "sev": e["severity"],
+             "label": e["severity_label"], "colour": e["colour"],
+             "hazard": e.get("hazard_label"), "h": e["headline"],
+             "lat": e.get("latitude"), "lon": e.get("longitude")}
+            for e in entries]
 
 
 # --------------------------------------------------------------------------- #

@@ -338,3 +338,24 @@ def test_player_area_fills_are_not_plotly_layout_layers():
     page = replay_export.TEMPLATE.read_text(encoding="utf-8")
     assert "layers: layers" not in page and "sourcetype" not in page
     assert "setData(" in page and "FILL_LAYERS" in page
+
+
+def test_timeline_spans_the_whole_event_not_just_its_last_hours(db):
+    """The feed returns newest first; one capped query over a long event kept
+    only its final hours. Every day must be represented."""
+    replay_export.clear_cache()
+    tags.create_tag("Long busy event", stamp(T0), stamp(at(4 * 1440)))
+    tag = tags.list_tags()[0]["id"]
+    rows = []
+    for minutes in range(0, 4 * 1440, 5):          # ~1,150 entries, 4 days
+        rows.append({"ts": stamp(at(minutes)), "detected_at": stamp(at(minutes)),
+                     "hazard": "storm", "entity_key": "c%d" % minutes,
+                     "kind": "escalation", "severity": 2,
+                     "headline": "Storm cell intensified %d" % minutes})
+    database.insert_rows("intel_events", rows)
+    times = [e["t"] for e in replay_export.build_package(tag)["timeline"]]
+    assert times == sorted(times)
+    days = {t // 1440 for t in times}
+    assert days == {0, 1, 2, 3}
+    assert len(times) <= 4 * (replay_export.TIMELINE_MAJOR_PER_DAY
+                              + replay_export.TIMELINE_NOTABLE_PER_DAY) + 4

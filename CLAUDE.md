@@ -705,6 +705,10 @@ reaching for live data would leave the replay map empty.
   agency/type filters live in a `⚙ Options` popover in the sticky controls bar (closes on ✕,
   Escape or a click outside; keys typed inside it never drive playback), so the map and the
   timeline sit side by side.
+- **Timeline spans the event (2026-10-09):** `intel_feed.entries` returns NEWEST first, so one capped
+  query kept only an event's last hours (a 9-day flood exported a timeline starting on day 8).
+  `replay_export.timeline` reads a day at a time — up to `TIMELINE_MAJOR_PER_DAY` (60) Major/Critical
+  then `TIMELINE_NOTABLE_PER_DAY` (30) Notable per day, de-duplicated by entry id.
 - **Diagnosis:** `/replay/export/diagnose/<tag>?at=YYYY-MM-DD HH:MM` (admin, plain text) puts the
   recorded counts beside the journal's reconstruction by feed type / level / type / agency.
 - Tests: `tests/test_replay_export.py`.
