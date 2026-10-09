@@ -452,18 +452,14 @@ function drawMap(force) {
   if (!force && playing && now - lastDraw < 220) { pendingDraw = true; return; }
   lastSig = sig; lastDraw = now; pendingDraw = false;
 
-  var traces = [], layers = [];
+  var traces = [], fills = {};
   // Warnings: area fill + outline, hover on an invisible centre marker; a
   // warning with no area keeps a visible marker.
   ["Advice", "Watch and Act", "Emergency Warning"].forEach(function (kind) {
     if (!on[kind]) return;
     var rows = s.fire.filter(function (r) { return r[2] === kind; });
     var withArea = rows.filter(function (r) { return r[5] != null && polys(D.geoms[r[5]]).length; });
-    if (withArea.length) {
-      var src = fc(withArea.map(function (r) { return r[5]; }));
-      layers.push({sourcetype: "geojson", source: src, type: "fill", color: C[kind], opacity: 0.35, below: "traces"});
-      layers.push({sourcetype: "geojson", source: src, type: "line", color: C[kind], line: {width: 2}, below: "traces"});
-    }
+    if (withArea.length) fills[kind] = withArea.map(function (r) { return r[5]; });
     var pts = rows.filter(function (r) { return r[3] != null; });
     if (!pts.length) return;
     // Legend-only swatch: the hover markers of area warnings are invisible,
@@ -481,7 +477,7 @@ function drawMap(force) {
     if (!on[kind]) return;
     var rows = s.fire.filter(function (r) { return r[2] === kind; });
     var areas = rows.filter(function (r) { return r[5] != null; }).map(function (r) { return r[5]; });
-    if (areas.length) layers.push({sourcetype: "geojson", source: fc(areas), type: "fill", color: C[kind], opacity: 0.2, below: "traces"});
+    if (areas.length) fills[kind] = areas;
     var pts = rows.filter(function (r) { return r[3] != null; });
     if (pts.length) traces.push({type: "scattermap", mode: "markers", name: kind,
       lat: pts.map(function (r) { return r[3]; }), lon: pts.map(function (r) { return r[4]; }),
@@ -540,9 +536,57 @@ function drawMap(force) {
     font: {color: dark ? "#e6edf3" : "#1b2733"}, showlegend: true,
     legend: {x: 0.01, y: 0.99, bgcolor: dark ? "rgba(15,20,25,.75)" : "rgba(255,255,255,.8)", font: {size: 11}},
     hoverlabel: {align: "left"},
-    map: {style: style, center: (view || HOME).center, zoom: (view || HOME).zoom, layers: layers}
+    map: {style: style, center: (view || HOME).center, zoom: (view || HOME).zoom}
   };
+  wantFills = fills;
   commitMap(traces, layout);
+  syncFills();
+}
+
+// ---- area fills: our own MapLibre layers, updated in place ------------------------
+// Handing the areas to Plotly as layout layers made the map strobe: on every
+// update Plotly removes and re-adds every layer and source, and the frames in
+// between show no areas at all. These layers are created once and only their
+// data is swapped (`setData`), which MapLibre does without a blank frame.
+// Bottom to top: incident areas, then warnings by rising level.
+var FILL_LAYERS = [
+  ["Fire", "fill", 0.2], ["Other incident", "fill", 0.2], ["Met (weather)", "fill", 0.2],
+  ["Advice", "fill", 0.35], ["Advice", "line", 2],
+  ["Watch and Act", "fill", 0.35], ["Watch and Act", "line", 2],
+  ["Emergency Warning", "fill", 0.35], ["Emergency Warning", "line", 2]
+];
+var EMPTY_FC = {type: "FeatureCollection", features: []};
+var wantFills = {}, appliedFills = {}, boundStyle = null;
+function mlMap() {
+  var m = mapEl._fullLayout && mapEl._fullLayout.map;
+  return m && m._subplot && m._subplot.map;
+}
+function fillId(spec) { return "rp-" + spec[1] + "-" + spec[0].replace(/\W+/g, "-").toLowerCase(); }
+function syncFills() {
+  var map = mlMap();
+  if (!map || !map.isStyleLoaded()) return;            // retried when the draw / style finishes
+  if (boundStyle !== map) {
+    boundStyle = map;
+    map.on("styledata", function () { setTimeout(syncFills, 0); });
+  }
+  var traceLayer = (map.getStyle().layers || []).filter(function (l) {
+    return l.id.indexOf("plotly-trace-layer-") === 0; })[0];
+  FILL_LAYERS.forEach(function (spec) {
+    var id = fillId(spec), geomIdx = wantFills[spec[0]] || [];
+    var key = geomIdx.join(",");
+    var src = map.getSource(id);
+    if (!src) {
+      map.addSource(id, {type: "geojson", data: geomIdx.length ? fc(geomIdx) : EMPTY_FC});
+      map.addLayer(spec[1] === "fill"
+        ? {id: id, type: "fill", source: id, paint: {"fill-color": C[spec[0]], "fill-opacity": spec[2]}}
+        : {id: id, type: "line", source: id, paint: {"line-color": C[spec[0]], "line-width": spec[2]}},
+        traceLayer ? traceLayer.id : undefined);
+      appliedFills[id] = key;
+    } else if (appliedFills[id] !== key) {
+      src.setData(geomIdx.length ? fc(geomIdx) : EMPTY_FC);
+      appliedFills[id] = key;
+    }
+  });
 }
 
 // One map draw at a time. MapLibre rejects a second update while the first is
@@ -559,6 +603,7 @@ function commitMap(traces, layout) {
   var done = function () {
     mapBusy = false;
     if (first) bindMap();
+    syncFills();
     if (mapQueued) { mapQueued = false; drawMap(true); }
   };
   Promise.resolve(first ? Plotly.newPlot(mapEl, traces, layout, cfg)
