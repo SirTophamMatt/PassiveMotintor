@@ -328,3 +328,13 @@ def test_diagnose_route_is_admin_only(event, monkeypatch):
     monkeypatch.setattr(auth, "is_admin", lambda: True)
     r = client.get("/replay/export/diagnose/%d" % event)
     assert r.status_code == 200 and "Replay diagnosis" in r.get_data(as_text=True)
+
+
+def test_player_area_fills_are_not_plotly_layout_layers():
+    """Plotly removes and re-adds every layout layer on each update, so areas
+    handed to it strobed during playback. The player keeps its own MapLibre
+    layers and swaps their data instead (verified in Chromium: areas present
+    on every frame of playback)."""
+    page = replay_export.TEMPLATE.read_text(encoding="utf-8")
+    assert "layers: layers" not in page and "sourcetype" not in page
+    assert "setData(" in page and "FILL_LAYERS" in page
