@@ -152,6 +152,9 @@ def _panel():
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-storm-status", className="muted",
                          style={"marginTop": "8px"}),
+                dcc.Link("▶ Run the storm wall test (simulated storm) →",
+                         href="/wall/storm/test", className="display-panel-link",
+                         style={"display": "block", "marginTop": "8px"}),
             ], className="panel"),
             html.Div([
                 html.H4("CFA pager (Mazzanet)"),

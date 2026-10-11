@@ -15,7 +15,7 @@ from app import auth, database, feedback_ui, shell, sound_alerts
 from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
-                       fire_wall, flood_wall, news_wall,
+                       fire_wall, flood_wall, news_wall, storm_wall,
                        importer_page, intel, opsum as opsum_page, overview,
                        pager as pager_page,
                        power,
@@ -40,6 +40,8 @@ PUBLIC_PAGES = [
     (shell.FLOOD_WALL_PATH, "Flood Wall", flood_wall),
     # Fire scenario wall: map-first, focused on one area of operation at a time.
     (shell.FIRE_WALL_PATH, "Fire Wall", fire_wall),
+    # Storm scenario wall: weather-related SES jobs linked into areas of operation.
+    (shell.STORM_WALL_PATH, "Storm Wall", storm_wall),
     # Newsroom-style wall: BREAKING / UPDATE! takeovers from the Intelligence Feed.
     (shell.NEWS_WALL_PATH, "Newsroom", news_wall),
     ("/map", "Unified Map", unified_page),
@@ -342,6 +344,10 @@ def create_app(autostart=False):
         if pathname == shell.FIRE_WALL_TEST_PATH:
             return (fire_wall.layout(test=True) if auth.is_admin()
                     else fire_wall.test_locked())
+        # Storm wall test run: a simulated storm, admins only (app/storm_demo.py).
+        if pathname == shell.STORM_WALL_TEST_PATH:
+            return (storm_wall.layout(test=True) if auth.is_admin()
+                    else storm_wall.test_locked())
         # Warning detail/history pages: /weather/warning/<id>
         if pathname and pathname.startswith(weather.WARNING_PATH):
             return weather.warning_detail_layout(weather.warning_id_from_path(pathname))
