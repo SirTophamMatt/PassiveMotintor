@@ -308,6 +308,28 @@ def _ha(value):
     return f"{value:,.0f} ha" if value >= 1 else f"{value:,.1f} ha"
 
 
+def _reported_line(area, now):
+    """'Reported size 10 → 27 ha · 13:42' for fires measured only by the feed's
+    size text (no mapped polygon)."""
+    if not area.reported:
+        return None
+    bits = []
+    for m, sc in area.reported[:3]:
+        if sc.step_at is not None and sc.step_from_ha is not None:
+            text = (f"{fire_areas._ha_text(sc.step_from_ha)} → "
+                    f"{fire_areas._ha_text(sc.size_ha)} at {sc.step_at:%H:%M}")
+        else:
+            text = (f"{fire_areas._ha_text(sc.baseline_ha)} → "
+                    f"{fire_areas._ha_text(sc.size_ha)}")
+        name = f"{m.location}: " if len(area.fires) > 1 else ""
+        bits.append(name + text)
+    return html.Div("Reported size " + " · ".join(bits),
+                    className="muted fiw-reported",
+                    title="The size VicEmergency reports for the fire. With no "
+                          "mapped perimeter, the map draws it as an equal-area "
+                          "dashed circle.")
+
+
 def _change_line(area, window_hours, now):
     bits = []
     if area.grown_ha:
@@ -396,6 +418,7 @@ def focus_card(area, snap, mode, now):
                  className="fiw-focus-head"),
         html.Div(_counts_line(area), className="fiw-focus-counts"),
         _change_line(area, window, now),
+        _reported_line(area, now),
         html.Div([_member_row(m) for m in shown]
                  + ([html.Div(f"+{more} more", className="muted")] if more else []),
                  className="fiw-members"),
@@ -426,6 +449,9 @@ def area_list(snap, flashes):
         if area.reduced_ha:
             change.append(html.Span(f" ▼ −{_ha(area.reduced_ha)}",
                                     className="fiw-reduce"))
+        if change and area.step_at:
+            change.append(html.Span(f" · latest {area.step_at:%H:%M}",
+                                    className="muted"))
         cards.append(html.Div([
             html.Div([html.Span(area.name, className="fiw-card-name"),
                       html.Span("NEW", className="fw-badge")
@@ -521,6 +547,34 @@ def burn_layers(snap, layers, now):
             name = f"{fire_page.PULSE_PREFIX}{int(ends.timestamp() * 1000)}"
             out += _pair([c.step_grown], GROWTH_COLOUR, 0.5, 2, name)
             out += _pair([c.step_reduced], REDUCTION_COLOUR, 0.5, 2, name)
+    out += size_ring_layers(snap, layers, now)
+    return out
+
+
+def size_ring_layers(snap, layers, now):
+    """Fires with no mapped polygon: a dashed circle of their REPORTED size
+    (equal area, centred on the incident — the real perimeter is unknown), the
+    growth over the window as a red ring, and the latest growth breathing."""
+    from app.pages import fire as fire_page
+    out = []
+    for area in snap.get("areas") or []:
+        for m, sc in area.reported:
+            ring, grown, step = fire_areas.size_rings(m, sc)
+            if ring is None:
+                continue
+            if "burnt" in layers:
+                fc = _fc([ring])
+                out += [_fill(fc, BURNT_COLOUR, 0.3),
+                        _line(fc, GROWTH_COLOUR if sc.grown_ha else BURNT_COLOUR,
+                              2, dash=[2, 1.5])]
+            if "change" not in layers:
+                continue
+            out += _pair([grown], GROWTH_COLOUR, 0.4, 1.5)
+            if step is not None and sc.step_at is not None:
+                ends = sc.step_at + timedelta(seconds=PULSE_SECONDS)
+                if now < ends:
+                    name = f"{fire_page.PULSE_PREFIX}{int(ends.timestamp() * 1000)}"
+                    out += _pair([step], GROWTH_COLOUR, 0.5, 2, name)
     return out
 
 

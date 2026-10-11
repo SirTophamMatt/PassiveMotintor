@@ -66,6 +66,15 @@ SLIVER_M = 10.0
 # many days (older ones are the historical DELWP footprints, see CLAUDE.md).
 BURN_AREA_RECENT_DAYS = 7
 CACHE_SECONDS = 45
+# A burn-area polygon that first appears inside the window is compared with the
+# polygon it replaced (a re-issue under a new feed id) when that one was last
+# seen at most this long before the window opened.
+PREDECESSOR_LOOKBACK_HOURS = 24
+# A change in a fire's REPORTED size (the feed's sizeFmt) takes over the wall
+# only when it grows at least this much — the Intelligence Feed's own floor
+# (config intel.fire_min_growth_ha / _pct), so the two agree on "significant".
+SIZE_TAKEOVER_MIN_HA = 5.0
+SIZE_TAKEOVER_MIN_PCT = 10.0
 
 WARNING_RANK = {"Emergency Warning": 1, "Watch and Act": 2, "Advice": 3}
 
@@ -311,6 +320,7 @@ class AreaChange:
     step_reduced: dict = None
     step_reduced_ha: float = 0.0
     shapes: int = 1                 # shapes recorded inside the window + baseline
+    predecessor: str = None         # the re-issued polygon this one replaced
 
     @property
     def changed(self):
@@ -342,14 +352,68 @@ def area_changes(source_ids, now=None, window_hours=DEFAULT_WINDOW_HOURS):
     now = now or datetime.now()
     cutoff = now - timedelta(hours=window_hours)
     df = _history(ids, cutoff)
-    out = {}
+    out, fresh = {}, {}
     for source_id, rows in df.groupby("source_id", sort=False):
         rows = rows.sort_values("recorded_at")
         try:
-            out[str(source_id)] = _change_for(str(source_id), rows, cutoff)
+            change = _change_for(str(source_id), rows, cutoff)
         except Exception:
             log.exception("Fire areas: change for %s failed", source_id)
+            continue
+        out[str(source_id)] = change
+        if (change.shapes == 1 and change.first_recorded is not None
+                and change.first_recorded >= cutoff):
+            fresh[str(source_id)] = rows
+    if fresh:
+        try:
+            _link_predecessors(out, fresh, ids, cutoff)
+        except Exception:
+            log.exception("Fire areas: predecessor matching failed")
     return out
+
+
+def _link_predecessors(out, fresh, ids, cutoff):
+    """A polygon first seen inside the window may be a RE-ISSUE: the feed
+    replacing a fire's mapped area under a new id. Diffed only against itself
+    it is just a baseline and its growth is invisible, so compare it with the
+    polygon it replaced — one no longer current, last recorded before the new
+    one appeared, that overlaps it most."""
+    marks = ",".join("?" * len(ids))
+    since = cutoff - timedelta(hours=PREDECESSOR_LOOKBACK_HOURS)
+    cands = database.read_df(
+        "SELECT source_id, recorded_at, geometry, area_ha FROM ("
+        "  SELECT source_id, recorded_at, geometry, area_ha, ROW_NUMBER() OVER ("
+        "    PARTITION BY source_id ORDER BY recorded_at DESC, id DESC) AS rn"
+        f"  FROM fire_area_history WHERE source_id NOT IN ({marks})"
+        "   AND recorded_at >= ?) WHERE rn = 1",
+        [*ids, _stamp(since)])
+    if cands.empty:
+        return
+    shapes = [(r, to_metric(json.loads(r.geometry)))
+              for r in cands.itertuples(index=False)]
+    shapes = [(r, g) for r, g in shapes if g is not None]
+    claimed = set()
+    for source_id, rows in fresh.items():
+        change = out[source_id]
+        current = to_metric(change.geometry)
+        if current is None:
+            continue
+        best, best_overlap = None, 0.0
+        for r, geom in shapes:
+            if r.source_id in claimed or _dt(r.recorded_at) is None \
+                    or _dt(r.recorded_at) > change.first_recorded:
+                continue
+            overlap = current.intersection(geom).area if current.intersects(geom) else 0.0
+            if overlap > best_overlap:
+                best, best_overlap = r, overlap
+        if best is None:
+            continue
+        claimed.add(best.source_id)
+        before = pd.DataFrame([best._asdict()])
+        linked = _change_for(source_id, pd.concat([before, rows],
+                                                  ignore_index=True), cutoff)
+        linked.predecessor = str(best.source_id)
+        out[source_id] = linked
 
 
 def _change_for(source_id, rows, cutoff):
@@ -382,6 +446,131 @@ def _change_for(source_id, rows, cutoff):
 
 
 # --------------------------------------------------------------------------- #
+# Reported size (the feed's sizeFmt) — for fires with no mapped polygon
+# --------------------------------------------------------------------------- #
+@dataclass
+class SizeChange:
+    """A fire's REPORTED size ('27 ha') now and how it moved inside the window.
+    Most fire incidents are a point plus this text, never a polygon, so this is
+    the only growth signal they carry. Read from the state journal, which the
+    fire collector writes itself whenever an incident's state changes."""
+    source_id: str
+    size_ha: float
+    baseline_ha: float              # at the window's start (or first seen in it)
+    grown_ha: float = 0.0
+    reduced_ha: float = 0.0
+    step_at: datetime = None        # newest size change, when inside the window
+    step_from_ha: float = None
+
+    @property
+    def changed(self):
+        return bool(self.grown_ha or self.reduced_ha)
+
+    @property
+    def significant_step(self):
+        """Growth at the latest step big enough to take over the wall."""
+        if self.step_at is None or self.step_from_ha is None:
+            return False
+        grew = self.size_ha - self.step_from_ha
+        return grew >= max(SIZE_TAKEOVER_MIN_HA,
+                           self.step_from_ha * SIZE_TAKEOVER_MIN_PCT / 100.0)
+
+
+def parse_ha(text):
+    from app.intel_feed import _parse_ha
+    return _parse_ha(text)
+
+
+def size_changes(source_ids, now=None, window_hours=DEFAULT_WINDOW_HOURS):
+    """{source_id: SizeChange} for fires whose reported size is known."""
+    from app import history
+    ids = sorted({str(s) for s in source_ids if s is not None})
+    if not ids:
+        return {}
+    now = now or datetime.now()
+    cutoff = now - timedelta(hours=window_hours)
+    marks = ",".join("?" * len(ids))
+    stamp = _stamp(cutoff)
+    df = database.read_df(
+        "SELECT entity_key, effective_ts, state_json FROM ("
+        "  SELECT entity_key, effective_ts, state_json, id, ROW_NUMBER() OVER ("
+        "    PARTITION BY entity_key ORDER BY effective_ts DESC, id DESC) AS rn"
+        "  FROM entity_state_history WHERE source = ?"
+        f"   AND entity_key IN ({marks}) AND effective_ts < ?"
+        ") WHERE rn = 1 "
+        "UNION ALL "
+        "SELECT entity_key, effective_ts, state_json FROM entity_state_history "
+        f"WHERE source = ? AND entity_key IN ({marks}) AND effective_ts >= ? "
+        "ORDER BY entity_key, effective_ts",
+        [history.FIRE, *ids, stamp, history.FIRE, *ids, stamp])
+    out = {}
+    for key, rows in df.groupby("entity_key", sort=False):
+        try:
+            change = _size_change_for(str(key), rows, cutoff)
+        except Exception:
+            log.exception("Fire areas: size change for %s failed", key)
+            continue
+        if change is not None:
+            out[str(key)] = change
+    return out
+
+
+def _size_change_for(source_id, rows, cutoff):
+    # Collapse the journal to the moments the SIZE changed (rows are written
+    # for any field's change).
+    points = []
+    for ts, raw in zip(rows["effective_ts"], rows["state_json"]):
+        try:
+            ha = parse_ha(json.loads(raw).get("size"))
+        except (TypeError, ValueError):
+            ha = None
+        if ha is None:
+            continue
+        if not points or abs(points[-1][1] - ha) > 1e-9:
+            points.append((_dt(ts), ha))
+    if not points:
+        return None
+    base, now_ha = points[0][1], points[-1][1]
+    change = SizeChange(source_id=source_id, size_ha=now_ha, baseline_ha=base)
+    delta = now_ha - base
+    if delta >= MIN_CHANGE_HA:
+        change.grown_ha = delta
+    elif -delta >= MIN_CHANGE_HA:
+        change.reduced_ha = -delta
+    if len(points) > 1 and points[-1][0] is not None and points[-1][0] >= cutoff:
+        change.step_at = points[-1][0]
+        change.step_from_ha = points[-2][1]
+    return change
+
+
+def size_rings(member, size):
+    """For a fire with no mapped polygon: circles of its reported size now and
+    at the window's start, centred on its point, as lon/lat GeoJSON —
+    (now, growth annulus, latest-step annulus). Only an equal-area stand-in, so
+    the wall draws them dashed: the real perimeter is unknown."""
+    if member.geom is None or member.geom.geom_type != "Point" or size is None:
+        return None, None, None
+
+    def disc(ha):
+        if not ha or ha <= 0:
+            return None
+        return member.geom.buffer(math.sqrt(ha * 10_000.0 / math.pi), quad_segs=24)
+    now = disc(size.size_ha)
+    if now is None:
+        return None, None, None
+    grown = step = None
+    if size.grown_ha:
+        base = disc(size.baseline_ha)
+        grown = now.difference(base) if base is not None else now
+    if size.step_at is not None and size.step_from_ha is not None \
+            and size.size_ha > size.step_from_ha:
+        prev = disc(size.step_from_ha)
+        step = now.difference(prev) if prev is not None else now
+    as_json = lambda g: to_geojson(g) if g is not None and not g.is_empty else None
+    return as_json(now), as_json(grown), as_json(step)
+
+
+# --------------------------------------------------------------------------- #
 # Areas of operation
 # --------------------------------------------------------------------------- #
 @dataclass
@@ -409,6 +598,9 @@ class OperationArea:
     grown_ha: float = 0.0     # inside the window
     reduced_ha: float = 0.0
     step_at: datetime = None  # newest shape change in the area
+    # Fires whose growth is only known from their REPORTED size:
+    # [(member, SizeChange)], shown as "10 → 27 ha reported".
+    reported: list = field(default_factory=list)
     center: dict = None
     zoom: float = 9.0
     outline: dict = None      # lon/lat GeoJSON of the area's hull
@@ -541,7 +733,7 @@ def focus_view(bounds, width_px=1100, height_px=700, pad=1.35,
             round(float(zoom), 2))
 
 
-def build_areas(members, changes=None, link_km=DEFAULT_LINK_KM):
+def build_areas(members, changes=None, link_km=DEFAULT_LINK_KM, sizes=None):
     """Build the areas of operation: ONE PER FIRE INCIDENT.
 
     Incidents are never grouped — two fires a few km apart are two areas, so
@@ -622,12 +814,14 @@ def build_areas(members, changes=None, link_km=DEFAULT_LINK_KM):
             m.geom.distance(groups[anchors[i][1]][0].geom)))
         groups[anchors[best][1]].append(m)
 
-    return sorted((_area(g, changes) for g in groups),
+    sizes = sizes or {}
+    return sorted((_area(g, changes, sizes) for g in groups),
                   key=lambda a: (a.level_rank, -a.grown_ha, -a.area_ha,
                                  a.name.lower()))
 
 
-def _area(members, changes):
+def _area(members, changes, sizes=None):
+    sizes = sizes or {}
     fires = [m for m in members if m.role == "fire"]
     burns = [m for m in members if m.role in ("fire", "burn")]
     key = min(m.id for m in (fires or members))
@@ -649,10 +843,32 @@ def _area(members, changes):
         if ch.step_at and (area.step_at is None or ch.step_at > area.step_at):
             area.step_at = ch.step_at
 
+    # Fires with no mapped polygon (most of them): their reported size is the
+    # only measure of burnt area and of growth. A fire whose polygon is mapped
+    # is measured by the polygon, never twice.
+    for m in fires:
+        if m.geom is not None and m.geom.geom_type in ("Polygon", "MultiPolygon"):
+            continue
+        sc = sizes.get(m.id)
+        ha = sc.size_ha if sc is not None else parse_ha(m.size)
+        area.area_ha += ha or 0.0
+        if sc is None:
+            continue
+        area.grown_ha += sc.grown_ha
+        area.reduced_ha += sc.reduced_ha
+        if sc.changed or sc.step_at:
+            area.reported.append((m, sc))
+        if sc.step_at and (sc.grown_ha or sc.reduced_ha) and (
+                area.step_at is None or sc.step_at > area.step_at):
+            area.step_at = sc.step_at
+
     # Name: the largest fire, else the first fire, else the worst warning.
     def size(m):
         ch = changes.get(m.id)
-        return ch.area_ha if ch else 0.0
+        if ch:
+            return ch.area_ha
+        sc = sizes.get(m.id)
+        return sc.size_ha if sc else (parse_ha(m.size) or 0.0)
     lead = (max(fires, key=size) if fires else (ranked or members)[0])
     others = len(fires) - 1 if fires else 0
     area.name = lead.location + (f" +{others} fire{'s' if others != 1 else ''}"
@@ -686,7 +902,7 @@ def compute(now=None, link_km=DEFAULT_LINK_KM, window_hours=DEFAULT_WINDOW_HOURS
     from app.modules.fire import data as fire_data
     now = now or datetime.now()
     snap = {"at": now, "ok": True, "error": None, "areas": [], "changes": {},
-            "incidents": pd.DataFrame(), "burn": pd.DataFrame(),
+            "sizes": {}, "incidents": pd.DataFrame(), "burn": pd.DataFrame(),
             "link_km": link_km, "window_hours": window_hours}
     if not HAVE_SHAPELY:
         snap.update(ok=False, error="shapely is not installed")
@@ -701,21 +917,23 @@ def compute(now=None, link_km=DEFAULT_LINK_KM, window_hours=DEFAULT_WINDOW_HOURS
             fire_ids = incidents.loc[kinds == "Fire", "source_id"].tolist()
         ids = fire_ids + (burn["source_id"].tolist() if not burn.empty else [])
         changes = area_changes(ids, now, window_hours)
-        assemble(snap, incidents, burn, changes)
+        sizes = size_changes(fire_ids, now, window_hours)
+        assemble(snap, incidents, burn, changes, sizes)
     except Exception as e:
         log.exception("Fire wall: areas of operation unavailable")
         snap.update(ok=False, error=str(e))
     return snap
 
 
-def assemble(snap, incidents, burn, changes):
+def assemble(snap, incidents, burn, changes, sizes=None):
     """Fill a snapshot from rows + their area changes. Shared by the live
     snapshot and the simulated test run (`app.fire_demo`), so the test
     exercises exactly the linking the wall uses."""
     members = members_from(incidents, burn, changes, snap["at"],
                            snap["window_hours"])
-    snap.update(incidents=incidents, burn=burn, changes=changes,
-                areas=build_areas(members, changes, snap["link_km"]))
+    sizes = sizes or {}
+    snap.update(incidents=incidents, burn=burn, changes=changes, sizes=sizes,
+                areas=build_areas(members, changes, snap["link_km"], sizes))
     return snap
 
 
@@ -749,7 +967,8 @@ def reset_cache():
 # --------------------------------------------------------------------------- #
 def events(snap):
     """Takeover-worthy facts, each with a stable key: a burn-area step that
-    grew, and a Watch and Act / Emergency Warning inside an area (keyed by its
+    grew (a mapped polygon, or — for a fire with none — its reported size
+    growing by at least SIZE_TAKEOVER_MIN_HA / _PCT), and a Watch and Act / Emergency Warning inside an area (keyed by its
     level, so an escalation is a new key). A new small fire on its own is not
     one — in summer that would be a takeover every few minutes."""
     out, done = [], set()
@@ -764,12 +983,23 @@ def events(snap):
                 out.append({"key": f"grow:{m.id}:{ch.step_at:%Y%m%d%H%M%S}",
                             "member": m.id, "kind": "growth",
                             "text": f"{m.location} burn area +{ch.step_grown_ha:,.0f} ha"})
+            sc = (snap.get("sizes") or {}).get(m.id)
+            if m.role == "fire" and sc is not None and sc.significant_step \
+                    and not (ch and ch.step_grown_ha >= MIN_CHANGE_HA):
+                out.append({"key": f"size:{m.id}:{sc.step_at:%Y%m%d%H%M%S}",
+                            "member": m.id, "kind": "growth",
+                            "text": f"{m.location} {_ha_text(sc.step_from_ha)} → "
+                                    f"{_ha_text(sc.size_ha)}"})
             if m.role == "warning" and m.level in ("Emergency Warning",
                                                    "Watch and Act"):
                 out.append({"key": f"warn:{m.id}:{m.level}", "member": m.id,
                             "kind": "warning", "level": m.level,
                             "text": f"{m.level} — {m.location}"})
     return out
+
+
+def _ha_text(value):
+    return f"{value:,.0f} ha" if value >= 10 else f"{value:,.1f} ha"
 
 
 def detect_new(seen, current_events):
