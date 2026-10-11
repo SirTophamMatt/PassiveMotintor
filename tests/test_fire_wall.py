@@ -614,3 +614,110 @@ def test_refresh_callback_runs_the_test_for_an_admin(monkeypatch):
     assert r.status_code == 200, r.get_data(as_text=True)[:500]
     text = r.get_data(as_text=True)
     assert "TEST RUN" in text and "Areas of operation" in text
+
+
+# --------------------------------------------------------------------------- #
+# Growth the polygon diff alone missed (2026-10-11): a fire reported only by
+# its SIZE text, and a burn polygon re-issued under a new feed id.
+# --------------------------------------------------------------------------- #
+def journal_size(sid, size, at):
+    from app import history
+    history.record_state(history.FIRE, sid, {"feed_type": "incident",
+                                             "category1": "Fire", "size": size},
+                         effective_ts=_stamp(at))
+
+
+def _point_fire(sid="pt", size="27 ha"):
+    put(sid, None, lat=-37.0, lon=145.0, location="Point Fire")
+    database.execute("UPDATE fire_incidents SET size = ? WHERE source_id = ?",
+                     [size, sid])
+
+
+def test_a_point_fire_growing_by_reported_size_is_growth():
+    _point_fire()
+    journal_size("pt", "10 ha", NOW - timedelta(hours=2))
+    journal_size("pt", "10 ha", NOW - timedelta(hours=1))      # another field changed
+    journal_size("pt", "27 ha", NOW - timedelta(minutes=4))
+    snap = _areas()
+    area = fa.area_for_member(snap["areas"], "pt")
+    assert area.grown_ha == pytest.approx(17)
+    assert area.area_ha == pytest.approx(27)
+    assert area.step_at == NOW - timedelta(minutes=4)
+    sc = snap["sizes"]["pt"]
+    assert (sc.baseline_ha, sc.step_from_ha, sc.size_ha) == (10, 10, 27)
+    # It takes over the wall, and the card says what happened and when.
+    assert [e["key"] for e in fa.events(snap)] == [
+        f"size:pt:{(NOW - timedelta(minutes=4)):%Y%m%d%H%M%S}"]
+    card = str(fiw.focus_card(area, snap, "rotate", NOW))
+    assert "+17 ha" in card and "10 ha → 27 ha at" in card
+    assert "+17 ha" in str(fiw.area_list(snap, []))
+    # The map draws the reported size as a ring, the growth red, and breathes it.
+    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, NOW))
+    assert any(l.get("color") == fiw.GROWTH_COLOUR and l.get("type") == "fill"
+               for l in layers)
+    assert any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
+    later = NOW + timedelta(seconds=fiw.PULSE_SECONDS + 60)
+    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, later))
+    assert not any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
+
+
+def test_a_small_reported_step_shows_but_does_not_take_over():
+    _point_fire(size="0.2 ha")
+    journal_size("pt", "0.1 ha", NOW - timedelta(hours=2))
+    journal_size("pt", "0.2 ha", NOW - timedelta(minutes=4))
+    snap = _areas()
+    assert fa.events(snap) == []
+    assert not fa.area_for_member(snap["areas"], "pt").grown_ha     # < 0.5 ha
+
+
+def test_a_size_change_before_the_window_is_not_growth():
+    _point_fire()
+    journal_size("pt", "10 ha", NOW - timedelta(hours=20))
+    journal_size("pt", "27 ha", NOW - timedelta(hours=10))
+    area = fa.area_for_member(_areas(window=6)["areas"], "pt")
+    assert area.grown_ha == 0 and area.step_at is None and area.area_ha == 27
+
+
+def test_a_mapped_fire_is_measured_by_its_polygon_not_its_size_too():
+    put("poly", square(145, -37, 0.05))
+    database.execute("UPDATE fire_incidents SET size = '900 ha' WHERE source_id = 'poly'")
+    history("poly", square(145, -37, 0.04), NOW - timedelta(hours=1))
+    history("poly", square(145, -37, 0.05), NOW - timedelta(minutes=2))
+    journal_size("poly", "500 ha", NOW - timedelta(hours=1))
+    journal_size("poly", "900 ha", NOW - timedelta(minutes=2))
+    snap = _areas()
+    area = fa.area_for_member(snap["areas"], "poly")
+    poly_change = snap["changes"]["poly"]
+    assert area.grown_ha == pytest.approx(poly_change.grown_ha)
+    assert not area.reported
+    assert [e["kind"] for e in fa.events(snap)] == ["growth"]
+
+
+def test_a_reissued_burn_polygon_is_diffed_against_the_one_it_replaced():
+    # The feed replaced burn area "old" with "new" (a bigger shape, new id).
+    put("new", square(145.0, -37.01, 0.03, point=False), feed_type="burn-area",
+        category=None, created=NOW - timedelta(minutes=5))
+    history("old", square(145.0, -37.01, 0.02, point=False), NOW - timedelta(hours=1))
+    history("new", square(145.0, -37.01, 0.03, point=False), NOW - timedelta(minutes=5))
+    # Unrelated, far away: never chosen as the predecessor.
+    history("elsewhere", square(147.0, -38.0, 0.05, point=False),
+            NOW - timedelta(hours=1))
+    ch = fa.area_changes(["new"], NOW)["new"]
+    assert ch.predecessor == "old"
+    old_ha = fa.area_ha(fa.polygons_only(square(145.0, -37.01, 0.02, point=False)))
+    assert ch.grown_ha == pytest.approx(ch.area_ha - old_ha, rel=0.03)
+    assert ch.step_at == NOW - timedelta(minutes=5)
+
+
+def test_a_new_polygon_with_nothing_before_it_stays_a_baseline():
+    history("new", square(145.0, -37.01, 0.03, point=False), NOW - timedelta(minutes=5))
+    ch = fa.area_changes(["new"], NOW)["new"]
+    assert ch.predecessor is None and not ch.changed and ch.step_at is None
+
+
+def test_test_run_charlie_grows_by_reported_size():
+    sizes = [fa.area_for_member(_test_snap(s)["areas"], "TEST-charlie")
+             for s in range(fire_demo.STEPS)]
+    assert [round(a.area_ha) for a in sizes] == fire_demo.CHARLIE_HA
+    keys = {e["key"] for e in fa.events(_test_snap(2)) if e["member"] == "TEST-charlie"}
+    assert len(keys) == 1 and next(iter(keys)).startswith("size:TEST-charlie:")

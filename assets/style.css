@@ -1158,6 +1158,7 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .fiw-focus-name { font-size: clamp(20px, 1.8vw, 34px); font-weight: 700; line-height: 1.15; }
 .fiw-focus-counts { font-size: 15px; }
 .fiw-change { font-size: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.fiw-reported { font-size: 14px; }
 .fiw-grow { color: #ff1744; font-weight: 700; }
 .fiw-reduce { color: #2979ff; font-weight: 700; }
 .app.light .fiw-reduce { color: #1559d6; }

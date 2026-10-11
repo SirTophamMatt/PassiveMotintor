@@ -1291,6 +1291,22 @@ what should I be watching* — and is useful **on its own, before anyone generat
   step that GREW, or a Watch and Act / Emergency Warning inside an area (keyed by level, so an
   escalation is new) takes the map for `TAKEOVER_SECONDS` (45) under a pulsing banner, Emergency first,
   then growth; a NEW badge stays on the area card for 15 min. New small fires alone never take over.
+- **Growth the polygon diff missed (fixed 2026-10-11).** A fire reported growing 10 → 27 ha got no
+  highlight, for two reasons, both fixed:
+  1. **Most fires have NO polygon** — a point plus the feed's size text (`sizeFmt`). The wall only
+     recorded/diffed polygons, so their growth was invisible. `size_changes` now reads each fire's
+     REPORTED size from the state journal (`entity_state_history`, written by the fire collector
+     itself; parsed with `intel_feed._parse_ha`) over the window. A polygon-less fire's area/growth
+     come from it (a mapped fire is measured by its polygon only, never twice); the card says
+     "Reported size 10 ha → 27 ha at 13:42"; the map draws an equal-area DASHED circle (the real
+     perimeter is unknown), the growth ring red, the latest step breathing (`size_rings`,
+     `fire_wall.size_ring_layers`); a step of ≥ 5 ha and ≥ 10 % (the Intelligence Feed's own floor)
+     is a takeover (`size:<id>:<ts>`).
+  2. **A polygon re-issued under a NEW feed id** was only a baseline. `_link_predecessors` diffs a
+     polygon first seen inside the window against the no-longer-current polygon it overlaps most
+     (last recorded within `PREDECESSOR_LOOKBACK_HOURS` before the window), `AreaChange.predecessor`.
+  Area cards in the list also show the time of the latest change. Test run: Grass Fire Charlie has no
+  polygon and grows by reported size only (`fire_demo.CHARLIE_HA`).
 - **graph_calm.js `wdFocus`.** keepView held a map at any view it had seen before, so rotating BACK to
   an area did not move it. A figure can now send `layout.meta.wdFocus`: the requested view is
   honoured whenever the focus changes; within one focus the viewer's pan/zoom is kept as before.

@@ -21,6 +21,9 @@ The scenario repeats every `CYCLE_SECONDS`, one new burn-area shape per
   takeover.
 * **TEST tree down** near Alpha attaches to that area as context.
 * **TEST Grass Fire Charlie** near Melton with its own Advice — a second area.
+  It has NO mapped polygon, like most fires in the feed: only its reported
+  size grows (2 -> 4 -> 9 -> 15 -> 27 -> 40 ha), drawn as an equal-area dashed
+  circle with the growth ring in red; the bigger steps take over the wall.
 * **TEST flood Advice** in Gippsland — a non-fire warning, so NOT an area.
 
 Admin-only (fake Emergency Warnings on a public page could be screenshotted
@@ -79,6 +82,9 @@ def warning_level(step):
     return "Advice"
 
 
+CHARLIE_HA = [2, 4, 9, 15, 27, 40]
+
+
 def clock(now_ts=None):
     """(cycle start, current step 0..STEPS-1, epoch of the next step)."""
     now_ts = time.time() if now_ts is None else now_ts
@@ -132,7 +138,7 @@ def incidents(now_ts=None):
              category1="Tree Down", status="Responding", org="VIC/SES",
              first_seen=at(0)),
         _row("TEST-charlie", "TEST Grass Fire Charlie", CHARLIE[1], CHARLIE[0],
-             size="Small", first_seen=at(0)),
+             size=f"{CHARLIE_HA[step]} ha", first_seen=at(0)),
         _row("TEST-charlie-advice", "TEST Advice — Charlie", CHARLIE[1] - 0.01,
              CHARLIE[0] + 0.01, feed_type="warning", category1="Advice",
              event="Grass Fire", level="Advice", first_seen=at(0)),
@@ -178,7 +184,20 @@ def snapshot(link_km=fire_areas.DEFAULT_LINK_KM,
         sid: fire_areas._change_for(sid, _history(shape, step, start), cutoff)
         for sid, shape in (("TEST-alpha", alpha_shape), ("TEST-bravo", bravo_shape))}
     burn = pd.DataFrame(columns=["source_id", "geometry", "created", "updated"])
-    return fire_areas.assemble(snap, incidents(now_ts), burn, changes)
+    return fire_areas.assemble(snap, incidents(now_ts), burn, changes,
+                               {"TEST-charlie": charlie_size(step, start)})
+
+
+def charlie_size(step, start):
+    """Charlie's reported-size history, as the journal would give it."""
+    size = fire_areas.SizeChange(source_id="TEST-charlie",
+                                 size_ha=float(CHARLIE_HA[step]),
+                                 baseline_ha=float(CHARLIE_HA[0]))
+    size.grown_ha = size.size_ha - size.baseline_ha
+    if step:
+        size.step_at = datetime.fromtimestamp(start + step * STEP_SECONDS)
+        size.step_from_ha = float(CHARLIE_HA[step - 1])
+    return size
 
 
 def describe(snap):
