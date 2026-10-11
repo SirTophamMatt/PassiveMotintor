@@ -15,7 +15,8 @@ The scenario repeats every `CYCLE_SECONDS`, one new burn-area shape per
 * **TEST Fire Alpha** grows every step, driven east — red growth, the newest
   step breathing, and a growth takeover each step.
 * **TEST Fire Bravo**, 15 km east, is re-mapped SMALLER at step 3 — blue.
-* **TEST warning** covers both, so they read as ONE area of operation:
+* **TEST warning** covers both, so it belongs to BOTH areas (incidents are
+  never grouped — Alpha and Bravo are two areas):
   Advice -> Watch and Act at step 2 -> Emergency Warning at step 4, each a
   takeover.
 * **TEST tree down** near Alpha attaches to that area as context.

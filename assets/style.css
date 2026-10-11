@@ -1211,6 +1211,22 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
     .fiw-focus { width: calc(100% - 24px); max-height: 45%; }
 }
 
+/* ----------------------------------------------------------------------
+   Storm wall (/wall/storm) — reuses the fire wall's map-first layout
+   (fiw-*); ten tiles instead of seven, and a few extra card lines.
+   ---------------------------------------------------------------------- */
+.stw-tiles { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
+.stw-tiles .wall-tile { padding: 6px 10px; }
+.stw-tiles .wall-tile-label { font-size: clamp(11px, 0.8vw, 17px); }
+.stw-tiles .wall-tile-value { font-size: clamp(22px, 2.2vw, 52px); }
+.stw-places { font-size: 14px; }
+.stw-kinds { font-size: 14px; }
+.stw-impacts { font-size: 14px; font-weight: 600; }
+.stw-page .fw-road-note { left: auto; right: 12px; bottom: 56px; max-width: 46%; }
+@media (max-width: 1000px) {
+    .stw-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 /* ======================================================================
    Newsroom wall (/wall/news) — a live TV news desk over the Intelligence
    Feed. News-red is the accent here regardless of colour scheme; warning

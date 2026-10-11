@@ -37,6 +37,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
   visitor geolocation from a truncated IP
 - `app/fire_areas.py` — fire wall model: burn-area shape history/change + areas of operation;
   `app/fire_demo.py` — the in-memory simulated scenario behind `/wall/fire/test`
+- `app/storm_areas.py` — storm wall model: weather-related incidents linked into areas of
+  operation; `app/storm_demo.py` — the simulated storm behind `/wall/storm/test`
 - `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
   Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
@@ -1258,12 +1260,16 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (▶ Resume rotation). Tiles: fire incidents, areas, the three FIRE-related warning levels (never
   summed), burnt area (ha), areas growing in the window. Options (rotation, statewide in rotation,
   link distance 2/5/10/20 km, change window 1–24 h) and layer chips persist per browser.
-- **Model `app/fire_areas.py`** (UI-free). `build_areas` links fire incidents, fire warnings
-  (`is_fire_warning`: "fire"/"burn" in event/category/headline) and moving burn areas that intersect or
-  sit within `link_km` (shapely STRtree `dwithin`, union-find) — a warning polygon over two fires joins
-  them. Other incidents / non-fire warnings / static recent burn areas attach to the NEAREST area as
-  context but never link two areas (a line of trees down must not chain two fires 40 km apart). A
-  non-fire warning alone is not an area. Focus view = convex hull of the members + 1 km → `focus_view`
+- **Model `app/fire_areas.py`** (UI-free). `build_areas` makes **one area per fire incident —
+  incidents are never grouped** (2026-10-11; it used to union-find nearby fires into one area). Within
+  `link_km` (shapely STRtree `dwithin`) of a fire: a fire warning (`is_fire_warning`: "fire"/"burn" in
+  event/category/headline) joins EVERY fire it covers (so a warning over two fires is in both areas;
+  `events` de-dups it so it takes over once); a moving burn area joins the NEAREST fire only (growth
+  counted once). Fire warnings / moving burn areas with no fire nearby still form an area, linked
+  among themselves. Other incidents / non-fire warnings / static recent burn areas attach to the
+  NEAREST area as context (nearest fire-related member; ties between areas sharing a warning go to
+  the nearer fire). A non-fire warning alone is not an area. The Options "link distance" is now the
+  attach distance. Focus view = convex hull of the members + 1 km → `focus_view`
   (MapLibre 512-px world, zoom clamped 6–12).
 - **Burn-area history `fire_area_history`** — written by the fire collector (`scraper._record_areas`,
   wrapped, never fatal) via `fire_areas.record`: one row per Fire-incident polygon or `burn-area`
@@ -1299,7 +1305,7 @@ what should I be watching* — and is useful **on its own, before anyone generat
   scenario from the clock, entirely IN MEMORY — nothing is written to the DB, so the feed, webhooks,
   ticker and sounds never see it — and hands it to the same `fire_areas.assemble`/`_change_for` the
   live wall uses. An 18-min cycle, one shape per 3 min: TEST Fire Alpha grows east every step, Bravo
-  is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
+  (its own area) is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
   Emergency Warning (step 5), a tree down attaches as context, Grass Fire Charlie is a second area
   and a flood Advice is (correctly) not one. Striped TEST RUN badge + a header line with the step and
   next change. `fire_wall.snapshot()` re-checks `auth.is_admin()` in every callback, so a direct
@@ -1307,6 +1313,46 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - **`is_fire_warning` reads the hazard fields** (`event`/`category2`) and only falls back to the
   headline when there is no hazard — the test run's "flood Advice (not a fire)" headline exposed it.
 - Tests: `tests/test_fire_wall.py`.
+
+## Storm wall — /wall/storm (built 2026-10-11)
+- **The fire wall's layout, the weather side of the picture.** `app/pages/storm_wall.py` (public, a
+  `wall.SCENARIOS` row, ids `stw-*`, reuses the `fiw-*` CSS + `fire_wall` helpers): map first, rotating
+  focus through each **area of operation** (+ optional statewide view), the area in focus as a card
+  over the map, every area as a clickable card beside it (pin / ▶ Resume rotation). Ten tiles:
+  incidents (labelled by agency, e.g. "SES incidents"), areas, the three weather-related warning
+  levels (never summed), BoM warnings, road closures, customers off, gauges ≥ Minor, strong cells.
+- **Model `app/storm_areas.py`** (UI-free). Unlike the fire wall, **incidents LINK**: weather-related
+  incidents (`is_weather_incident`: category/event keywords — tree, building, damage, flood, wind …;
+  never a warning or a fire) from the selected agencies (**SES only by default**) within `link_km`
+  (2/5/10/20, default 5) chain into one area (STRtree `dwithin` + union-find), rebuilt every snapshot,
+  so areas grow / merge / split with the event. A weather warning (`is_weather_warning`: hazard
+  keywords, never a fire warning) joins EVERY area it is within `link_km` of but never links two (a
+  catchment polygon would merge the state); a Watch and Act / Emergency Warning with no incident near
+  it gets an area of its own, an Advice does not. Context — roads caused by flooding/weather/trees,
+  power outages, gauges ≥ Minor (reading < 24 h), moderate/strong storm cells — attaches to the
+  NEAREST incident/standalone-warning anchor within `link_km`, never links. Area name = its busiest
+  locality (text after the last comma of the feed location); card shows the other localities, job
+  kinds (`Tree Down ×8`), jobs new in the last `NEW_MINUTES` (60), warnings and the impacts line. Focus
+  view = hull of incidents + context (not warning polygons) + 1.5 km.
+- **Options** (per browser): rotation, statewide, link distance, incident agency checklist,
+  "weather-related only" (off = every incident of those agencies), and an **Event** tag — which scopes
+  incidents and roads to those that STARTED during it (`scope`, `roads.filter_since`); warnings,
+  power, gauges and cells are always what is current. A note on the map states the scope.
+- **Takeovers** (per browser, first snapshot seeds): a Watch and Act / Emergency Warning in an area
+  (keyed by level, de-duplicated across areas sharing it) and an area's incident count reaching
+  `SIZE_STEPS` (5/10/20/50, keyed on its oldest incident) take the map for 45 s; a single new job never
+  does.
+- **Cost:** `storm_areas.current` cached 45 s per option set; `load_frames` reads each source once
+  (isolated — an unreadable source is "—") and the map draws from the snapshot's own frames.
+- **Test run `/wall/storm/test`** (admin only, link on Admin → Storm tracking): `app/storm_demo.py`
+  builds frames from the clock, in memory, through the same `assemble`. Dandenong Ranges jobs grow
+  2/step into one area (takeovers at 5 and 10) under a thunderstorm warning Advice → Watch and Act →
+  Emergency, with a tree closure, power outage and strong cell attached; Geelong is a second area with
+  a gauge at Minor; a Shepparton flood Watch and Act is a standalone area; a Gippsland Advice, a Bendigo
+  rescue and a CFA grass fire are (correctly) not areas.
+- Not confirmed against a live storm: the exact SES `category1/2` wording (tune
+  `_WEATHER_INCIDENT_RE`) and the `location` format (locality after the last comma).
+- Tests: `tests/test_storm_wall.py`.
 
 ## Warnings never count as fires (2026-10-08)
 - **One definition of a fire:** `fire.data.is_fire(row)` — an INCIDENT (`feed_type` not `warning` /

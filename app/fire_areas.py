@@ -12,10 +12,9 @@ Two jobs:
   not before is GROWTH, area that was and no longer is is a REDUCTION (a
   perimeter re-mapped smaller). Both over the selected window, plus the latest
   single step, which is what the wall makes breathe.
-* **Areas of operation.** `build_areas()` links fire incidents, fire warnings
-  and burn areas that intersect or sit within `link_km` of each other into one
-  area, then attaches every other incident / warning that is that close as
-  context. The wall focuses its map on one area at a time.
+* **Areas of operation.** `build_areas()` makes one area per fire incident
+  (incidents are never grouped), attaching the fire warnings, burn areas and
+  other incidents / warnings within `link_km` of it. The wall focuses its map on one area at a time.
 
 Polygon maths uses shapely in a local metric projection (equirectangular about
 Victoria). Within the state that is accurate to a couple of percent for area,
@@ -543,43 +542,87 @@ def focus_view(bounds, width_px=1100, height_px=700, pad=1.35,
 
 
 def build_areas(members, changes=None, link_km=DEFAULT_LINK_KM):
-    """Group members into areas of operation.
+    """Build the areas of operation: ONE PER FIRE INCIDENT.
 
-    Fire-related members (fire incidents, fire warnings, moving burn areas)
-    that intersect or lie within `link_km` of each other are one area — a
-    warning polygon covering two fires joins them. Every other member (other
-    incidents, non-fire warnings, static burn areas) is attached to the
-    nearest area it is that close to, but never links two areas itself: a line
-    of fallen trees must not chain two fires 40 km apart into one.
+    Incidents are never grouped — two fires a few km apart are two areas, so
+    each gets its own turn on the map and its own card. Within `link_km` of a
+    fire:
+
+    * a fire warning joins EVERY fire it is that close to (a warning polygon
+      over two fires is part of both pictures);
+    * a moving burn area joins the NEAREST fire only, so its growth is counted
+      once;
+    * every other member (other incidents, non-fire warnings, static burn
+      areas) attaches to the nearest area as context.
+
+    Fire warnings and moving burn areas with no fire incident nearby still make
+    an area, linked among themselves as before (a fire can be warned about
+    before an incident appears for it).
     """
     if not HAVE_SHAPELY:
         return []
     changes = changes or {}
     link_m = float(link_km) * 1000.0
-    seeds = [m for m in members if m.fire_related]
-    if not seeds:
-        return []
-    tree = STRtree([m.geom for m in seeds])
-    uf = _Union(len(seeds))
-    left, right = tree.query([m.geom for m in seeds], predicate="dwithin",
-                             distance=link_m)
-    for a, b in zip(left, right):
-        uf.union(int(a), int(b))
-    groups = {}
-    for i, m in enumerate(seeds):
-        groups.setdefault(uf.find(i), []).append(m)
 
-    group_of = {i: uf.find(i) for i in range(len(seeds))}
+    def nearest_first(tree, geoms, m):
+        hits = tree.query(m.geom, predicate="dwithin", distance=link_m)
+        return sorted((int(i) for i in hits),
+                      key=lambda i: m.geom.distance(geoms[i]))
+
+    fires = [m for m in members if m.role == "fire"]
+    groups = [[f] for f in fires]
+    fire_geoms = [f.geom for f in fires]
+    fire_tree = STRtree(fire_geoms) if fires else None
+
+    orphans = []
+    for m in members:
+        if not m.fire_related or m.role == "fire":
+            continue
+        hits = nearest_first(fire_tree, fire_geoms, m) if fire_tree else []
+        if not hits:
+            orphans.append(m)
+        elif m.role == "warning":
+            for i in hits:
+                groups[i].append(m)
+        else:
+            groups[hits[0]].append(m)
+
+    # Anchors for context: every fire-related member, by its group (a shared
+    # warning anchors each of its groups).
+    anchors = [(m.geom, i) for i, g in enumerate(groups) for m in g]
+    if orphans:
+        tree = STRtree([m.geom for m in orphans])
+        uf = _Union(len(orphans))
+        left, right = tree.query([m.geom for m in orphans], predicate="dwithin",
+                                 distance=link_m)
+        for a, b in zip(left, right):
+            uf.union(int(a), int(b))
+        index = {}
+        for i, m in enumerate(orphans):
+            root = uf.find(i)
+            if root not in index:
+                index[root] = len(groups)
+                groups.append([])
+            groups[index[root]].append(m)
+            anchors.append((m.geom, index[root]))
+    if not groups:
+        return []
+
+    anchor_geoms = [g for g, _ in anchors]
+    anchor_tree = STRtree(anchor_geoms)
     for m in members:
         if m.fire_related:
             continue
-        hits = tree.query(m.geom, predicate="dwithin", distance=link_m)
+        hits = anchor_tree.query(m.geom, predicate="dwithin", distance=link_m)
         if len(hits) == 0:
             continue
-        nearest = min(hits, key=lambda i: m.geom.distance(seeds[int(i)].geom))
-        groups[group_of[int(nearest)]].append(m)
+        # Nearest anchor; between areas sharing it, the nearest fire.
+        best = min((int(i) for i in hits), key=lambda i: (
+            m.geom.distance(anchor_geoms[i]),
+            m.geom.distance(groups[anchors[i][1]][0].geom)))
+        groups[anchors[best][1]].append(m)
 
-    return sorted((_area(g, changes) for g in groups.values()),
+    return sorted((_area(g, changes) for g in groups),
                   key=lambda a: (a.level_rank, -a.grown_ha, -a.area_ha,
                                  a.name.lower()))
 
@@ -709,9 +752,12 @@ def events(snap):
     grew, and a Watch and Act / Emergency Warning inside an area (keyed by its
     level, so an escalation is a new key). A new small fire on its own is not
     one — in summer that would be a takeover every few minutes."""
-    out = []
+    out, done = [], set()
     for area in snap.get("areas") or []:
         for m in area.members:
+            if m.id in done:               # a warning shared by two areas
+                continue
+            done.add(m.id)
             ch = snap["changes"].get(m.id)
             if m.role in ("fire", "burn") and ch and ch.step_at \
                     and ch.step_grown_ha >= MIN_CHANGE_HA:
