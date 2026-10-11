@@ -1,9 +1,9 @@
 # Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Fire wall (/wall/fire): a map-first scenario wall for a fire event.
 
-The map is the page. Fire incidents, fire warnings and burn areas that
-intersect or sit within a few km of each other are linked into one AREA OF
-OPERATION (`app.fire_areas`), and the map rotates its focus from one area to
+The map is the page. Each fire incident is its own AREA OF OPERATION
+(`app.fire_areas`; incidents are never grouped), carrying the fire warnings,
+burn areas and other incidents within a few km of it, and the map rotates its focus from one area to
 the next — optionally with a statewide view in the rotation — with the area's
 facts in a card over the map and every area listed beside it (click one to pin
 the map there).
@@ -207,7 +207,7 @@ def layout(test=False):
                                              "rotation", "value": "state"}],
                           value=["state"], className="display-options",
                           persistence=True, persistence_type="local"),
-            html.Div("Link incidents and warnings within",
+            html.Div("Attach warnings and nearby incidents within",
                      className="display-panel-label"),
             _radio("fiw-link-km", fire_areas.LINK_KM_CHOICES,
                    fire_areas.DEFAULT_LINK_KM, lambda n: f" {n} km"),

@@ -236,31 +236,34 @@ def _ids(area):
     return sorted(m.id for m in area.members)
 
 
-def test_nearby_fires_link_and_distant_ones_do_not():
+def test_incidents_are_never_grouped():
     put("a1", lat=-37.0, lon=145.0)
     put("a2", lat=-37.02, lon=145.02)          # ~3 km away
     put("far", lat=-38.0, lon=147.0)
-    areas = _areas()["areas"]
-    assert sorted(_ids(a) for a in areas) == [["a1", "a2"], ["far"]]
+    for km in fa.LINK_KM_CHOICES:
+        areas = _areas(link_km=km)["areas"]
+        assert sorted(_ids(a) for a in areas) == [["a1"], ["a2"], ["far"]]
 
 
-def test_link_distance_is_the_option():
+def test_link_distance_is_the_attach_option():
     put("a1", lat=-37.0, lon=145.0)
-    put("a2", lat=-37.0, lon=145.09)           # ~8 km away
-    assert len(_areas(link_km=5)["areas"]) == 2
-    assert len(_areas(link_km=10)["areas"]) == 1
+    put("tree", category="Tree Down", lat=-37.0, lon=145.09)   # ~8 km away
+    assert _ids(_areas(link_km=5)["areas"][0]) == ["a1"]
+    assert _ids(_areas(link_km=10)["areas"][0]) == ["a1", "tree"]
 
 
-def test_a_warning_covering_two_fires_joins_them():
+def test_a_warning_covering_two_fires_belongs_to_both():
     put("a1", lat=-37.0, lon=145.0)
     put("a2", lat=-37.0, lon=145.3)            # ~27 km apart
     put("w1", square(144.95, -37.05, 0.4), category="Watch and Act",
         feed_type="warning", level="Watch and Act", event="Bushfire",
         lat=-36.85, lon=145.15)
-    areas = _areas()["areas"]
-    assert len(areas) == 1
-    assert _ids(areas[0]) == ["a1", "a2", "w1"]
-    assert areas[0].level == "Watch and Act"
+    snap = _areas()
+    areas = snap["areas"]
+    assert sorted(_ids(a) for a in areas) == [["a1", "w1"], ["a2", "w1"]]
+    assert all(a.level == "Watch and Act" for a in areas)
+    # One warning, one takeover — not one per area it belongs to.
+    assert [e["member"] for e in fa.events(snap)] == ["w1"]
 
 
 def test_other_incidents_attach_but_never_chain_two_fires():
@@ -311,15 +314,16 @@ def test_a_moving_burn_area_is_an_area_on_its_own():
     assert areas[0].step_at == NOW - timedelta(minutes=2)
 
 
-def test_area_rolls_up_burnt_area_and_growth_and_is_named_after_the_largest_fire():
+def test_area_rolls_up_burnt_area_and_growth_and_is_named_after_its_fire():
     put("small", square(145.0, -37.0, 0.01), location="Small Gully")
     put("big", square(145.02, -37.0, 0.05), location="Big Ridge",
         lat=-37.0, lon=145.02)
     history("small", square(145.0, -37.0, 0.01), NOW - timedelta(hours=1))
     history("big", square(145.02, -37.0, 0.04), NOW - timedelta(hours=1))
     history("big", square(145.02, -37.0, 0.05), NOW - timedelta(minutes=1))
-    area = _areas()["areas"][0]
-    assert area.name == "Big Ridge +1 fire"
+    areas = _areas()["areas"]
+    assert sorted(a.name for a in areas) == ["Big Ridge", "Small Gully"]
+    area = fa.area_for_member(areas, "big")
     assert area.grown_ha > 0 and area.area_ha > area.grown_ha
     assert -37.1 < area.center["lat"] < -36.9 and 6 <= area.zoom <= 12
 
@@ -516,7 +520,8 @@ def test_test_run_links_and_separates_as_intended():
     snap = _test_snap(0)
     assert snap["ok"] and snap["test"]["step"] == 1
     ids = sorted(sorted(a.member_ids()) for a in snap["areas"])
-    assert ["TEST-alpha", "TEST-bravo", "TEST-tree", "TEST-warning"] in ids
+    assert ["TEST-alpha", "TEST-tree", "TEST-warning"] in ids
+    assert ["TEST-bravo", "TEST-warning"] in ids
     assert ["TEST-charlie", "TEST-charlie-advice"] in ids
     assert not any("TEST-flood" in a.member_ids() for a in snap["areas"])
 
@@ -524,10 +529,11 @@ def test_test_run_links_and_separates_as_intended():
 def test_test_run_grows_shrinks_and_escalates():
     levels, grown, reduced = [], [], []
     for step in range(fire_demo.STEPS):
-        area = fa.area_for_member(_test_snap(step)["areas"], "TEST-alpha")
+        areas = _test_snap(step)["areas"]
+        area = fa.area_for_member(areas, "TEST-alpha")
         levels.append(area.level)
         grown.append(area.grown_ha)
-        reduced.append(area.reduced_ha)
+        reduced.append(fa.area_for_member(areas, "TEST-bravo").reduced_ha)
     assert levels == ["Advice", "Advice", "Watch and Act", "Watch and Act",
                       "Emergency Warning", "Emergency Warning"]
     assert grown[0] == 0 and all(b > a for a, b in zip(grown, grown[1:]))

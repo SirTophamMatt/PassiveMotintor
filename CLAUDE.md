@@ -1258,12 +1258,16 @@ what should I be watching* — and is useful **on its own, before anyone generat
   (▶ Resume rotation). Tiles: fire incidents, areas, the three FIRE-related warning levels (never
   summed), burnt area (ha), areas growing in the window. Options (rotation, statewide in rotation,
   link distance 2/5/10/20 km, change window 1–24 h) and layer chips persist per browser.
-- **Model `app/fire_areas.py`** (UI-free). `build_areas` links fire incidents, fire warnings
-  (`is_fire_warning`: "fire"/"burn" in event/category/headline) and moving burn areas that intersect or
-  sit within `link_km` (shapely STRtree `dwithin`, union-find) — a warning polygon over two fires joins
-  them. Other incidents / non-fire warnings / static recent burn areas attach to the NEAREST area as
-  context but never link two areas (a line of trees down must not chain two fires 40 km apart). A
-  non-fire warning alone is not an area. Focus view = convex hull of the members + 1 km → `focus_view`
+- **Model `app/fire_areas.py`** (UI-free). `build_areas` makes **one area per fire incident —
+  incidents are never grouped** (2026-10-11; it used to union-find nearby fires into one area). Within
+  `link_km` (shapely STRtree `dwithin`) of a fire: a fire warning (`is_fire_warning`: "fire"/"burn" in
+  event/category/headline) joins EVERY fire it covers (so a warning over two fires is in both areas;
+  `events` de-dups it so it takes over once); a moving burn area joins the NEAREST fire only (growth
+  counted once). Fire warnings / moving burn areas with no fire nearby still form an area, linked
+  among themselves. Other incidents / non-fire warnings / static recent burn areas attach to the
+  NEAREST area as context (nearest fire-related member; ties between areas sharing a warning go to
+  the nearer fire). A non-fire warning alone is not an area. The Options "link distance" is now the
+  attach distance. Focus view = convex hull of the members + 1 km → `focus_view`
   (MapLibre 512-px world, zoom clamped 6–12).
 - **Burn-area history `fire_area_history`** — written by the fire collector (`scraper._record_areas`,
   wrapped, never fatal) via `fire_areas.record`: one row per Fire-incident polygon or `burn-area`
@@ -1299,7 +1303,7 @@ what should I be watching* — and is useful **on its own, before anyone generat
   scenario from the clock, entirely IN MEMORY — nothing is written to the DB, so the feed, webhooks,
   ticker and sounds never see it — and hands it to the same `fire_areas.assemble`/`_change_for` the
   live wall uses. An 18-min cycle, one shape per 3 min: TEST Fire Alpha grows east every step, Bravo
-  is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
+  (its own area) is re-mapped smaller at step 3 (blue), the warning over both goes Advice → Watch and Act (step 3) →
   Emergency Warning (step 5), a tree down attaches as context, Grass Fire Charlie is a second area
   and a flood Advice is (correctly) not one. Striped TEST RUN badge + a header line with the step and
   next change. `fire_wall.snapshot()` re-checks `auth.is_admin()` in every callback, so a direct
