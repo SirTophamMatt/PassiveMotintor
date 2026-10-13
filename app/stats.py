@@ -16,6 +16,8 @@ event tag — plus what is active right now.
 Everything here is the PUBLIC feed: structure fires in particular are often not
 published, so every surface carries that caveat (`CAVEAT`).
 """
+import json
+import re
 import threading
 import time as _time
 from dataclasses import dataclass, field
@@ -152,11 +154,45 @@ def incident_type(r):
     return cat1
 
 
+def fire_kind_of(category1, category2):
+    """(is_fire, kind) for an incident. Tolerant of where the feed puts the
+    fire type: category1 is usually "Fire" with the type in category2, but an
+    agency may publish the type as the category itself ("Structure Fire"),
+    so both are read. An alarm is never a fire."""
+    c1 = _s(category1).lower()
+    if "alarm" in c1:
+        return False, None
+    kind = fire_kind(category2) if c1 == "fire" else None
+    if kind is None and "fire" in c1:
+        kind = fire_kind(c1) or fire_kind(f"{c1} {_s(category2).lower()}")
+    return (c1 == "fire" or "fire" in c1), kind
+
+
+ESTA = "esta"                   # a Triple Zero dispatch event, agency not identified
+_ESTA_ID_RE = re.compile(r"^ESTA:(\d{9,10})$")
+_FRV_STATION_RE = re.compile(r"^FS\d{1,3}$")
+_CFA_BRIGADE_RE = re.compile(r"^[A-Z]{4}$")
+
+
+def agency_for(r):
+    """The agency a row is counted under. An `agency_hint` (from the pager,
+    see `attribute_esta`) wins; then the feed's sourceOrg. FRV publishes no
+    feed of its own: metro fire jobs arrive as raw ESTA dispatch events
+    (sourceOrg VIC/ESTA) with no agency on them, so those are "esta" until
+    the pager says whose job it was."""
+    hint = _s(r.get("agency_hint"))
+    if hint:
+        return hint
+    agency = fire_data.agency_of(r.get("source_org"))
+    if agency == fire_data.AGENCY_OTHER and "ESTA" in _s(r.get("source_org")).upper():
+        return ESTA
+    return agency
+
+
 def classify(r):
     """Every flag a row contributes to. Pure, so the rules are testable."""
-    agency = fire_data.agency_of(r.get("source_org"))
-    fire = _s(r.get("category1")).lower() == "fire"
-    kind = fire_kind(r.get("category2")) if fire else None
+    agency = agency_for(r)
+    fire, kind = fire_kind_of(r.get("category1"), r.get("category2"))
     return {
         "agency": agency,
         "rfa": agency == "ses",
@@ -164,21 +200,172 @@ def classify(r):
         "kind": kind,
         "structure_cfa": kind == "structure" and agency == "cfa",
         "structure_frv": kind == "structure" and agency == "frv",
+        "structure_esta": kind == "structure" and agency == ESTA,
         "grass_cfa": kind == "grass" and agency == "cfa",
         "grass_ffm": kind == "grass" and agency == "ffm",
+        "grass_esta": kind == "grass" and agency == ESTA,
     }
+
+
+def esta_f_number(source_id):
+    """'ESTA:261014231' -> 'F261014231' (the pager's F-number), else None."""
+    m = _ESTA_ID_RE.match(_s(source_id))
+    return f"F{m.group(1)}" if m else None
+
+
+def pager_agency(messages):
+    """'frv' / 'cfa' / None from one job's pager messages [(brigade, units_json)].
+    The bracketed brigade/station names whose area the job is in ([FS91] = FRV
+    station 91, [MTEL] = CFA Mount Eliza); without one, the appliances paged
+    decide, and a tie is left unattributed rather than guessed."""
+    for brigade, _ in messages:
+        b = _s(brigade).upper()
+        if _FRV_STATION_RE.match(b):
+            return "frv"
+        if _CFA_BRIGADE_RE.match(b):
+            return "cfa"
+    services = {"FRV": 0, "CFA": 0}
+    for _, units in messages:
+        try:
+            for u in json.loads(units or "[]"):
+                if u.get("service") in services:
+                    services[u["service"]] += 1
+        except (TypeError, ValueError):
+            continue
+    if services["FRV"] != services["CFA"]:
+        return "frv" if services["FRV"] > services["CFA"] else "cfa"
+    return None
+
+
+# A CFA pager cycle must have run within this long after an ESTA job started
+# for "no page seen" to mean "not paged" rather than "we weren't looking".
+PAGER_COVER_MINUTES = 30
+HOW_PAGER = "pager"
+HOW_NOT_PAGED = "not paged"
+
+
+def _pager_covered(started, heartbeats):
+    """For each start time: did a pager cycle run in (start, start + cover]?"""
+    import numpy as np
+    if not len(heartbeats):
+        return [False] * len(started)
+    hb = np.sort(pd.to_datetime(pd.Series(heartbeats), errors="coerce").dropna().values)
+    st = pd.to_datetime(pd.Series(list(started)), errors="coerce")
+    out = []
+    for t in st:
+        if pd.isna(t):
+            out.append(False)
+            continue
+        i = np.searchsorted(hb, np.datetime64(t), side="right")
+        out.append(bool(i < len(hb) and hb[i] <= np.datetime64(
+            t + timedelta(minutes=PAGER_COVER_MINUTES))))
+    return out
+
+
+def attribute_esta(df):
+    """Add `agency_hint` / `agency_how` to ESTA rows (Triple Zero dispatch
+    events, which carry no agency).
+
+    The CFA pager (Mazzanet) carries every CFA job and the FRV stations that
+    were CFA stations (Dandenong, Boronia, …), but NOT the ex-MFB metro
+    stations. So an ESTA job:
+    - on the pager -> the agency the page names (`pager_agency`);
+    - NOT on the pager, while the pager collector was running -> FRV
+      (an ex-MFB metro job);
+    - not on the pager and the pager wasn't being collected then -> left
+      unidentified, because a CFA job would look the same."""
+    if df.empty or "source_id" not in df:
+        return df
+    df = df.copy()
+    df["f_number"] = df["source_id"].map(esta_f_number)
+    df["agency_hint"] = None
+    df["agency_how"] = None
+    esta = df["f_number"].notna()
+    if not esta.any():
+        return df
+    fnums = sorted(set(df.loc[esta, "f_number"]))
+    found = {}
+    try:
+        for i in range(0, len(fnums), 500):
+            chunk = fnums[i:i + 500]
+            rows = database.read_df(
+                "SELECT f_number, brigade, units_json FROM pager_messages "
+                f"WHERE f_number IN ({','.join('?' * len(chunk))}) ORDER BY sent_at",
+                chunk)
+            for f, g in rows.groupby("f_number"):
+                found[f] = pager_agency(list(zip(g["brigade"], g["units_json"])))
+        starts = pd.to_datetime(df.loc[esta, "started"], errors="coerce").dropna()
+        heartbeats = []
+        if not starts.empty:
+            heartbeats = database.read_df(
+                "SELECT timestamp FROM pager_heartbeat WHERE timestamp > ? AND timestamp <= ?",
+                [starts.min().strftime(TS),
+                 (starts.max() + timedelta(minutes=PAGER_COVER_MINUTES)).strftime(TS)],
+            )["timestamp"].tolist()
+    except Exception:                   # no pager tables yet
+        return df
+    paged = df["f_number"].isin(found.keys())
+    df.loc[paged, "agency_hint"] = df.loc[paged, "f_number"].map(found)
+    df.loc[paged, "agency_how"] = HOW_PAGER
+    unpaged = esta & ~paged
+    if unpaged.any():
+        covered = _pager_covered(df.loc[unpaged, "started"], heartbeats)
+        idx = df.index[unpaged][covered]
+        df.loc[idx, "agency_hint"] = "frv"
+        df.loc[idx, "agency_how"] = HOW_NOT_PAGED
+    return df
+
+
+def counted_as(r):
+    """The headline figure a classified row lands in (for the check table)."""
+    if r.get("rfa"):
+        return "SES RFA"
+    via = {HOW_PAGER: " — via CFA pager",
+           HOW_NOT_PAGED: " — ESTA job not on the CFA pager (ex-MFB area)"
+           }.get(_s(r.get("agency_how")), "")
+    for key, label in (("structure_cfa", "Structure fire (CFA)"),
+                       ("structure_frv", "Structure fire (FRV)"),
+                       ("structure_esta", "Structure fire (ESTA — agency not identified)"),
+                       ("grass_cfa", "Grass & scrub/bush (CFA)"),
+                       ("grass_ffm", f"Grass & scrub/bush ({FFM_LABEL})"),
+                       ("grass_esta", "Grass & scrub/bush (ESTA — agency not identified)")):
+        if r.get(key):
+            return label + via
+    if r.get("fire"):
+        kind = {"structure": "structure", "grass": "grass/bush"}.get(r.get("kind"))
+        agency = fire_data.AGENCY_LABELS.get(r.get("agency"), "other agency")
+        return (f"Fire — {kind} fire but agency is {agency}" if kind
+                else "Fire — other type (not structure or grass/bush)")
+    return "Other incident"
+
+
+def classification_check(df, limit=40):
+    """[(source_org, category1, category2, count, counted_as)] — what the feed
+    actually called each incident and where it was counted, so a feed wording
+    the rules don't recognise is visible on the page instead of reading as 0."""
+    if df.empty:
+        return []
+    keys = pd.DataFrame({
+        "org": df["source_org"].map(_s), "c1": df["category1"].map(_s),
+        "c2": df["category2"].map(_s), "as_": df.apply(counted_as, axis=1)})
+    g = (keys.groupby(["org", "c1", "c2", "as_"]).size()
+         .reset_index(name="n").sort_values(["n", "org"], ascending=[False, True]))
+    return [(r.org or "—", r.c1 or "—", r.c2 or "—", int(r.n), r.as_)
+            for r in g.head(limit).itertuples()]
 
 
 def _frame(df):
     """Add the classification columns to a raw incident frame."""
     if df.empty:
         cols = ["agency", "rfa", "fire", "kind", "structure_cfa", "structure_frv",
-                "grass_cfa", "grass_ffm"]
+                "structure_esta", "grass_cfa", "grass_ffm", "grass_esta",
+                "structure", "grass", "agency_hint", "agency_how"]
         return df.assign(**{c: pd.Series(dtype=object) for c in cols})
+    df = attribute_esta(df)
     flags = pd.DataFrame([classify(r) for r in df.to_dict("records")], index=df.index)
     out = pd.concat([df, flags], axis=1)
-    out["structure"] = out["structure_cfa"] | out["structure_frv"]
-    out["grass"] = out["grass_cfa"] | out["grass_ffm"]
+    out["structure"] = out["structure_cfa"] | out["structure_frv"] | out["structure_esta"]
+    out["grass"] = out["grass_cfa"] | out["grass_ffm"] | out["grass_esta"]
     return out
 
 
@@ -216,9 +403,11 @@ def totals(df):
         "structure_frv": n("structure_frv"),
         "grass_cfa": n("grass_cfa"),
         "grass_ffm": n("grass_ffm"),
+        "structure_esta": n("structure_esta"),
+        "grass_esta": n("grass_esta"),
     }
-    t["structure"] = t["structure_cfa"] + t["structure_frv"]
-    t["grass"] = t["grass_cfa"] + t["grass_ffm"]
+    t["structure"] = t["structure_cfa"] + t["structure_frv"] + t["structure_esta"]
+    t["grass"] = t["grass_cfa"] + t["grass_ffm"] + t["grass_esta"]
     return t
 
 
@@ -335,7 +524,7 @@ def top_localities(df, mask=None, limit=10):
 
 
 AGENCY_COLUMNS = [("cfa", "CFA"), ("frv", "FRV"), ("ffm", FFM_LABEL),
-                  ("other", "Other")]
+                  (ESTA, "ESTA (not identified)"), ("other", "Other")]
 KIND_ROWS = [("structure", "Structure"), ("grass", "Grass & scrub/bush"),
              (None, "Other fires")]
 
@@ -356,7 +545,7 @@ def fire_matrix(df):
             if sub.empty:
                 cells[key] = 0
             elif key == "other":
-                cells[key] = int((~sub["agency"].isin(["cfa", "frv", "ffm"])).sum())
+                cells[key] = int((~sub["agency"].isin(["cfa", "frv", "ffm", ESTA])).sum())
             else:
                 cells[key] = int((sub["agency"] == key).sum())
         rows.append({"kind": label, **cells, "total": int(len(sub))})
@@ -391,6 +580,7 @@ class Snapshot:
     rfa_localities: list = field(default_factory=list)
     fire_types: list = field(default_factory=list)
     fire_matrix: list = field(default_factory=list)
+    check: list = field(default_factory=list)
     active_rfa_types: list = field(default_factory=list)
     coverage: datetime = None
     notes: list = field(default_factory=list)
@@ -416,6 +606,7 @@ def build(period, now=None):
         snap.rfa_localities = top_localities(df, df["rfa"].astype(bool))
         snap.fire_types = top_types(df, df["fire"].astype(bool))
     snap.fire_matrix = fire_matrix(df)
+    snap.check = classification_check(df)
     snap.coverage = coverage_start()
     if period.partial(now):
         snap.notes.append(f"Period not complete — counted to {_fmt(now)}.")

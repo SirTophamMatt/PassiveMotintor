@@ -155,6 +155,11 @@ def stat_card(label, value, colour, split=None, delta=None, spark=None, foot=Non
                     style={"borderTop": f"4px solid {colour}"})
 
 
+def _unidentified(n):
+    """ESTA dispatch events the CFA pager could not place with an agency."""
+    return [("agency not identified (ESTA)", n)] if n else []
+
+
 def period_cards(snap, dark):
     t, p = snap.totals, snap.previous
     lab = snap.period.previous_label
@@ -167,9 +172,11 @@ def period_cards(snap, dark):
     return [
         card("rfa", "SES RFAs"),
         card("structure", "Structure fires",
-             [("CFA", t["structure_cfa"]), ("FRV", t["structure_frv"])]),
+             [("CFA", t["structure_cfa"]), ("FRV", t["structure_frv"])]
+             + _unidentified(t["structure_esta"])),
         card("grass", "Grass & scrub/bush fires",
-             [("CFA", t["grass_cfa"]), (stats.FFM_LABEL, t["grass_ffm"])]),
+             [("CFA", t["grass_cfa"]), (stats.FFM_LABEL, t["grass_ffm"])]
+             + _unidentified(t["grass_esta"])),
         card("incidents", "All incidents",
              [("fire" if t["fires"] == 1 else "fires", t["fires"])]),
     ]
@@ -281,7 +288,27 @@ def breakdown(snap):
         html.Div([html.H4("Fires by category"),
                   _list_table(snap.fire_types, "Category", "No fires in this period.")],
                  className="panel"),
+        html.Details([
+            html.Summary("Classification check — what the feed called each incident"),
+            html.P("Agency, category and sub-category exactly as VicEmergency published "
+                   "them, and the figure each was counted in. If a number above looks "
+                   "wrong, the reason is in this table.", className="muted"),
+            _check_table(snap.check),
+        ], className="panel stats-wide stats-check"),
     ]
+
+
+def _check_table(rows):
+    if not rows:
+        return html.Div("No incidents in this period.", className="muted")
+    return html.Table([
+        html.Thead(html.Tr([html.Th("Agency (sourceOrg)"), html.Th("Category"),
+                            html.Th("Sub-category"), html.Th("Count", className="num"),
+                            html.Th("Counted as")])),
+        html.Tbody([html.Tr([html.Td(o), html.Td(c1), html.Td(c2),
+                             html.Td(f"{n:,}", className="num"), html.Td(a)])
+                    for o, c1, c2, n, a in rows]),
+    ], className="trend-table stats-table")
 
 
 def _notes(snap):

@@ -1,0 +1,764 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "properties": {
+    "status": "Under Control",
+    "feedType": "incident",
+    "sourceOrg": "VIC/DEECA",
+    "sourceId": 102741004,
+    "sourceFeed": "deeca-incident",
+    "sourceTitle": "Wulgulmerang - Wombargo Track",
+    "id": 102741004,
+    "category1": "Fire",
+    "category2": "Bushfire",
+    "created": "2026-10-12T00:00:00Z",
+    "updated": "2026-10-13T05:12:38.5717957Z",
+    "resources": 0,
+    "size": 2.4,
+    "sizeFmt": "2.4 Ha.",
+    "location": "6.7Km Sw Of Wulgulmerang"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     148.2129,
+     -37.0513
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Under Control",
+    "feedType": "incident",
+    "sourceOrg": "VIC/DEECA",
+    "sourceId": 102741005,
+    "sourceFeed": "deeca-incident",
+    "sourceTitle": "Lake Tyres - Petersons Track",
+    "id": 102741005,
+    "category1": "Fire",
+    "category2": "Bushfire",
+    "created": "2026-10-12T00:27:00Z",
+    "updated": "2026-10-13T04:49:58.8714589Z",
+    "resources": 0,
+    "size": 0.5,
+    "sizeFmt": "0.5 Ha.",
+    "location": "5.3Km Nw Of Lake Tyers Beach"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     148.0436,
+     -37.8217
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Under Control",
+    "feedType": "incident",
+    "sourceOrg": "VIC/DEECA",
+    "sourceId": 102741006,
+    "sourceFeed": "deeca-incident",
+    "sourceTitle": "Colquhoun - Siberia Crossing",
+    "id": 102741006,
+    "category1": "Fire",
+    "category2": "Bushfire",
+    "created": "2026-10-12T02:00:00Z",
+    "updated": "2026-10-13T04:34:03.4423107Z",
+    "resources": 0,
+    "size": 2.05,
+    "sizeFmt": "2.05 Ha.",
+    "location": "15.1Km N Of Lakes Entrance"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     147.95170868380868,
+     -37.74230370359084
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Under Control",
+    "feedType": "incident",
+    "sourceOrg": "VIC/DEECA",
+    "sourceId": 102753001,
+    "sourceFeed": "deeca-incident",
+    "sourceTitle": "Three Bridges - Coles Road",
+    "id": 102753001,
+    "category1": "Fire",
+    "category2": "Bushfire",
+    "created": "2026-10-11T06:00:00Z",
+    "updated": "2026-10-13T01:54:40.9514724Z",
+    "resources": 0,
+    "size": 0.2,
+    "sizeFmt": "0.2 Ha.",
+    "location": "0.7Km Ne Of Three Bridges"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     145.6868,
+     -37.8389
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Safe",
+    "estaId": 126073873,
+    "feedType": "incident",
+    "source": "000",
+    "sourceOrg": "VIC/ESTA",
+    "sourceId": 126073873,
+    "sourceFeed": "esta-cad-event",
+    "sourceTitle": "Boort",
+    "eventId": "F261006710",
+    "id": "ESTA:261006710",
+    "suppress": false,
+    "category1": "Fire",
+    "category2": "Building Fire",
+    "created": "2026-10-07T15:22:52.000Z",
+    "updated": "2026-10-13T21:15:08.296Z",
+    "resources": 0,
+    "location": "Osborne Rd, Boort"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     143.69972137835796,
+     -36.06635296037983
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Under Control",
+    "estaId": 126157971,
+    "feedType": "incident",
+    "source": "000",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297493,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "",
+    "eventId": 261014180,
+    "id": "ESTA:261014180",
+    "suppress": false,
+    "category1": "Accident / Rescue",
+    "category2": "Road Accident",
+    "created": "2026-10-13T20:52:00.000Z",
+    "updated": "2026-10-13T21:17:00.000Z",
+    "resources": 1,
+    "location": "Trawalla",
+    "cfaId": 297493,
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     143.53565021636177,
+     -37.4539894939214
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "estaId": 126158176,
+    "feedType": "incident",
+    "source": "FIP",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297496,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "Flat Rock Rd",
+    "eventId": 261014221,
+    "id": "ESTA:261014221",
+    "suppress": false,
+    "category1": "Fire",
+    "category2": "Building Fire",
+    "created": "2026-10-13T21:18:00.000Z",
+    "updated": "2026-10-13T21:18:00.000Z",
+    "resources": 2,
+    "location": "Flat Rock Rd, Beechworth",
+    "cfaId": 297496,
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     146.6551866111083,
+     -36.348396281237754
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "estaId": 126158216,
+    "feedType": "incident",
+    "source": "SES STRM",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297497,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "Silvermines Rd",
+    "eventId": 261014230,
+    "id": "ESTA:261014230",
+    "suppress": false,
+    "category1": "Other",
+    "category2": "Other",
+    "created": "2026-10-13T21:22:00.000Z",
+    "updated": "2026-10-13T21:22:00.000Z",
+    "resources": 0,
+    "location": "Silvermines Rd, St Arnaud",
+    "cfaId": 297497,
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     143.25322809945402,
+     -36.60991341783442
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "estaId": 126158219,
+    "feedType": "incident",
+    "source": "000",
+    "sourceOrg": "VIC/ESTA",
+    "sourceId": 126158219,
+    "sourceFeed": "esta-cad-event",
+    "sourceTitle": "Ascot Vale",
+    "eventId": "F261014231",
+    "id": "ESTA:261014231",
+    "suppress": false,
+    "category1": "Other",
+    "category2": "Other",
+    "created": "2026-10-13T21:21:40.000Z",
+    "updated": "2026-10-13T21:21:48.916Z",
+    "resources": 0,
+    "location": "Ascot Vale"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     144.91520060809836,
+     -37.77788141876581
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "estaId": 126158226,
+    "feedType": "incident",
+    "source": "000",
+    "sourceOrg": "VIC/ESTA",
+    "sourceId": 126158226,
+    "sourceFeed": "esta-cad-event",
+    "sourceTitle": "Ascot Vale",
+    "eventId": "F261014234",
+    "id": "ESTA:261014234",
+    "suppress": false,
+    "category1": "Other",
+    "category2": "Other",
+    "created": "2026-10-13T21:22:17.000Z",
+    "updated": "2026-10-13T21:22:24.723Z",
+    "resources": 0,
+    "location": "Ascot Vale"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     144.91520060809836,
+     -37.77788141876581
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Safe",
+    "estaId": 126158209,
+    "feedType": "incident",
+    "source": "000",
+    "sourceOrg": "VIC/ESTA",
+    "sourceId": 126158209,
+    "sourceFeed": "esta-cad-event",
+    "sourceTitle": "Ascot Vale",
+    "eventId": "F261014228",
+    "id": "ESTA:261014228",
+    "suppress": false,
+    "category1": "Hazardous Material",
+    "category2": "Hazardous Material",
+    "created": "2026-10-13T21:19:47.000Z",
+    "updated": "2026-10-13T21:27:34.319Z",
+    "resources": 7,
+    "location": "Ascot Vale"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     144.91520060809836,
+     -37.77788141876581
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "status": "Warning",
+    "feedType": "incident",
+    "sourceOrg": "AU/BOM",
+    "sourceId": "IDV20600/d52995912a844cee28698e459e330aa3",
+    "sourceFeed": "bom-idv20600",
+    "sourceTitle": "Strong Wind Warning",
+    "id": "IDV20600/d52995912a844cee28698e459e330aa3",
+    "category1": "Met",
+    "category2": "Strong Wind",
+    "name": "Strong Wind Warning",
+    "created": "2026-10-13T17:00:00.000Z",
+    "webHeadline": "Strong Wind Warning",
+    "location": "East Gippsland Coast"
+   },
+   "geometry": {
+    "type": "GeometryCollection",
+    "geometries": [
+     {
+      "type": "Polygon",
+      "coordinates": [
+       [
+        [
+         149.9045,
+         -37.5429
+        ],
+        [
+         149.9117,
+         -37.569
+        ],
+        [
+         149.9124,
+         -37.5693
+        ],
+        [
+         151.0211,
+         -37.568
+        ],
+        [
+         151.0211,
+         -38.4446
+        ],
+        [
+         147.9951,
+         -39.6977
+        ],
+        [
+         147.9951,
+         -37.8844
+        ],
+        [
+         148.0796,
+         -37.8616
+        ],
+        [
+         148.083,
+         -37.8609
+        ],
+        [
+         148.0776,
+         -37.8331
+        ],
+        [
+         148.0702,
+         -37.827
+        ],
+        [
+         148.1033,
+         -37.8413
+        ],
+        [
+         148.127,
+         -37.809
+        ],
+        [
+         148.1262,
+         -37.8351
+        ],
+        [
+         148.0915,
+         -37.8563
+        ],
+        [
+         148.088,
+         -37.8581
+        ],
+        [
+         148.2788,
+         -37.8115
+        ],
+        [
+         148.3433,
+         -37.8047
+        ],
+        [
+         148.6517,
+         -37.8025
+        ],
+        [
+         148.6993,
+         -37.8009
+        ],
+        [
+         148.7296,
+         -37.8131
+        ],
+        [
+         148.73,
+         -37.8134
+        ],
+        [
+         148.7432,
+         -37.799
+        ],
+        [
+         148.7492,
+         -37.7963
+        ],
+        [
+         148.8251,
+         -37.7847
+        ],
+        [
+         149.1344,
+         -37.7775
+        ],
+        [
+         149.1431,
+         -37.7774
+        ],
+        [
+         149.1367,
+         -37.7705
+        ],
+        [
+         149.1215,
+         -37.7677
+        ],
+        [
+         149.1175,
+         -37.742
+        ],
+        [
+         149.1255,
+         -37.7401
+        ],
+        [
+         149.1412,
+         -37.7745
+        ],
+        [
+         149.1458,
+         -37.7775
+        ],
+        [
+         149.2382,
+         -37.7785
+        ],
+        [
+         149.2753,
+         -37.8031
+        ],
+        [
+         149.3405,
+         -37.7767
+        ],
+        [
+         149.3448,
+         -37.7757
+        ],
+        [
+         149.4669,
+         -37.7689
+        ],
+        [
+         149.4869,
+         -37.775
+        ],
+        [
+         149.4973,
+         -37.7534
+        ],
+        [
+         149.5964,
+         -37.7256
+        ],
+        [
+         149.5966,
+         -37.7257
+        ],
+        [
+         149.6175,
+         -37.7011
+        ],
+        [
+         149.6748,
+         -37.6866
+        ],
+        [
+         149.7541,
+         -37.5782
+        ],
+        [
+         149.7672,
+         -37.573
+        ],
+        [
+         149.7593,
+         -37.5458
+        ],
+        [
+         149.7598,
+         -37.5449
+        ],
+        [
+         149.6979,
+         -37.5072
+        ],
+        [
+         149.7063,
+         -37.4993
+        ],
+        [
+         149.7354,
+         -37.4982
+        ],
+        [
+         149.7449,
+         -37.4929
+        ],
+        [
+         149.7402,
+         -37.5251
+        ],
+        [
+         149.7431,
+         -37.5272
+        ],
+        [
+         149.7793,
+         -37.5072
+        ],
+        [
+         149.7753,
+         -37.4916
+        ],
+        [
+         149.7839,
+         -37.5019
+        ],
+        [
+         149.8045,
+         -37.4923
+        ],
+        [
+         149.8108,
+         -37.4878
+        ],
+        [
+         149.7894,
+         -37.511
+        ],
+        [
+         149.8024,
+         -37.5311
+        ],
+        [
+         149.8022,
+         -37.5333
+        ],
+        [
+         149.7699,
+         -37.5595
+        ],
+        [
+         149.7686,
+         -37.5609
+        ],
+        [
+         149.9045,
+         -37.5429
+        ]
+       ]
+      ]
+     },
+     {
+      "type": "Point",
+      "coordinates": [
+       149.50811274100005,
+       -38.59273152499995
+      ],
+      "name": "East Gippsland Coast"
+     }
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Under Control",
+    "cfaId": 297485,
+    "feedType": "incident",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297485,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "Epping Rd",
+    "eventId": 261014123,
+    "id": "ESTA:261014123",
+    "category1": "Fire",
+    "category2": "Building Fire",
+    "created": "2026-10-13T18:53:00.000Z",
+    "updated": "2026-10-13T19:58:00.000Z",
+    "resources": 6,
+    "location": "Epping Rd, Epping",
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     145.02900990393388,
+     -37.62369210727765
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "cfaId": 297495,
+    "feedType": "incident",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297495,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "Kindra Cl",
+    "eventId": 261014214,
+    "id": "ESTA:261014214",
+    "category1": "Hazardous Material",
+    "category2": "Hazardous Material",
+    "created": "2026-10-13T21:13:00.000Z",
+    "updated": "2026-10-13T21:13:00.000Z",
+    "resources": 4,
+    "location": "Kindra Cl, Portsea",
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     144.72166469581077,
+     -38.331202356240745
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Responding",
+    "cfaId": 297498,
+    "feedType": "incident",
+    "sourceOrg": "VIC/CFA",
+    "sourceId": 297498,
+    "sourceFeed": "cfa-incident",
+    "sourceTitle": "Kingburgh Cl",
+    "eventId": 261014240,
+    "id": "ESTA:261014240",
+    "category1": "Other",
+    "category2": "Other",
+    "created": "2026-10-13T21:24:00.000Z",
+    "updated": "2026-10-13T21:24:00.000Z",
+    "resources": 0,
+    "location": "Kingburgh Cl, Drouin",
+    "size": "Small",
+    "sizeFmt": "Small"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     145.8731794565183,
+     -38.13108494865972
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Request For Assistance",
+    "sesId": 619098,
+    "feedType": "incident",
+    "sourceOrg": "VIC/SES",
+    "sourceId": 619098,
+    "sourceFeed": "ses-incident",
+    "sourceTitle": "Undefined",
+    "eventId": 261051685,
+    "id": "ESTA:261051685",
+    "category1": "Tree Down",
+    "category2": "Tree Down",
+    "created": "2026-10-13T20:56:40.000Z",
+    "updated": "2026-10-13T20:59:57.000Z",
+    "resources": 0,
+    "location": "Hampton"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     145.01446439633202,
+     -37.94180153764255
+    ]
+   }
+  },
+  {
+   "properties": {
+    "status": "Request For Assistance",
+    "sesId": 619099,
+    "feedType": "incident",
+    "sourceOrg": "VIC/SES",
+    "sourceId": 619099,
+    "sourceFeed": "ses-incident",
+    "sourceTitle": "Undefined",
+    "eventId": 261051686,
+    "id": "ESTA:261051686",
+    "category1": "Rescue",
+    "category2": "Rescue Vehicle Into Structure",
+    "created": "2026-10-13T21:23:37.000Z",
+    "updated": "2026-10-13T21:24:55.000Z",
+    "resources": 0,
+    "location": "Ascot Vale"
+   },
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     144.91518605542964,
+     -37.77788334871559
+    ]
+   }
+  }
+ ]
+}
