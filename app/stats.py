@@ -584,18 +584,21 @@ class Snapshot:
     active_rfa_types: list = field(default_factory=list)
     coverage: datetime = None
     notes: list = field(default_factory=list)
+    rows: pd.DataFrame = None          # classified incidents started in the period
+    active_rows: pd.DataFrame = None   # classified incidents open now
 
 
 def build(period, now=None):
     now = now or datetime.now()
     end = period.effective_end(now)
     df = incidents_started(period.start, end)
-    snap = Snapshot(period=period, now=now, totals=totals(df))
+    snap = Snapshot(period=period, now=now, totals=totals(df), rows=df)
     snap.trend, snap.unit = trend(df, period.start, end)
     if period.previous:
         pstart, pend = period.previous
         snap.previous = totals(incidents_started(pstart, min(pend, now)))
     act = active_incidents()
+    snap.active_rows = act
     snap.active = {"incidents": len(act),
                    "rfa": int(act["rfa"].sum()) if not act.empty else 0,
                    "fires": int(act["fire"].sum()) if not act.empty else 0}
@@ -621,6 +624,63 @@ def build(period, now=None):
         snap.notes.append(f"No comparison with the {period.previous_label}: "
                           "collection had not started.")
     return snap
+
+
+# --------------------------------------------------------------------------- #
+# What makes up each card (admin "copy" button)
+# --------------------------------------------------------------------------- #
+# card key -> (label, which frame, flag column or None for every row)
+CARD_ROWS = {
+    "rfa": ("SES RFAs", "rows", "rfa"),
+    "structure": ("Structure fires", "rows", "structure"),
+    "grass": ("Grass & scrub/bush fires", "rows", "grass"),
+    "incidents": ("All incidents", "rows", None),
+    "active_incidents": ("Active open incidents", "active_rows", None),
+    "active_rfa": ("Active SES RFAs", "active_rows", "rfa"),
+    "active_fires": ("Active fires", "active_rows", "fire"),
+}
+_AGENCY_NAMES = {**fire_data.AGENCY_LABELS, "ffm": FFM_LABEL,
+                 ESTA: "Not identified (ESTA)"}
+_HOW_NAMES = {HOW_PAGER: "CFA pager", HOW_NOT_PAGED: "Not on CFA pager (ex-MFB area)"}
+COPY_COLUMNS = ["Started", "Incident ID", "F-number", "Agency", "Agency from",
+                "Source org", "Category", "Sub-category", "Location", "Status",
+                "Open", "Counted as"]
+
+
+def card_rows(snap, key):
+    """The incidents behind one card, oldest first."""
+    _, frame, flag = CARD_ROWS[key]
+    df = getattr(snap, frame)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if flag:
+        df = df[df[flag].fillna(False).astype(bool)]
+    return df.sort_values("started", kind="stable")
+
+
+def _cell(v):
+    return " ".join(_s(v).split())       # no tabs / newlines inside a cell
+
+
+def card_text(snap, key):
+    """Tab-separated text (pastes straight into Excel) of one card's incidents,
+    under a line naming the card, the period and the count."""
+    label, frame, _ = CARD_ROWS[key]
+    df = card_rows(snap, key)
+    scope = ("open now" if frame == "active_rows" else snap.period.label)
+    lines = [f"{label} — {scope} — {len(df)} incident{'s' if len(df) != 1 else ''}",
+             "\t".join(COPY_COLUMNS)]
+    for r in df.to_dict("records"):
+        source = "Feed sourceOrg" if not _s(r.get("agency_how")) else \
+            _HOW_NAMES.get(_s(r.get("agency_how")), _s(r.get("agency_how")))
+        lines.append("\t".join(_cell(v) for v in (
+            r.get("started"), r.get("source_id"), r.get("f_number"),
+            _AGENCY_NAMES.get(r.get("agency"), r.get("agency")), source,
+            r.get("source_org"), r.get("category1"), r.get("category2"),
+            r.get("location"), r.get("status"),
+            "No" if str(r.get("resolved")) in ("1", "1.0", "True") else "Yes",
+            counted_as(r))))
+    return "\n".join(lines)
 
 
 _cache = {}

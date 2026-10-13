@@ -325,3 +325,43 @@ def test_pager_tie_is_not_inferred_as_frv(db):
     ])
     snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
     assert snap.totals["structure_esta"] == 1 and snap.totals["structure_frv"] == 0
+
+
+# --- Admin copy button: what makes up each card ---
+def test_card_text_lists_exactly_the_counted_incidents(data):
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    for key in stats.CARD_ROWS:
+        text = stats.card_text(snap, key)
+        lines = text.split("\n")
+        assert lines[1].split("\t") == stats.COPY_COLUMNS
+        assert all(len(l.split("\t")) == len(stats.COPY_COLUMNS) for l in lines[2:])
+        expected = {"rfa": snap.totals["rfa"], "structure": snap.totals["structure"],
+                    "grass": snap.totals["grass"], "incidents": snap.totals["incidents"],
+                    "active_incidents": snap.active["incidents"],
+                    "active_rfa": snap.active["rfa"],
+                    "active_fires": snap.active["fires"]}[key]
+        assert len(lines) - 2 == expected, key
+        assert f"— {expected} incident" in lines[0]
+    structure = stats.card_text(snap, "structure")
+    assert "\ts1\t" in structure and "\ts2\t" in structure and "\ts3\t" not in structure
+
+
+def test_card_text_survives_tabs_and_newlines_in_feed_text(db):
+    database.insert_rows("fire_incidents", [
+        _row("t1", "Tree Down", "VIC/SES", created="2026-10-12 08:00:00",
+             location="12 Main\tSt,\nBelgrave"),
+    ], ignore_duplicates=True)
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    lines = stats.card_text(snap, "rfa").split("\n")
+    assert len(lines) == 3 and "12 Main St, Belgrave" in lines[2]
+
+
+def test_copy_buttons_only_for_admins(data):
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+
+    def has_copy(cards):
+        return "stats-copy" in str(cards)
+    assert not has_copy(stats_page.period_cards(snap, False))
+    assert not has_copy(stats_page.active_cards(snap, False))
+    assert has_copy(stats_page.period_cards(snap, False, admin=True))
+    assert has_copy(stats_page.active_cards(snap, False, admin=True))

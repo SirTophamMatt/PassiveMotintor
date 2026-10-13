@@ -62,3 +62,29 @@ def test_analytics_hidden_from_anonymous(client, outputs):
                {"id": "theme-store", "property": "data", "value": True}],
               ["analytics-interval.n_intervals"])
     assert r.status_code == 204
+
+
+def _stats_copy(client):
+    """POST the /stats card-copy callback the way an anonymous client could."""
+    cid = {"key": "rfa", "type": "stats-copy"}
+    return client.post("/_dash-update-component", json={
+        "output": '{"key":["MATCH"],"type":"stats-copy"}.content',
+        "outputs": {"id": cid, "property": "content"},
+        "inputs": [{"id": cid, "property": "n_clicks", "value": 1}],
+        "changedPropIds": ['{"key":"rfa","type":"stats-copy"}.n_clicks'],
+        "state": [{"id": cid, "property": "id", "value": cid},
+                  {"id": "stats-period", "property": "value", "value": "day"},
+                  {"id": "stats-day", "property": "date", "value": None},
+                  {"id": "stats-fy", "property": "value", "value": None},
+                  {"id": "stats-event", "property": "value", "value": None}]})
+
+
+def test_stats_card_copy_hidden_from_anonymous(client):
+    r = _stats_copy(client)
+    assert r.status_code == 204 or "Incident ID" not in r.get_data(as_text=True)
+
+
+def test_stats_card_copy_shown_to_admin(client, monkeypatch):
+    monkeypatch.setattr(auth, "is_admin", lambda: True)
+    r = _stats_copy(client)
+    assert r.status_code == 200 and "Incident ID" in r.get_data(as_text=True)
