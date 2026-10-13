@@ -20,7 +20,8 @@ from app.pages import (admin, analytics as analytics_page,
                        pager as pager_page,
                        power,
                        replay as replay_page, roads as roads_page,
-                       settings, station, storm as storm_page,
+                       settings, station, stats as stats_page,
+                       storm as storm_page,
                        unified as unified_page, wall as wall_page, weather)
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ PUBLIC_PAGES = [
     # Third on purpose: Overview is the glance, the Feed is what changed, and
     # this is the thing you actually stand up and deliver from.
     ("/briefing", "Briefing", briefing_page),
+    # Counts for the reporting period: 24 h to 06:00, financial year, event.
+    ("/stats", "Incident Statistics", stats_page),
     # Full-screen, navigation-free view for an operations-room screen.
     (shell.WALL_PATH, "Wall Display", wall_page),
     # Flood scenario wall: rotates through the gauges at/above Minor.

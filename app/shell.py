@@ -53,7 +53,7 @@ STORM_WALL_TEST_PATH = STORM_WALL_PATH + "/test"
 # Console top-bar menus. Paths not listed fall into "Tools" so a page added to
 # the factory later is never unreachable from the console layout.
 NAV_GROUPS = [
-    ("Situation", ["/", "/feed", "/briefing", WALL_PATH, FLOOD_WALL_PATH,
+    ("Situation", ["/", "/feed", "/briefing", "/stats", WALL_PATH, FLOOD_WALL_PATH,
                    FIRE_WALL_PATH, STORM_WALL_PATH, NEWS_WALL_PATH]),
     ("Map", ["/map", "/replay"]),
     ("Hazards", ["/flood", "/fire", "/weather", "/storm", "/roads", "/pager",
