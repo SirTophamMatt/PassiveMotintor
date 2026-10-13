@@ -1545,6 +1545,18 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   after the job -> **FRV (ex-MFB area)**; not on the pager and no pager cycle then -> **"agency not
   identified (ESTA)"**, still in the totals, never guessed (a CFA job would look the same). The
   Classification check labels each route. Real feed sample: `tests/fixtures/osom_incidents_sample.json`.
+- **Duplicates + ESTA event type (2026-10-14, from a copied 24 h of live data).** (1) Every Triple
+  Zero call is its own ESTA event, so one fire arrived as up to 5 records (Moonee Ponds, 4 min), plus
+  CFA's own record of the same job. `stats.mark_duplicates` merges records of the same kind in the
+  same locality within `DUP_WINDOW_MINUTES` (60) of the previous one (and within `DUP_MAX_KM` 3 when
+  both have coords), only when at least one is a raw ESTA event — two CFA-feed jobs stay two. Kept
+  record: CFA feed > pager-attributed > earliest. Duplicates are excluded from every count but listed
+  under "Not counted" in the card copy and the Classification check. On that day: 67 -> 58.
+  (2) ESTA's own type separates the services: CFA jobs are **Building Fire**, ex-MFB FRV jobs
+  **Structure Fire** (every paged ESTA Building Fire was a CFA brigade's), so an unpaged ESTA
+  Building Fire is CFA (`ESTA_CFA_TYPES`, how = "esta type") — Churchill / Donnybrook had read FRV.
+  (3) The not-paged -> FRV inference now applies only to raw `VIC/ESTA` rows: CFA-feed records reuse
+  `ESTA:<n>` ids and a CFA job missing from the pager is still CFA's.
 - **Admin copy button per card (2026-10-14).** Admins get a copy icon on each of the 7 cards
   (`dcc.Clipboard` id `{"type": "stats-copy", "key": …}`, keys = `stats.CARD_ROWS`). The text is
   built ON CLICK by a MATCH callback (not shipped with every 60 s refresh — a FY card can be

@@ -242,6 +242,11 @@ def pager_agency(messages):
 PAGER_COVER_MINUTES = 30
 HOW_PAGER = "pager"
 HOW_NOT_PAGED = "not paged"
+HOW_ESTA_TYPE = "esta type"
+# ESTA's own event type tells the two services' jobs apart: CFA jobs are
+# "Building Fire" (the CFA feed's own word), ex-MFB FRV jobs "Structure Fire".
+# Seen live 2026-10-14: every paged ESTA "Building Fire" was a CFA brigade's.
+ESTA_CFA_TYPES = {"building fire"}
 
 
 def _pager_covered(started, heartbeats):
@@ -307,21 +312,125 @@ def attribute_esta(df):
     paged = df["f_number"].isin(found.keys())
     df.loc[paged, "agency_hint"] = df.loc[paged, "f_number"].map(found)
     df.loc[paged, "agency_how"] = HOW_PAGER
-    unpaged = esta & ~paged
-    if unpaged.any():
-        covered = _pager_covered(df.loc[unpaged, "started"], heartbeats)
-        idx = df.index[unpaged][covered]
+    # Only raw ESTA events are inferred: the CFA feed reuses ESTA:<n> ids, but
+    # a CFA-feed job is CFA's whether or not the pager page was seen.
+    raw_esta = df["source_org"].map(lambda v: "ESTA" in _s(v).upper())
+    unpaged = esta & ~paged & raw_esta
+    cfa_type = unpaged & df["category2"].map(lambda v: _s(v).lower() in ESTA_CFA_TYPES)
+    df.loc[cfa_type, "agency_hint"] = "cfa"
+    df.loc[cfa_type, "agency_how"] = HOW_ESTA_TYPE
+    rest = unpaged & ~cfa_type
+    if rest.any():
+        covered = _pager_covered(df.loc[rest, "started"], heartbeats)
+        idx = df.index[rest][covered]
         df.loc[idx, "agency_hint"] = "frv"
         df.loc[idx, "agency_how"] = HOW_NOT_PAGED
     return df
 
 
+# --------------------------------------------------------------------------- #
+# Duplicate ESTA events: every Triple Zero call is its own ESTA event, so one
+# fire can arrive as several (5 for one Moonee Ponds fire in 4 minutes), plus
+# the CFA feed's own record of the same job.
+# --------------------------------------------------------------------------- #
+DUP_WINDOW_MINUTES = 60
+DUP_MAX_KM = 3
+
+
+def _dup_key(r):
+    c1 = _s(r.get("category1")).lower()
+    kind = r.get("kind")
+    sub = kind if isinstance(kind, str) and kind else _s(r.get("category2")).lower()
+    return (c1, sub, locality(r.get("location")))
+
+
+def _km(a, b):
+    import math
+    la1, lo1, la2, lo2 = (math.radians(x) for x in (a[0], a[1], b[0], b[1]))
+    h = (math.sin((la2 - la1) / 2) ** 2
+         + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2)
+    return 6371 * 2 * math.asin(math.sqrt(min(1.0, h)))
+
+
+def _coords(r):
+    try:
+        lat, lon = float(r.get("latitude")), float(r.get("longitude"))
+    except (TypeError, ValueError):
+        return None
+    return None if lat != lat or lon != lon else (lat, lon)
+
+
+def mark_duplicates(df):
+    """Flag `duplicate` (+ `dup_of`) on the extra records of one incident: the
+    same kind of job in the same locality within DUP_WINDOW_MINUTES of the
+    previous record, where at least one of them is a raw ESTA event (two
+    CFA-feed jobs are two jobs). Where both have coordinates they must also be
+    within DUP_MAX_KM. The record kept is the agency's own (CFA feed) one,
+    else a pager-attributed one, else the earliest."""
+    df = df.copy()
+    df["duplicate"] = False
+    df["dup_of"] = None
+    if df.empty:
+        return df
+    recs = df.to_dict("records")
+    order = sorted(range(len(recs)), key=lambda i: _s(recs[i].get("started")))
+    clusters = []                       # [key, last_time, [indices]]
+    for i in order:
+        r = recs[i]
+        key = _dup_key(r)
+        t = pd.to_datetime(r.get("started"), errors="coerce")
+        if not key[2] or pd.isna(t):
+            continue
+        is_esta = "ESTA" in _s(r.get("source_org")).upper()
+        here = _coords(r)
+        joined = False
+        for c in clusters:
+            if c[0] != key or t - c[1] > timedelta(minutes=DUP_WINDOW_MINUTES):
+                continue
+            members = [recs[j] for j in c[2]]
+            if not (is_esta or any("ESTA" in _s(m.get("source_org")).upper() for m in members)):
+                continue
+            pts = [p for p in (_coords(m) for m in members) if p]
+            if here and pts and min(_km(here, p) for p in pts) > DUP_MAX_KM:
+                continue
+            c[1] = t
+            c[2].append(i)
+            joined = True
+            break
+        if not joined:
+            clusters.append([key, t, [i]])
+    for _, _, idx in clusters:
+        if len(idx) < 2:
+            continue
+
+        def rank(j):
+            m = recs[j]
+            return ("ESTA" in _s(m.get("source_org")).upper(),
+                    _s(m.get("agency_how")) != HOW_PAGER, _s(m.get("started")))
+        keep = min(idx, key=rank)
+        for j in idx:
+            if j != keep:
+                df.loc[df.index[j], "duplicate"] = True
+                df.loc[df.index[j], "dup_of"] = recs[keep].get("source_id")
+    return df
+
+
+def counted(df):
+    """The rows that count (duplicates removed)."""
+    if df is None or df.empty or "duplicate" not in df:
+        return df
+    return df[~df["duplicate"].fillna(False).astype(bool)]
+
+
 def counted_as(r):
     """The headline figure a classified row lands in (for the check table)."""
+    if r.get("duplicate") is True:
+        return "Not counted — duplicate ESTA event of " + _s(r.get("dup_of"))
     if r.get("rfa"):
         return "SES RFA"
     via = {HOW_PAGER: " — via CFA pager",
-           HOW_NOT_PAGED: " — ESTA job not on the CFA pager (ex-MFB area)"
+           HOW_NOT_PAGED: " — ESTA job not on the CFA pager (ex-MFB area)",
+           HOW_ESTA_TYPE: " — ESTA event type Building Fire (CFA)",
            }.get(_s(r.get("agency_how")), "")
     for key, label in (("structure_cfa", "Structure fire (CFA)"),
                        ("structure_frv", "Structure fire (FRV)"),
@@ -359,14 +468,14 @@ def _frame(df):
     if df.empty:
         cols = ["agency", "rfa", "fire", "kind", "structure_cfa", "structure_frv",
                 "structure_esta", "grass_cfa", "grass_ffm", "grass_esta",
-                "structure", "grass", "agency_hint", "agency_how"]
+                "structure", "grass", "agency_hint", "agency_how", "duplicate", "dup_of"]
         return df.assign(**{c: pd.Series(dtype=object) for c in cols})
     df = attribute_esta(df)
     flags = pd.DataFrame([classify(r) for r in df.to_dict("records")], index=df.index)
     out = pd.concat([df, flags], axis=1)
     out["structure"] = out["structure_cfa"] | out["structure_frv"] | out["structure_esta"]
     out["grass"] = out["grass_cfa"] | out["grass_ffm"] | out["grass_esta"]
-    return out
+    return mark_duplicates(out)
 
 
 _INCIDENT_SQL = ("feed_type NOT IN ('warning', 'burn-area')")
@@ -377,7 +486,7 @@ def incidents_started(start, end):
     """Incidents that started in (start, end], classified."""
     df = database.read_df(
         f"SELECT source_id, category1, category2, source_org, location, status, "
-        f"resolved, {_STARTED} AS started FROM fire_incidents "
+        f"resolved, latitude, longitude, {_STARTED} AS started FROM fire_incidents "
         f"WHERE {_INCIDENT_SQL} AND {_STARTED} > ? AND {_STARTED} <= ?",
         [start.strftime(TS), end.strftime(TS)])
     return _frame(df)
@@ -386,7 +495,7 @@ def incidents_started(start, end):
 def active_incidents():
     df = database.read_df(
         "SELECT source_id, category1, category2, source_org, location, status, "
-        f"resolved, {_STARTED} AS started FROM fire_incidents "
+        f"resolved, latitude, longitude, {_STARTED} AS started FROM fire_incidents "
         f"WHERE resolved = 0 AND {_INCIDENT_SQL}")
     return _frame(df)
 
@@ -591,14 +700,16 @@ class Snapshot:
 def build(period, now=None):
     now = now or datetime.now()
     end = period.effective_end(now)
-    df = incidents_started(period.start, end)
-    snap = Snapshot(period=period, now=now, totals=totals(df), rows=df)
+    full = incidents_started(period.start, end)
+    df = counted(full)
+    snap = Snapshot(period=period, now=now, totals=totals(df), rows=full)
     snap.trend, snap.unit = trend(df, period.start, end)
     if period.previous:
         pstart, pend = period.previous
-        snap.previous = totals(incidents_started(pstart, min(pend, now)))
-    act = active_incidents()
-    snap.active_rows = act
+        snap.previous = totals(counted(incidents_started(pstart, min(pend, now))))
+    act_full = active_incidents()
+    snap.active_rows = act_full
+    act = counted(act_full)
     snap.active = {"incidents": len(act),
                    "rfa": int(act["rfa"].sum()) if not act.empty else 0,
                    "fires": int(act["fire"].sum()) if not act.empty else 0}
@@ -609,7 +720,7 @@ def build(period, now=None):
         snap.rfa_localities = top_localities(df, df["rfa"].astype(bool))
         snap.fire_types = top_types(df, df["fire"].astype(bool))
     snap.fire_matrix = fire_matrix(df)
-    snap.check = classification_check(df)
+    snap.check = classification_check(full)
     snap.coverage = coverage_start()
     if period.partial(now):
         snap.notes.append(f"Period not complete — counted to {_fmt(now)}.")
@@ -641,20 +752,24 @@ CARD_ROWS = {
 }
 _AGENCY_NAMES = {**fire_data.AGENCY_LABELS, "ffm": FFM_LABEL,
                  ESTA: "Not identified (ESTA)"}
-_HOW_NAMES = {HOW_PAGER: "CFA pager", HOW_NOT_PAGED: "Not on CFA pager (ex-MFB area)"}
+_HOW_NAMES = {HOW_PAGER: "CFA pager", HOW_NOT_PAGED: "Not on CFA pager (ex-MFB area)",
+              HOW_ESTA_TYPE: "ESTA event type (Building Fire = CFA)"}
 COPY_COLUMNS = ["Started", "Incident ID", "F-number", "Agency", "Agency from",
                 "Source org", "Category", "Sub-category", "Location", "Status",
                 "Open", "Counted as"]
 
 
-def card_rows(snap, key):
-    """The incidents behind one card, oldest first."""
+def card_rows(snap, key, duplicates=False):
+    """The incidents behind one card, oldest first (with `duplicates`, the
+    duplicate ESTA events that were merged into them instead)."""
     _, frame, flag = CARD_ROWS[key]
     df = getattr(snap, frame)
     if df is None or df.empty:
         return pd.DataFrame()
     if flag:
         df = df[df[flag].fillna(False).astype(bool)]
+    dup = df["duplicate"].fillna(False).astype(bool) if "duplicate" in df else False
+    df = df[dup] if duplicates else df[~dup] if "duplicate" in df else df
     return df.sort_values("started", kind="stable")
 
 
@@ -670,7 +785,16 @@ def card_text(snap, key):
     scope = ("open now" if frame == "active_rows" else snap.period.label)
     lines = [f"{label} — {scope} — {len(df)} incident{'s' if len(df) != 1 else ''}",
              "\t".join(COPY_COLUMNS)]
-    for r in df.to_dict("records"):
+    dups = card_rows(snap, key, duplicates=True)
+    records = df.to_dict("records")
+    if not dups.empty:
+        records += [None] + dups.to_dict("records")
+    for r in records:
+        if r is None:
+            lines += ["", f"Not counted — {len(dups)} duplicate ESTA event"
+                          f"{'s' if len(dups) != 1 else ''} of the incidents above",
+                      "\t".join(COPY_COLUMNS)]
+            continue
         source = "Feed sourceOrg" if not _s(r.get("agency_how")) else \
             _HOW_NAMES.get(_s(r.get("agency_how")), _s(r.get("agency_how")))
         lines.append("\t".join(_cell(v) for v in (
