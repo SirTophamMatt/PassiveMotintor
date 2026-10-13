@@ -20,6 +20,7 @@ COLOURS = {
     "structure": ("#eb6834", "#d95926"),
     "grass":     ("#1baf7a", "#199e70"),
     "incidents": ("#eda100", "#c98500"),
+    "burn":      ("#e87ba4", "#d55181"),
 }
 ACTIVE_COLOURS = {"incidents": COLOURS["incidents"], "fires": COLOURS["structure"]}
 
@@ -178,12 +179,22 @@ def period_cards(snap, dark, admin=False):
     t, p = snap.totals, snap.previous
     lab = snap.period.previous_label
 
-    def card(key, label, split=None):
+    def card(key, label, split=None, foot=None):
         colour = _colour(key, dark)
         return stat_card(label, t[key], colour, split=split,
                          delta=_delta(t[key], p[key], lab) if p else None,
                          spark=_sparkline(snap.trend, key, colour, snap.unit),
-                         copy_key=key if admin else None)
+                         foot=foot, copy_key=key if admin else None)
+
+    ha, sized = snap.grass_ha
+    grass_foot = (f"{_ha(ha)} reported burnt ({sized} of {t['grass']} fires with a size)"
+                  if sized else None)
+    b, pb = snap.burn or {"count": 0, "ha": 0.0}, snap.previous_burn
+    burn = stat_card("Burn areas", b["count"], _colour("burn", dark),
+                     split=[("ha mapped", round(b["ha"]))] if b["count"] else None,
+                     delta=_delta(b["count"], pb["count"], lab) if (p and pb) else None,
+                     foot="DEECA burn footprints published in the feed, dated in this period",
+                     copy_key="burn" if admin else None)
     return [
         card("rfa", "SES RFAs"),
         card("structure", "Structure fires",
@@ -191,10 +202,15 @@ def period_cards(snap, dark, admin=False):
              + _unidentified(t["structure_esta"])),
         card("grass", "Grass & scrub/bush fires",
              [("CFA", t["grass_cfa"]), (stats.FFM_LABEL, t["grass_ffm"])]
-             + _unidentified(t["grass_esta"])),
+             + _unidentified(t["grass_esta"]), foot=grass_foot),
         card("incidents", "All incidents",
              [("fire" if t["fires"] == 1 else "fires", t["fires"])]),
+        burn,
     ]
+
+
+def _ha(v):
+    return f"{v:,.1f} ha" if v < 100 else f"{v:,.0f} ha"
 
 
 def active_cards(snap, dark, admin=False):

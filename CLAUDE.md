@@ -1548,15 +1548,27 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
 - **Duplicates + ESTA event type (2026-10-14, from a copied 24 h of live data).** (1) Every Triple
   Zero call is its own ESTA event, so one fire arrived as up to 5 records (Moonee Ponds, 4 min), plus
   CFA's own record of the same job. `stats.mark_duplicates` merges records of the same kind in the
-  same locality within `DUP_WINDOW_MINUTES` (60) of the previous one (and within `DUP_MAX_KM` 3 when
+  same locality within `DUP_WINDOW_MINUTES` (20; was 60, narrowed at the user's request
+  2026-10-14) of the previous one (and within `DUP_MAX_KM` 3 when
   both have coords), only when at least one is a raw ESTA event — two CFA-feed jobs stay two. Kept
   record: CFA feed > pager-attributed > earliest. Duplicates are excluded from every count but listed
-  under "Not counted" in the card copy and the Classification check. On that day: 67 -> 58.
+  under "Not counted" in the card copy and the Classification check. On that day: 67 -> 59.
   (2) ESTA's own type separates the services: CFA jobs are **Building Fire**, ex-MFB FRV jobs
   **Structure Fire** (every paged ESTA Building Fire was a CFA brigade's), so an unpaged ESTA
   Building Fire is CFA (`ESTA_CFA_TYPES`, how = "esta type") — Churchill / Donnybrook had read FRV.
   (3) The not-paged -> FRV inference now applies only to raw `VIC/ESTA` rows: CFA-feed records reuse
   `ESTA:<n>` ids and a CFA job missing from the pager is still CFA's.
+- **FFMVIC fires are published late (2026-10-14).** `VIC/DEECA` (deeca-incident) fires are
+  `Fire / Bushfire` (classified correctly as grass, FFMVIC) but arrive in the feed a day or two after
+  they start, dated by their start (`created` often a bare date -> 11:00 local). The live feed of
+  14 Oct carried four, all started 11-12 Oct — so "24 h to 06:00 14 Oct" correctly shows 0 FFMVIC;
+  they appear under their start day once published. Counting is by start time, deliberately.
+- **Burn areas + reported hectares (2026-10-14).** A **Burn areas** card: VicEmergency
+  `feedType == "burn-area"` features (DEECA burn footprints, `category1` "Burn Area") dated in the
+  period (`burn_areas_started`), with mapped hectares from the polygon (`fire_areas.area_ha`); never
+  an incident. Copy lists each (`BURN_COPY_COLUMNS`). The grass card's foot gives the feed's
+  REPORTED hectares (`size`, parsed by `intel_feed._parse_ha`; "Small" etc. carry no number and are
+  left out, with "N of M fires with a size" stated). The incident copy gained a Reported size column.
 - **Admin copy button per card (2026-10-14).** Admins get a copy icon on each of the 7 cards
   (`dcc.Clipboard` id `{"type": "stats-copy", "key": …}`, keys = `stats.CARD_ROWS`). The text is
   built ON CLICK by a MATCH callback (not shipped with every 60 s refresh — a FY card can be

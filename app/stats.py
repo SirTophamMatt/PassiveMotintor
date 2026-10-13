@@ -333,7 +333,7 @@ def attribute_esta(df):
 # fire can arrive as several (5 for one Moonee Ponds fire in 4 minutes), plus
 # the CFA feed's own record of the same job.
 # --------------------------------------------------------------------------- #
-DUP_WINDOW_MINUTES = 60
+DUP_WINDOW_MINUTES = 20
 DUP_MAX_KM = 3
 
 
@@ -486,7 +486,7 @@ def incidents_started(start, end):
     """Incidents that started in (start, end], classified."""
     df = database.read_df(
         f"SELECT source_id, category1, category2, source_org, location, status, "
-        f"resolved, latitude, longitude, {_STARTED} AS started FROM fire_incidents "
+        f"resolved, latitude, longitude, size, {_STARTED} AS started FROM fire_incidents "
         f"WHERE {_INCIDENT_SQL} AND {_STARTED} > ? AND {_STARTED} <= ?",
         [start.strftime(TS), end.strftime(TS)])
     return _frame(df)
@@ -495,7 +495,7 @@ def incidents_started(start, end):
 def active_incidents():
     df = database.read_df(
         "SELECT source_id, category1, category2, source_org, location, status, "
-        f"resolved, latitude, longitude, {_STARTED} AS started FROM fire_incidents "
+        f"resolved, latitude, longitude, size, {_STARTED} AS started FROM fire_incidents "
         f"WHERE resolved = 0 AND {_INCIDENT_SQL}")
     return _frame(df)
 
@@ -661,6 +661,40 @@ def fire_matrix(df):
     return rows
 
 
+# --------------------------------------------------------------------------- #
+# Burn areas + reported hectares
+# --------------------------------------------------------------------------- #
+def reported_ha(df, mask=None):
+    """(hectares, fires with a size) from the feed's reported size ('2.4 Ha.').
+    Sizes like 'Small' carry no number and are left out, not read as 0."""
+    from app.intel_feed import _parse_ha
+    sub = df if mask is None else df[mask]
+    if sub is None or sub.empty or "size" not in sub:
+        return 0.0, 0
+    vals = [v for v in (_parse_ha(x) for x in sub["size"]) if v is not None]
+    return float(sum(vals)), len(vals)
+
+
+def burn_areas_started(start, end):
+    """VicEmergency 'Burn Area' features (DEECA burn footprints) dated in
+    (start, end], with their mapped area in hectares."""
+    from app.fire_areas import area_ha, polygons_only
+    df = database.read_df(
+        f"SELECT source_id, location, headline, geometry, resolved, {_STARTED} AS started "
+        "FROM fire_incidents WHERE feed_type = 'burn-area' "
+        f"AND {_STARTED} > ? AND {_STARTED} <= ?",
+        [start.strftime(TS), end.strftime(TS)])
+    if df.empty:
+        return df.assign(ha=pd.Series(dtype=float))
+    df["ha"] = [area_ha(polygons_only(g)) for g in df["geometry"]]
+    return df.drop(columns=["geometry"])
+
+
+def burn_totals(df):
+    return {"count": 0 if df is None else len(df),
+            "ha": 0.0 if df is None or df.empty else float(df["ha"].sum())}
+
+
 def coverage_start():
     """When the fire collector's history begins (first incident seen)."""
     df = database.read_df("SELECT MIN(first_seen) AS t FROM fire_incidents")
@@ -695,6 +729,10 @@ class Snapshot:
     notes: list = field(default_factory=list)
     rows: pd.DataFrame = None          # classified incidents started in the period
     active_rows: pd.DataFrame = None   # classified incidents open now
+    burn_rows: pd.DataFrame = None     # burn areas dated in the period
+    burn: dict = field(default_factory=dict)
+    previous_burn: dict = None
+    grass_ha: tuple = (0.0, 0)         # (reported hectares, fires with a size)
 
 
 def build(period, now=None):
@@ -721,6 +759,13 @@ def build(period, now=None):
         snap.fire_types = top_types(df, df["fire"].astype(bool))
     snap.fire_matrix = fire_matrix(df)
     snap.check = classification_check(full)
+    snap.burn_rows = burn_areas_started(period.start, end)
+    snap.burn = burn_totals(snap.burn_rows)
+    if snap.previous is not None and period.previous:
+        pstart, pend = period.previous
+        snap.previous_burn = burn_totals(burn_areas_started(pstart, min(pend, now)))
+    if not df.empty:
+        snap.grass_ha = reported_ha(df, df["grass"].fillna(False).astype(bool))
     snap.coverage = coverage_start()
     if period.partial(now):
         snap.notes.append(f"Period not complete — counted to {_fmt(now)}.")
@@ -749,14 +794,17 @@ CARD_ROWS = {
     "active_incidents": ("Active open incidents", "active_rows", None),
     "active_rfa": ("Active SES RFAs", "active_rows", "rfa"),
     "active_fires": ("Active fires", "active_rows", "fire"),
+    "burn": ("Burn areas", "burn_rows", None),
 }
+BURN_COPY_COLUMNS = ["Dated", "Burn area ID", "Name", "Location", "Hectares (mapped)",
+                     "Still in feed"]
 _AGENCY_NAMES = {**fire_data.AGENCY_LABELS, "ffm": FFM_LABEL,
                  ESTA: "Not identified (ESTA)"}
 _HOW_NAMES = {HOW_PAGER: "CFA pager", HOW_NOT_PAGED: "Not on CFA pager (ex-MFB area)",
               HOW_ESTA_TYPE: "ESTA event type (Building Fire = CFA)"}
 COPY_COLUMNS = ["Started", "Incident ID", "F-number", "Agency", "Agency from",
                 "Source org", "Category", "Sub-category", "Location", "Status",
-                "Open", "Counted as"]
+                "Reported size", "Open", "Counted as"]
 
 
 def card_rows(snap, key, duplicates=False):
@@ -781,6 +829,8 @@ def card_text(snap, key):
     """Tab-separated text (pastes straight into Excel) of one card's incidents,
     under a line naming the card, the period and the count."""
     label, frame, _ = CARD_ROWS[key]
+    if key == "burn":
+        return _burn_text(snap, label)
     df = card_rows(snap, key)
     scope = ("open now" if frame == "active_rows" else snap.period.label)
     lines = [f"{label} — {scope} — {len(df)} incident{'s' if len(df) != 1 else ''}",
@@ -801,9 +851,23 @@ def card_text(snap, key):
             r.get("started"), r.get("source_id"), r.get("f_number"),
             _AGENCY_NAMES.get(r.get("agency"), r.get("agency")), source,
             r.get("source_org"), r.get("category1"), r.get("category2"),
-            r.get("location"), r.get("status"),
+            r.get("location"), r.get("status"), r.get("size"),
             "No" if str(r.get("resolved")) in ("1", "1.0", "True") else "Yes",
             counted_as(r))))
+    return "\n".join(lines)
+
+
+def _burn_text(snap, label):
+    df = snap.burn_rows
+    n = 0 if df is None else len(df)
+    lines = [f"{label} — {snap.period.label} — {n} burn area{'s' if n != 1 else ''}, "
+             f"{snap.burn.get('ha', 0):,.1f} ha", "\t".join(BURN_COPY_COLUMNS)]
+    if n:
+        for r in df.sort_values("started", kind="stable").to_dict("records"):
+            lines.append("\t".join(_cell(v) for v in (
+                r.get("started"), r.get("source_id"), r.get("headline"), r.get("location"),
+                f"{r.get('ha') or 0:.1f}",
+                "No" if str(r.get("resolved")) in ("1", "1.0", "True") else "Yes")))
     return "\n".join(lines)
 
 
