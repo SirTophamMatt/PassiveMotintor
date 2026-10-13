@@ -190,10 +190,17 @@ def period_cards(snap, dark, admin=False):
     grass_foot = (f"{_ha(ha)} reported burnt ({sized} of {t['grass']} fires with a size)"
                   if sized else None)
     b, pb = snap.burn or {"count": 0, "ha": 0.0}, snap.previous_burn
+    burn_foot = (f"{_ha(b.get('planned_ha', 0))} planned · {_ha(b.get('bushfire_ha', 0))} "
+                 "bushfire. Re-mapped footprints of one burn are merged; a burn is a "
+                 "bushfire when a fire incident sits on it" if b["count"] else
+                 "DEECA burn footprints dated in this period")
+    if b.get("undated"):
+        burn_foot += f" · {b['undated']} undated not counted"
     burn = stat_card("Burn areas", b["count"], _colour("burn", dark),
-                     split=[("ha mapped", round(b["ha"]))] if b["count"] else None,
+                     split=([("planned", b.get("planned", 0)), ("bushfire", b.get("bushfire", 0)),
+                             ("ha", round(b["ha"]))] if b["count"] else None),
                      delta=_delta(b["count"], pb["count"], lab) if (p and pb) else None,
-                     foot="DEECA burn footprints published in the feed, dated in this period",
+                     foot=burn_foot,
                      copy_key="burn" if admin else None)
     return [
         card("rfa", "SES RFAs"),

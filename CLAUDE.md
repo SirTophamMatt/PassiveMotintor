@@ -1563,12 +1563,23 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   they start, dated by their start (`created` often a bare date -> 11:00 local). The live feed of
   14 Oct carried four, all started 11-12 Oct — so "24 h to 06:00 14 Oct" correctly shows 0 FFMVIC;
   they appear under their start day once published. Counting is by start time, deliberately.
-- **Burn areas + reported hectares (2026-10-14).** A **Burn areas** card: VicEmergency
-  `feedType == "burn-area"` features (DEECA burn footprints, `category1` "Burn Area") dated in the
-  period (`burn_areas_started`), with mapped hectares from the polygon (`fire_areas.area_ha`); never
-  an incident. Copy lists each (`BURN_COPY_COLUMNS`). The grass card's foot gives the feed's
-  REPORTED hectares (`size`, parsed by `intel_feed._parse_ha`; "Small" etc. carry no number and are
-  left out, with "N of M fires with a size" stated). The incident copy gained a Reported size column.
+- **Burn areas + reported hectares (2026-10-14).** A **Burn areas** card from VicEmergency
+  `feedType == "burn-area"` features (`VIC/DELWP`, `category1`/`category2` "Burn Area" — the feed
+  carries NO planned/bushfire type). `burn_areas_started` returns one row per BURN, never an incident:
+  - **Re-mapped footprints are merged.** DEECA re-issues a burn's footprint under a NEW id each time
+    it re-maps it (one Seacombe burn = ~30 records of 800-950 ha; summing records gave an FY of
+    22,353 ha). Records group by name, each within `BURN_GROUP_GAP_DAYS` (30) of the previous; the
+    burn's area is the UNION of its shapes; it counts in the period holding its FIRST dated record
+    (look-back of the gap so a re-issue never starts a new burn).
+  - **Undated records are left out** (`created` NULL — only when we first saw them is known; six
+    appeared at collector start) and stated ("N undated not counted").
+  - **Planned vs bushfire**: a burn with a fire incident within `BURN_FIRE_KM` (2) of its footprint,
+    started 3 days before its first record to 2 days after its last, is that fire's footprint
+    (BUSHFIRE) — unless every such incident is itself a planned burn/burn-off. No fire on it =
+    PLANNED. Live 14 Oct: Wulgulmerang / Coles Rd / Colquhoun sat 0.1 km from DEECA bushfires; every
+    other burn area was 9-133 km from any fire. Fixture `tests/fixtures/osom_burn_areas_sample.json`.
+  The grass card's foot gives the feed's REPORTED hectares (`size`, `intel_feed._parse_ha`; "Small"
+  etc. are left out, with "N of M fires with a size" stated). The incident copy has a Reported size.
 - **Admin copy button per card (2026-10-14).** Admins get a copy icon on each of the 7 cards
   (`dcc.Clipboard` id `{"type": "stats-copy", "key": …}`, keys = `stats.CARD_ROWS`). The text is
   built ON CLICK by a MATCH callback (not shipped with every 60 s refresh — a FY card can be
