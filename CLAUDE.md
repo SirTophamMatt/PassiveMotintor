@@ -1525,6 +1525,12 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
 - **Honesty:** a period that starts before collection is labelled PARTIAL and its comparison is
   dropped; an in-progress period says so; the public-feed caveat (structure fires under-reported)
   sits on the page. Snapshot cached 60 s per period for every viewer.
+- **Fire type read from either category (2026-10-13).** FRV structure fires read 0: the first cut
+  only counted an incident whose category1 was exactly "Fire" with the type in category2.
+  `stats.fire_kind_of` also reads a type published as the category itself ("Structure Fire");
+  anything with "alarm" is never a fire. The page's **Classification check** panel lists sourceOrg /
+  category1 / category2 exactly as published, with the figure each was counted in — check it first
+  when a number looks wrong (the live wording was not visible from the dev sandbox).
 - Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
 - Tests: `tests/test_stats.py`.
 

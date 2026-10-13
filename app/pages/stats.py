@@ -281,7 +281,27 @@ def breakdown(snap):
         html.Div([html.H4("Fires by category"),
                   _list_table(snap.fire_types, "Category", "No fires in this period.")],
                  className="panel"),
+        html.Details([
+            html.Summary("Classification check — what the feed called each incident"),
+            html.P("Agency, category and sub-category exactly as VicEmergency published "
+                   "them, and the figure each was counted in. If a number above looks "
+                   "wrong, the reason is in this table.", className="muted"),
+            _check_table(snap.check),
+        ], className="panel stats-wide stats-check"),
     ]
+
+
+def _check_table(rows):
+    if not rows:
+        return html.Div("No incidents in this period.", className="muted")
+    return html.Table([
+        html.Thead(html.Tr([html.Th("Agency (sourceOrg)"), html.Th("Category"),
+                            html.Th("Sub-category"), html.Th("Count", className="num"),
+                            html.Th("Counted as")])),
+        html.Tbody([html.Tr([html.Td(o), html.Td(c1), html.Td(c2),
+                             html.Td(f"{n:,}", className="num"), html.Td(a)])
+                    for o, c1, c2, n, a in rows]),
+    ], className="trend-table stats-table")
 
 
 def _notes(snap):

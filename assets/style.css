@@ -1382,3 +1382,5 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .stats-wide { flex: 2; min-width: 440px; }
 .stats-table { width: 100%; }
 @media (max-width: 600px) { .stats-wide { min-width: 0; } .stats-card-row { grid-template-columns: 1fr; } }
+.stats-check { flex-basis: 100%; }
+.stats-check summary { cursor: pointer; font-weight: 600; }

@@ -176,3 +176,35 @@ def test_stats_in_nav():
     from app import factory, shell
     assert "/stats" in [p for p, _, _ in factory.PUBLIC_PAGES]
     assert any("/stats" in paths for _, paths in shell.NAV_GROUPS)
+
+
+@pytest.mark.parametrize("cat1,cat2,org,expected", [
+    ("Fire", "Structure Fire", "VIC/FRV", "structure_frv"),
+    ("Structure Fire", None, "VIC/FRV", "structure_frv"),     # type as the category
+    ("STRUCTURE FIRE", "Residential", "VIC/FRV", "structure_frv"),
+    ("Fire", "Building", "VIC/MFB", "structure_frv"),
+    ("Grass Fire", None, "VIC/CFA", "grass_cfa"),
+    ("Fire", "Grass and Scrub", "VIC/CFA", "grass_cfa"),
+])
+def test_fire_type_read_from_either_category(cat1, cat2, org, expected):
+    c = stats.classify({"category1": cat1, "category2": cat2, "source_org": org})
+    assert c["fire"] and c[expected]
+
+
+def test_alarm_is_not_a_fire():
+    c = stats.classify({"category1": "Fire Alarm", "category2": None, "source_org": "VIC/FRV"})
+    assert not c["fire"] and c["kind"] is None
+
+
+def test_classification_check(data):
+    database.insert_rows("fire_incidents", [
+        _row("x1", "Structure Fire", "VIC/FRV", None, "2026-10-12 20:00:00"),
+        _row("x2", "Fire", "VIC/EMV", "Structure Fire", "2026-10-12 21:00:00"),
+    ], ignore_duplicates=True)
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.totals["structure_frv"] == 2
+    rows = {(o, c1, c2): a for o, c1, c2, _, a in snap.check}
+    assert rows[("VIC/FRV", "Structure Fire", "—")] == "Structure fire (FRV)"
+    assert rows[("VIC/EMV", "Fire", "Structure Fire")].startswith("Fire — structure fire but agency")
+    assert rows[("VIC/SES", "Tree Down", "—")] == "SES RFA"
+    stats_page.breakdown(snap)

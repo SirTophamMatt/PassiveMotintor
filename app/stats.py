@@ -152,11 +152,24 @@ def incident_type(r):
     return cat1
 
 
+def fire_kind_of(category1, category2):
+    """(is_fire, kind) for an incident. Tolerant of where the feed puts the
+    fire type: category1 is usually "Fire" with the type in category2, but an
+    agency may publish the type as the category itself ("Structure Fire"),
+    so both are read. An alarm is never a fire."""
+    c1 = _s(category1).lower()
+    if "alarm" in c1:
+        return False, None
+    kind = fire_kind(category2) if c1 == "fire" else None
+    if kind is None and "fire" in c1:
+        kind = fire_kind(c1) or fire_kind(f"{c1} {_s(category2).lower()}")
+    return (c1 == "fire" or "fire" in c1), kind
+
+
 def classify(r):
     """Every flag a row contributes to. Pure, so the rules are testable."""
     agency = fire_data.agency_of(r.get("source_org"))
-    fire = _s(r.get("category1")).lower() == "fire"
-    kind = fire_kind(r.get("category2")) if fire else None
+    fire, kind = fire_kind_of(r.get("category1"), r.get("category2"))
     return {
         "agency": agency,
         "rfa": agency == "ses",
@@ -167,6 +180,39 @@ def classify(r):
         "grass_cfa": kind == "grass" and agency == "cfa",
         "grass_ffm": kind == "grass" and agency == "ffm",
     }
+
+
+def counted_as(r):
+    """The headline figure a classified row lands in (for the check table)."""
+    if r.get("rfa"):
+        return "SES RFA"
+    for key, label in (("structure_cfa", "Structure fire (CFA)"),
+                       ("structure_frv", "Structure fire (FRV)"),
+                       ("grass_cfa", "Grass & scrub/bush (CFA)"),
+                       ("grass_ffm", f"Grass & scrub/bush ({FFM_LABEL})")):
+        if r.get(key):
+            return label
+    if r.get("fire"):
+        kind = {"structure": "structure", "grass": "grass/bush"}.get(r.get("kind"))
+        agency = fire_data.AGENCY_LABELS.get(r.get("agency"), "other agency")
+        return (f"Fire — {kind} fire but agency is {agency}" if kind
+                else "Fire — other type (not structure or grass/bush)")
+    return "Other incident"
+
+
+def classification_check(df, limit=40):
+    """[(source_org, category1, category2, count, counted_as)] — what the feed
+    actually called each incident and where it was counted, so a feed wording
+    the rules don't recognise is visible on the page instead of reading as 0."""
+    if df.empty:
+        return []
+    keys = pd.DataFrame({
+        "org": df["source_org"].map(_s), "c1": df["category1"].map(_s),
+        "c2": df["category2"].map(_s), "as_": df.apply(counted_as, axis=1)})
+    g = (keys.groupby(["org", "c1", "c2", "as_"]).size()
+         .reset_index(name="n").sort_values(["n", "org"], ascending=[False, True]))
+    return [(r.org or "—", r.c1 or "—", r.c2 or "—", int(r.n), r.as_)
+            for r in g.head(limit).itertuples()]
 
 
 def _frame(df):
@@ -391,6 +437,7 @@ class Snapshot:
     rfa_localities: list = field(default_factory=list)
     fire_types: list = field(default_factory=list)
     fire_matrix: list = field(default_factory=list)
+    check: list = field(default_factory=list)
     active_rfa_types: list = field(default_factory=list)
     coverage: datetime = None
     notes: list = field(default_factory=list)
@@ -416,6 +463,7 @@ def build(period, now=None):
         snap.rfa_localities = top_localities(df, df["rfa"].astype(bool))
         snap.fire_types = top_types(df, df["fire"].astype(bool))
     snap.fire_matrix = fire_matrix(df)
+    snap.check = classification_check(df)
     snap.coverage = coverage_start()
     if period.partial(now):
         snap.notes.append(f"Period not complete — counted to {_fmt(now)}.")
