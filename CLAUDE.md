@@ -1507,6 +1507,27 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   `flooding_breakdown`) — fine on a click, **do not move it onto a timer**.
 - Tests: `tests/test_opsum_auto.py`.
 
+## Incident Statistics — /stats (built 2026-10-13)
+- **Counts for a reporting period.** `app/stats.py` (model, UI-free) + `app/pages/stats.py` (public,
+  Situation menu). Period filter: **24 h to 06:00** on a date (the SCC stats clock; default = the
+  last completed day), **Since 06:00** (in progress), **Financial year** (1 Jul – 30 Jun, back to the
+  FY collection started) and **Event** (an event tag; ongoing runs to now).
+- **Definitions** (all VicEmergency incidents — warnings and burn areas never count; start =
+  `COALESCE(created, first_seen)`, window `(start, end]`, the opsum rule): **RFA** = SES incident
+  (`fire.data.agency_of`); **structure fires** CFA + FRV and **grass & scrub/bush fires** CFA +
+  FFMVIC/DEECA by `opsum_auto.fire_kind` on category2 (so the page and the Op Summary agree;
+  Non-Structure is neither). **Active now**: open incidents, open SES RFAs, open fires (`is_fire`).
+- **Cards:** big number + agency split + change vs the previous period (previous 24 h; for a FY
+  the SAME SPAN of the prior FY, never a whole year against a part one; none for events) + a
+  sparkline. Trend: started per hour (<= 2 days) / per 06:00 day (<= 92 days) / per month; active
+  incidents/fires over the period from `fire_timeseries` (peak per hour/day, aggregated in SQL).
+  Breakdowns: fires by type x agency, SES RFAs by type and by locality, fires by category.
+- **Honesty:** a period that starts before collection is labelled PARTIAL and its comparison is
+  dropped; an in-progress period says so; the public-feed caveat (structure fires under-reported)
+  sits on the page. Snapshot cached 60 s per period for every viewer.
+- Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
+- Tests: `tests/test_stats.py`.
+
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
 lat/longs now exist via `gauge_coords`; flood gauges already render on `/map`) · hand-fill the
