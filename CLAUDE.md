@@ -1284,7 +1284,10 @@ what should I be watching* — and is useful **on its own, before anyone generat
   equirectangular projection about Victoria (affine, so differences are exact; area ±~2%).
 - **Historical burn areas** (the ~60 DELWP footprints) are only a toggle (off). A burn-area feature
   joins an area when the feed dates it within `BURN_AREA_RECENT_DAYS` (7), and seeds one on its own
-  only when its shape moved inside the window. NOT yet confirmed against a live fire season whether
+  only when its shape moved inside the window — or when it was **newly PUBLISHED** (first seen inside
+  the window and dated within the recent days; 2026-10-14). A new burn area gets its own area, a NEW
+  badge and a `wd-pulse` breath for `PULSE_SECONDS` (`Member.new_at`, event kind `new_burn`) but is
+  **never a takeover** — DEECA publishes planned-burn footprints in batches. NOT yet confirmed against a live fire season whether
   VicEmergency publishes a going fire's perimeter on the incident or as a separate burn-area feature
   — both paths are handled.
 - **Takeover** (per browser, first snapshot only seeds — `fire_areas.events`/`detect_new`): a burn-area
@@ -1298,10 +1301,10 @@ what should I be watching* — and is useful **on its own, before anyone generat
      REPORTED size from the state journal (`entity_state_history`, written by the fire collector
      itself; parsed with `intel_feed._parse_ha`) over the window. A polygon-less fire's area/growth
      come from it (a mapped fire is measured by its polygon only, never twice); the card says
-     "Reported size 10 ha → 27 ha at 13:42"; the map draws an equal-area DASHED circle (the real
-     perimeter is unknown), the growth ring red, the latest step breathing (`size_rings`,
-     `fire_wall.size_ring_layers`); a step of ≥ 5 ha and ≥ 10 % (the Intelligence Feed's own floor)
-     is a takeover (`size:<id>:<ts>`).
+     "Reported size 10 ha → 27 ha at 13:42"; a step of ≥ 5 ha and ≥ 10 % (the Intelligence Feed's
+     own floor) is a takeover (`size:<id>:<ts>`). **The map draws NOTHING for it (2026-10-14, user
+     request): only burn areas the feed publishes are drawn** — the equal-area dashed circle
+     (`size_rings` / `size_ring_layers`) that stood in for an unknown perimeter was removed.
   2. **A polygon re-issued under a NEW feed id** was only a baseline. `_link_predecessors` diffs a
      polygon first seen inside the window against the no-longer-current polygon it overlaps most
      (last recorded within `PREDECESSOR_LOOKBACK_HOURS` before the window), `AreaChange.predecessor`.

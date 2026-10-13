@@ -22,8 +22,9 @@ The scenario repeats every `CYCLE_SECONDS`, one new burn-area shape per
 * **TEST tree down** near Alpha attaches to that area as context.
 * **TEST Grass Fire Charlie** near Melton with its own Advice — a second area.
   It has NO mapped polygon, like most fires in the feed: only its reported
-  size grows (2 -> 4 -> 9 -> 15 -> 27 -> 40 ha), drawn as an equal-area dashed
-  circle with the growth ring in red; the bigger steps take over the wall.
+  size grows (2 -> 4 -> 9 -> 15 -> 27 -> 40 ha). It has no published perimeter,
+  so the map draws no burn area for it; the card shows the reported size and
+  the bigger steps take over the wall.
 * **TEST flood Advice** in Gippsland — a non-fire warning, so NOT an area.
 
 Admin-only (fake Emergency Warnings on a public page could be screenshotted
