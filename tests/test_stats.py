@@ -256,9 +256,12 @@ def test_pager_agency(messages, expected):
 
 def test_esta_structure_fire_attributed_to_frv_by_pager(db):
     database.insert_rows("fire_incidents", [
-        _row("ESTA:261014300", "Fire", "VIC/ESTA", "Building Fire", "2026-10-12 20:00:00"),
-        _row("ESTA:261014301", "Fire", "VIC/ESTA", "Building Fire", "2026-10-12 20:10:00"),
-        _row("ESTA:261014302", "Fire", "VIC/ESTA", "Building Fire", "2026-10-12 20:20:00"),
+        _row("ESTA:261014300", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:00:00",
+             location="Main St, Dandenong"),
+        _row("ESTA:261014301", "Fire", "VIC/ESTA", "Building Fire", "2026-10-12 20:10:00",
+             location="Main St, Boort"),
+        _row("ESTA:261014302", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:20:00",
+             location="Main St, Brunswick"),
         _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
     ], ignore_duplicates=True)
     database.insert_rows("pager_messages", [
@@ -288,10 +291,14 @@ def test_esta_job_not_on_pager_is_frv_when_pager_was_running(db):
     """Mazzanet carries CFA and the ex-CFA FRV stations, never the ex-MFB
     metro stations: an ESTA job the pager never saw is a metro FRV job."""
     database.insert_rows("fire_incidents", [
-        _row("ESTA:261014400", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:00:00"),
-        _row("ESTA:261014401", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 23:00:00"),
-        _row("ESTA:261014402", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 21:00:00"),
-        _row("ESTA:261014403", "Fire", "VIC/ESTA", "Non Structure Fire", "2026-10-12 20:05:00"),
+        _row("ESTA:261014400", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:00:00",
+             location="Lygon St, Brunswick East"),
+        _row("ESTA:261014401", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 23:00:00",
+             location="Deakin St, Essendon"),
+        _row("ESTA:261014402", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 21:00:00",
+             location="Princes Hwy, Dandenong"),
+        _row("ESTA:261014403", "Fire", "VIC/ESTA", "Non Structure Fire", "2026-10-12 20:05:00",
+             location="Lygon St, Brunswick East"),
         _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
     ], ignore_duplicates=True)
     # Pager running 20:00-21:30, then down (23:00 job has no cycle after it).
@@ -365,3 +372,86 @@ def test_copy_buttons_only_for_admins(data):
     assert not has_copy(stats_page.active_cards(snap, False))
     assert has_copy(stats_page.period_cards(snap, False, admin=True))
     assert has_copy(stats_page.active_cards(snap, False, admin=True))
+
+
+# --- Duplicate ESTA events + ESTA event type (from the live 24 h of 2026-10-14) ---
+def test_esta_building_fire_not_on_pager_is_cfa(db):
+    """ESTA labels CFA jobs 'Building Fire' and ex-MFB FRV jobs 'Structure Fire'."""
+    database.insert_rows("fire_incidents", [
+        _row("ESTA:261014030", "Fire", "VIC/ESTA", "Building Fire", "2026-10-12 21:50:58",
+             location="Mclean Av, Churchill"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    _pager_hb("2026-10-12 21:54:00")
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.totals["structure_cfa"] == 1 and snap.totals["structure_frv"] == 0
+    assert "Building Fire (CFA)" in stats.card_text(snap, "structure")
+
+
+def test_cfa_feed_job_missing_from_pager_stays_cfa(db):
+    database.insert_rows("fire_incidents", [
+        _row("ESTA:261014048", "Fire", "VIC/CFA", "Building Fire", "2026-10-12 22:59:00",
+             location="Bunjil Way, Knoxfield"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    _pager_hb("2026-10-12 23:03:00")
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.totals["structure_cfa"] == 1 and snap.totals["structure_frv"] == 0
+
+
+def test_repeat_esta_calls_for_one_fire_count_once(db):
+    database.insert_rows("fire_incidents", [
+        # Five Triple Zero calls for one Moonee Ponds fire in four minutes.
+        _row("ESTA:261014071", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 00:50:10",
+             location="Moonee Ponds"),
+        _row("ESTA:261014073", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 00:50:22",
+             location="Shuter St, Moonee Ponds"),
+        _row("ESTA:261014072", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 00:50:54",
+             location="Shuter St, Moonee Ponds"),
+        _row("ESTA:261014074", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 00:51:03",
+             location="Moonee Ponds"),
+        _row("ESTA:261014076", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 00:54:13",
+             location="Moonee Ponds"),
+        # Kurunjang: two ESTA calls, then CFA's own record (paged to FRV).
+        _row("ESTA:261014088", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 01:36:10",
+             location="Kingston Rule St, Kurunjang"),
+        _row("ESTA:261014089", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-13 01:40:03",
+             location="Kingston Rule St, Kurunjang"),
+        _row("ESTA:261014091", "Fire", "VIC/CFA", "Building Fire", "2026-10-13 01:49:00",
+             location="Kingston Rule St, Kurunjang"),
+        # Two CFA-feed jobs in one place are two jobs, even close together.
+        _row("ESTA:261013400", "Fire", "VIC/CFA", "Building Fire", "2026-10-12 09:36:00",
+             location="Dookie-Nalinga Rd, Dookie College"),
+        _row("ESTA:261013401", "Fire", "VIC/CFA", "Building Fire", "2026-10-12 09:50:00",
+             location="Dookie-Nalinga Rd, Dookie College"),
+        # Same suburb, hours apart: separate fires.
+        _row("ESTA:261013846", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 16:55:30",
+             location="Millers Rd, Altona North"),
+        _row("ESTA:261013976", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:02:28",
+             location="Millers Rd, Altona North"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    _pager_hb("2026-10-12 10:00:00", "2026-10-12 17:00:00", "2026-10-12 20:05:00",
+              "2026-10-13 00:55:00", "2026-10-13 01:45:00")
+    database.insert_rows("pager_messages", [
+        {"msg_hash": "k", "received_at": "2026-10-13 01:49:30", "sent_at": "2026-10-13 01:49:30",
+         "message": "@@ALERT STRUC1 ... F261014091 [FS40_]", "f_number": "F261014091",
+         "brigade": "FS40"},
+        {"msg_hash": "d1", "received_at": "2026-10-12 09:36:30", "sent_at": "2026-10-12 09:36:30",
+         "message": "x F261013400 [DOOK]", "f_number": "F261013400", "brigade": "DOOK"},
+        {"msg_hash": "d2", "received_at": "2026-10-12 09:50:30", "sent_at": "2026-10-12 09:50:30",
+         "message": "x F261013401 [DOOK]", "f_number": "F261013401", "brigade": "DOOK"},
+    ])
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    t = snap.totals
+    assert t["structure"] == 6          # Moonee Ponds, Kurunjang, 2 x Dookie, 2 x Altona North
+    assert t["structure_frv"] == 4 and t["structure_cfa"] == 2
+    rows = snap.rows.set_index("source_id")
+    assert rows.loc["ESTA:261014091", "duplicate"] == False          # CFA's record is kept
+    assert rows.loc["ESTA:261014088", "dup_of"] == "ESTA:261014091"
+    assert rows.loc["ESTA:261014071", "duplicate"] == False          # earliest call kept
+    text = stats.card_text(snap, "structure")
+    assert "— 6 incidents" in text
+    assert "Not counted — 6 duplicate ESTA events of the incidents above" in text
+    assert "ESTA:261014076" in text.split("Not counted", 1)[1]
+    assert "ESTA:261014076" not in text.split("Not counted", 1)[0]
