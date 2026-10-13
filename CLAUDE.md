@@ -1284,7 +1284,10 @@ what should I be watching* — and is useful **on its own, before anyone generat
   equirectangular projection about Victoria (affine, so differences are exact; area ±~2%).
 - **Historical burn areas** (the ~60 DELWP footprints) are only a toggle (off). A burn-area feature
   joins an area when the feed dates it within `BURN_AREA_RECENT_DAYS` (7), and seeds one on its own
-  only when its shape moved inside the window. NOT yet confirmed against a live fire season whether
+  only when its shape moved inside the window — or when it was **newly PUBLISHED** (first seen inside
+  the window and dated within the recent days; 2026-10-14). A new burn area gets its own area, a NEW
+  badge and a `wd-pulse` breath for `PULSE_SECONDS` (`Member.new_at`, event kind `new_burn`) but is
+  **never a takeover** — DEECA publishes planned-burn footprints in batches. NOT yet confirmed against a live fire season whether
   VicEmergency publishes a going fire's perimeter on the incident or as a separate burn-area feature
   — both paths are handled.
 - **Takeover** (per browser, first snapshot only seeds — `fire_areas.events`/`detect_new`): a burn-area
@@ -1298,10 +1301,10 @@ what should I be watching* — and is useful **on its own, before anyone generat
      REPORTED size from the state journal (`entity_state_history`, written by the fire collector
      itself; parsed with `intel_feed._parse_ha`) over the window. A polygon-less fire's area/growth
      come from it (a mapped fire is measured by its polygon only, never twice); the card says
-     "Reported size 10 ha → 27 ha at 13:42"; the map draws an equal-area DASHED circle (the real
-     perimeter is unknown), the growth ring red, the latest step breathing (`size_rings`,
-     `fire_wall.size_ring_layers`); a step of ≥ 5 ha and ≥ 10 % (the Intelligence Feed's own floor)
-     is a takeover (`size:<id>:<ts>`).
+     "Reported size 10 ha → 27 ha at 13:42"; a step of ≥ 5 ha and ≥ 10 % (the Intelligence Feed's
+     own floor) is a takeover (`size:<id>:<ts>`). **The map draws NOTHING for it (2026-10-14, user
+     request): only burn areas the feed publishes are drawn** — the equal-area dashed circle
+     (`size_rings` / `size_ring_layers`) that stood in for an unknown perimeter was removed.
   2. **A polygon re-issued under a NEW feed id** was only a baseline. `_link_predecessors` diffs a
      polygon first seen inside the window against the no-longer-current polygon it overlaps most
      (last recorded within `PREDECESSOR_LOOKBACK_HOURS` before the window), `AreaChange.predecessor`.
@@ -1563,12 +1566,23 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   they start, dated by their start (`created` often a bare date -> 11:00 local). The live feed of
   14 Oct carried four, all started 11-12 Oct — so "24 h to 06:00 14 Oct" correctly shows 0 FFMVIC;
   they appear under their start day once published. Counting is by start time, deliberately.
-- **Burn areas + reported hectares (2026-10-14).** A **Burn areas** card: VicEmergency
-  `feedType == "burn-area"` features (DEECA burn footprints, `category1` "Burn Area") dated in the
-  period (`burn_areas_started`), with mapped hectares from the polygon (`fire_areas.area_ha`); never
-  an incident. Copy lists each (`BURN_COPY_COLUMNS`). The grass card's foot gives the feed's
-  REPORTED hectares (`size`, parsed by `intel_feed._parse_ha`; "Small" etc. carry no number and are
-  left out, with "N of M fires with a size" stated). The incident copy gained a Reported size column.
+- **Burn areas + reported hectares (2026-10-14).** A **Burn areas** card from VicEmergency
+  `feedType == "burn-area"` features (`VIC/DELWP`, `category1`/`category2` "Burn Area" — the feed
+  carries NO planned/bushfire type). `burn_areas_started` returns one row per BURN, never an incident:
+  - **Re-mapped footprints are merged.** DEECA re-issues a burn's footprint under a NEW id each time
+    it re-maps it (one Seacombe burn = ~30 records of 800-950 ha; summing records gave an FY of
+    22,353 ha). Records group by name, each within `BURN_GROUP_GAP_DAYS` (30) of the previous; the
+    burn's area is the UNION of its shapes; it counts in the period holding its FIRST dated record
+    (look-back of the gap so a re-issue never starts a new burn).
+  - **Undated records are left out** (`created` NULL — only when we first saw them is known; six
+    appeared at collector start) and stated ("N undated not counted").
+  - **Planned vs bushfire**: a burn with a fire incident within `BURN_FIRE_KM` (2) of its footprint,
+    started 3 days before its first record to 2 days after its last, is that fire's footprint
+    (BUSHFIRE) — unless every such incident is itself a planned burn/burn-off. No fire on it =
+    PLANNED. Live 14 Oct: Wulgulmerang / Coles Rd / Colquhoun sat 0.1 km from DEECA bushfires; every
+    other burn area was 9-133 km from any fire. Fixture `tests/fixtures/osom_burn_areas_sample.json`.
+  The grass card's foot gives the feed's REPORTED hectares (`size`, `intel_feed._parse_ha`; "Small"
+  etc. are left out, with "N of M fires with a size" stated). The incident copy has a Reported size.
 - **Admin copy button per card (2026-10-14).** Admins get a copy icon on each of the 7 cards
   (`dcc.Clipboard` id `{"type": "stats-copy", "key": …}`, keys = `stats.CARD_ROWS`). The text is
   built ON CLICK by a MATCH callback (not shipped with every 60 s refresh — a FY card can be

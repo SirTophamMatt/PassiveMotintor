@@ -530,8 +530,88 @@ def test_burn_areas_counted_with_mapped_hectares(db):
     ], ignore_duplicates=True)
     snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
     assert snap.burn["count"] == 1 and 95 < snap.burn["ha"] < 105
+    assert snap.burn["planned"] == 1                     # no fire incident on it
     assert snap.totals["incidents"] == 0                 # never an incident
     text = stats.card_text(snap, "burn")
     assert text.startswith("Burn areas — ") and "Cabbage Tree Rd" in text
     assert "b2" not in text
     assert "Burn areas" in str(stats_page.period_cards(snap, False, admin=True))
+
+
+# --- Burn areas: re-mapped footprints merged, planned vs bushfire (live feed 2026-10-14) ---
+def _square(lon, lat, d):
+    return {"type": "Polygon", "coordinates": [[[lon, lat], [lon + d, lat], [lon + d, lat - d],
+                                                [lon, lat - d], [lon, lat]]]}
+
+
+def _burn(sid, name, created, geom, resolved=1, first_seen=None):
+    import json
+    return {"source_id": sid, "feed_type": "burn-area", "category1": "Burn Area",
+            "category2": "Burn Area", "source_org": "VIC/DELWP", "location": name,
+            "headline": name, "geometry": json.dumps(geom), "created": created,
+            "first_seen": first_seen or created, "resolved": resolved}
+
+
+def test_remapped_burn_footprints_merge_into_one_burn(db):
+    """Seacombe arrived as ~30 records of 800-950 ha: one burn, its area the union."""
+    big, bigger = _square(147.0, -38.0, 0.03), _square(147.0, -38.0, 0.035)
+    database.insert_rows("fire_incidents", [
+        _burn("s1", "Seacombe - Longford-Loch Sport Rd", "2026-10-12 10:00:00", big),
+        _burn("s2", "Seacombe - Longford-Loch Sport Rd", "2026-10-12 10:00:00", big),
+        _burn("s3", "Seacombe - Longford-Loch Sport Rd", "2026-10-12 12:00:00", bigger, 0),
+        # Re-issued after the period ends: same burn, not a new one.
+        _burn("s4", "Seacombe - Longford-Loch Sport Rd", "2026-10-13 10:00:00", bigger, 0),
+        # The feed gave no date: only when we first saw it is known.
+        _burn("u1", "Trawool - Tallarook Sf", None, _square(145.2, -37.0, 0.01),
+              first_seen="2026-10-12 14:26:04"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    from app.fire_areas import area_ha, polygons_only
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    b = snap.burn
+    assert b["count"] == 1 and b["undated"] == 1
+    assert abs(b["ha"] - area_ha(polygons_only(bigger))) < 0.05 * b["ha"]   # union, not the sum
+    row = snap.burn_rows.iloc[0]
+    assert row["records"] == 3 and row["burn_id"] == "s3"
+    nxt = stats.build(stats.day_period(date(2026, 10, 14)), NOW).burn
+    assert nxt["count"] == 0                     # s4 continues the burn, it doesn't start one
+    text = stats.card_text(snap, "burn")
+    assert "1 burn area record the feed gave no date" in text
+
+
+def test_burn_with_a_fire_on_it_is_a_bushfire(db):
+    """Live feed 2026-10-14: Wulgulmerang / Coles Rd / Colquhoun burn areas sat
+    0.1 km from DEECA bushfires; every other one was 9-133 km from any fire."""
+    import json, os
+    from tests.conftest import FIXTURE_DIR
+    from app.modules.fire import scraper
+    feats = json.load(open(os.path.join(FIXTURE_DIR, "osom_burn_areas_sample.json")))["features"]
+    rows = []
+    for f in feats:
+        r = scraper._extract(f)
+        r.update(first_seen=r["created"], last_seen=NOW.strftime(TS), resolved=0)
+        rows.append(r)
+    database.insert_rows("fire_incidents", rows + [
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1)],
+        ignore_duplicates=True)
+    snap = stats.build(stats.fy_period(2026, datetime(2026, 10, 14, 9)), datetime(2026, 10, 14, 9))
+    kinds = dict(zip(snap.burn_rows["name"], snap.burn_rows["kind"]))
+    for name in ("Wulgulmerang - Wombargo Track", "Coles Rd", "Colquhoun - Siberia Crossing"):
+        assert kinds[name] == stats.BURN_BUSHFIRE, name
+    assert kinds["Seacombe - Longford-Loch Sport Rd"] == stats.BURN_PLANNED
+    assert kinds["Gaffneys Creek - Gaffneys Creek Track"] == stats.BURN_PLANNED
+    assert snap.burn["bushfire"] == 3
+    assert snap.burn["count"] == len(set(kinds))          # one row per burn, not per record
+    assert "Bushfire" in stats.card_text(snap, "burn")
+
+
+def test_burn_on_a_planned_burn_incident_is_planned(db):
+    database.insert_rows("fire_incidents", [
+        _burn("p1", "Bruthen - Blicks Hill Rd", "2026-10-12 10:00:00", _square(147.8, -37.7, 0.01)),
+        dict(_row("pb", "Fire", "VIC/DEECA", "Planned Burn", "2026-10-12 09:00:00"),
+             latitude=-37.705, longitude=147.805),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    row = snap.burn_rows.iloc[0]
+    assert row["kind"] == stats.BURN_PLANNED and row["matched"].startswith("planned burn incident")

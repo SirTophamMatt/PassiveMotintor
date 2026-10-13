@@ -543,33 +543,6 @@ def _size_change_for(source_id, rows, cutoff):
     return change
 
 
-def size_rings(member, size):
-    """For a fire with no mapped polygon: circles of its reported size now and
-    at the window's start, centred on its point, as lon/lat GeoJSON —
-    (now, growth annulus, latest-step annulus). Only an equal-area stand-in, so
-    the wall draws them dashed: the real perimeter is unknown."""
-    if member.geom is None or member.geom.geom_type != "Point" or size is None:
-        return None, None, None
-
-    def disc(ha):
-        if not ha or ha <= 0:
-            return None
-        return member.geom.buffer(math.sqrt(ha * 10_000.0 / math.pi), quad_segs=24)
-    now = disc(size.size_ha)
-    if now is None:
-        return None, None, None
-    grown = step = None
-    if size.grown_ha:
-        base = disc(size.baseline_ha)
-        grown = now.difference(base) if base is not None else now
-    if size.step_at is not None and size.step_from_ha is not None \
-            and size.size_ha > size.step_from_ha:
-        prev = disc(size.step_from_ha)
-        step = now.difference(prev) if prev is not None else now
-    as_json = lambda g: to_geojson(g) if g is not None and not g.is_empty else None
-    return as_json(now), as_json(grown), as_json(step)
-
-
 # --------------------------------------------------------------------------- #
 # Areas of operation
 # --------------------------------------------------------------------------- #
@@ -586,6 +559,7 @@ class Member:
     size: str = None
     fire_related: bool = False
     geom: object = None       # metric shapely geometry (polygon or point)
+    new_at: datetime = None   # burn areas: first published inside the window
 
 
 @dataclass
@@ -693,11 +667,20 @@ def members_from(incidents, burn_areas=None, changes=None, now=None,
             ch = changes.get(str(row.get("source_id")))
             moving = ch is not None and ch.step_at is not None \
                 and ch.step_at >= changed_since
-            if not moving and (dated is None or dated < recent):
+            # Newly PUBLISHED: first seen inside the window and dated recently
+            # (an old footprint appearing for the first time is not news).
+            seen = _dt(row.get("first_seen"))
+            fresh = seen is not None and seen >= changed_since \
+                and (dated is None or dated >= recent)
+            if not (moving or fresh) and (dated is None or dated < recent):
                 continue                       # a historical footprint
-            # A burn area whose shape is moving seeds an area on its own; a
-            # recent but static one only joins an area a fire already made.
-            out.append(_member(row, "Burn area", "burn", moving))
+            # A burn area whose shape is moving, or that has just been
+            # published, seeds an area on its own; a recent but static one
+            # only joins an area a fire already made.
+            m = _member(row, "Burn area", "burn", moving or fresh)
+            if fresh:
+                m.new_at = seen
+            out.append(m)
     return [m for m in out if m.geom is not None]
 
 
@@ -893,7 +876,7 @@ def area_for_member(areas, member_id):
 def _burn_area_rows():
     return database.read_df(
         "SELECT source_id, feed_type, location, headline, latitude, longitude, "
-        "geometry, created, updated, status, size FROM fire_incidents "
+        "geometry, created, updated, first_seen, status, size FROM fire_incidents "
         "WHERE feed_type = 'burn-area' AND resolved = 0 AND geometry IS NOT NULL")
 
 
@@ -990,6 +973,12 @@ def events(snap):
                             "member": m.id, "kind": "growth",
                             "text": f"{m.location} {_ha_text(sc.step_from_ha)} → "
                                     f"{_ha_text(sc.size_ha)}"})
+            if m.role == "burn" and m.new_at is not None:
+                # Flagged NEW on its card and breathing on the map, but never a
+                # takeover: DEECA publishes planned-burn footprints in batches.
+                out.append({"key": f"newburn:{m.id}", "member": m.id,
+                            "kind": "new_burn",
+                            "text": f"{m.location} burn area published"})
             if m.role == "warning" and m.level in ("Emergency Warning",
                                                    "Watch and Act"):
                 out.append({"key": f"warn:{m.id}:{m.level}", "member": m.id,

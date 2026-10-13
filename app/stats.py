@@ -675,24 +675,134 @@ def reported_ha(df, mask=None):
     return float(sum(vals)), len(vals)
 
 
-def burn_areas_started(start, end):
-    """VicEmergency 'Burn Area' features (DEECA burn footprints) dated in
-    (start, end], with their mapped area in hectares."""
-    from app.fire_areas import area_ha, polygons_only
+# DEECA re-issues a burn's footprint under a NEW id each time it re-maps it
+# (one Seacombe burn arrived as ~30 records of 800-950 ha), so records are
+# grouped by name into one burn: same name, each record within
+# BURN_GROUP_GAP_DAYS of the previous one. Its area is the UNION of its shapes.
+BURN_GROUP_GAP_DAYS = 30
+# The feed never says planned vs bushfire. A burn with a fire incident on it
+# (within BURN_FIRE_KM, started BURN_FIRE_DAYS_BEFORE before its first record
+# to BURN_FIRE_DAYS_AFTER after its last) is that fire's footprint.
+BURN_FIRE_KM = 2.0
+BURN_FIRE_DAYS_BEFORE = 3
+BURN_FIRE_DAYS_AFTER = 2
+BURN_PLANNED = "planned"
+BURN_BUSHFIRE = "bushfire"
+_PLANNED_RE = re.compile(r"planned|burn[ -]?off|fuel reduction", re.I)
+
+
+def _burn_name(r):
+    return " ".join((_s(r.get("headline")) or _s(r.get("location"))).lower().split())
+
+
+def _burn_groups(df):
+    """[[record dicts]] — one list per burn (records sorted by date)."""
+    groups = []
+    for _, g in df.sort_values("dated", kind="stable").groupby("name", sort=False):
+        current, last = [], None
+        for r in g.to_dict("records"):
+            t = pd.to_datetime(r["dated"])
+            if current and t - last > timedelta(days=BURN_GROUP_GAP_DAYS):
+                groups.append(current)
+                current = []
+            current.append(r)
+            last = t
+        if current:
+            groups.append(current)
+    return groups
+
+
+def _fires_near(t0, t1):
+    """Fire incidents (any agency) started in [t0, t1] with a position."""
     df = database.read_df(
-        f"SELECT source_id, location, headline, geometry, resolved, {_STARTED} AS started "
+        "SELECT source_id, source_org, category1, category2, location, latitude, longitude, "
+        f"{_STARTED} AS started FROM fire_incidents WHERE {_INCIDENT_SQL} "
+        f"AND latitude IS NOT NULL AND {_STARTED} >= ? AND {_STARTED} <= ?",
+        [t0.strftime(TS), t1.strftime(TS)])
+    if df.empty:
+        return df
+    return df[[fire_kind_of(a, b)[0] for a, b in zip(df["category1"], df["category2"])]]
+
+
+def burn_areas_started(start, end):
+    """One row per BURN whose first dated record falls in (start, end]: merged
+    footprint hectares, record count, and planned / bushfire with the reason.
+    Undated records (the feed gave no date, so only when we first saw them
+    is known) are left out and counted in `undated`."""
+    import shapely
+    from app.fire_areas import metric_ha, polygons_only, to_metric
+    cols = ["burn_id", "name", "dated", "last_dated", "records", "ha", "kind",
+            "matched", "in_feed"]
+    look_back = start - timedelta(days=BURN_GROUP_GAP_DAYS)
+    df = database.read_df(
+        "SELECT source_id, location, headline, geometry, resolved, created, first_seen "
         "FROM fire_incidents WHERE feed_type = 'burn-area' "
         f"AND {_STARTED} > ? AND {_STARTED} <= ?",
-        [start.strftime(TS), end.strftime(TS)])
+        [look_back.strftime(TS), end.strftime(TS)])
+    undated = 0
+    if not df.empty:
+        dated_mask = df["created"].map(lambda v: bool(_s(v)))
+        undated = int((~dated_mask & (df["first_seen"] > start.strftime(TS))).sum())
+        df = df[dated_mask].copy()
     if df.empty:
-        return df.assign(ha=pd.Series(dtype=float))
-    df["ha"] = [area_ha(polygons_only(g)) for g in df["geometry"]]
-    return df.drop(columns=["geometry"])
+        out = pd.DataFrame(columns=cols)
+        out.attrs["undated"] = undated
+        return out
+    df["dated"] = df["created"]
+    df["name"] = [_burn_name(r) for r in df.to_dict("records")]
+    groups = [g for g in _burn_groups(df)
+              if start.strftime(TS) < g[0]["dated"] <= end.strftime(TS)]
+    rows = []
+    if groups:
+        first = min(pd.to_datetime(g[0]["dated"]) for g in groups)
+        last = max(pd.to_datetime(g[-1]["dated"]) for g in groups)
+        fires = _fires_near(first - timedelta(days=BURN_FIRE_DAYS_BEFORE),
+                            last + timedelta(days=BURN_FIRE_DAYS_AFTER))
+    for g in groups:
+        shapes = [m for m in (to_metric(polygons_only(r["geometry"])) for r in g) if m is not None]
+        union = shapely.union_all(shapes) if shapes else None
+        kind, matched = BURN_PLANNED, "no fire incident on it"
+        if union is not None and not fires.empty:
+            t0 = pd.to_datetime(g[0]["dated"]) - timedelta(days=BURN_FIRE_DAYS_BEFORE)
+            t1 = pd.to_datetime(g[-1]["dated"]) + timedelta(days=BURN_FIRE_DAYS_AFTER)
+            near = []
+            for f in fires.to_dict("records"):
+                ft = pd.to_datetime(f["started"], errors="coerce")
+                if pd.isna(ft) or not (t0 <= ft <= t1):
+                    continue
+                pt = to_metric({"type": "Point",
+                                "coordinates": [float(f["longitude"]), float(f["latitude"])]})
+                if pt is not None and union.distance(pt) <= BURN_FIRE_KM * 1000:
+                    near.append(f)
+            if near:
+                f = near[0]
+                what = f"{_s(f['category2']) or _s(f['category1'])}, {_s(f['location'])} " \
+                       f"({_s(f['source_org'])}, {_s(f['started'])[:16]})"
+                if all(_PLANNED_RE.search(_s(x["category2"])) for x in near):
+                    kind, matched = BURN_PLANNED, "planned burn incident: " + what
+                else:
+                    kind, matched = BURN_BUSHFIRE, what
+        rows.append({
+            "burn_id": g[-1]["source_id"], "name": _s(g[-1].get("headline")) or
+            _s(g[-1].get("location")), "dated": g[0]["dated"], "last_dated": g[-1]["dated"],
+            "records": len(g), "ha": metric_ha(union) if union is not None else 0.0,
+            "kind": kind, "matched": matched,
+            "in_feed": any(str(r.get("resolved")) in ("0", "0.0", "False") for r in g)})
+    out = pd.DataFrame(rows, columns=cols)
+    out.attrs["undated"] = undated
+    return out
 
 
 def burn_totals(df):
-    return {"count": 0 if df is None else len(df),
-            "ha": 0.0 if df is None or df.empty else float(df["ha"].sum())}
+    if df is None or df.empty:
+        return {"count": 0, "ha": 0.0, "planned": 0, "bushfire": 0,
+                "planned_ha": 0.0, "bushfire_ha": 0.0,
+                "undated": 0 if df is None else df.attrs.get("undated", 0)}
+    p, b = df[df["kind"] == BURN_PLANNED], df[df["kind"] == BURN_BUSHFIRE]
+    return {"count": len(df), "ha": float(df["ha"].sum()),
+            "planned": len(p), "bushfire": len(b),
+            "planned_ha": float(p["ha"].sum()), "bushfire_ha": float(b["ha"].sum()),
+            "undated": df.attrs.get("undated", 0)}
 
 
 def coverage_start():
@@ -796,8 +906,8 @@ CARD_ROWS = {
     "active_fires": ("Active fires", "active_rows", "fire"),
     "burn": ("Burn areas", "burn_rows", None),
 }
-BURN_COPY_COLUMNS = ["Dated", "Burn area ID", "Name", "Location", "Hectares (mapped)",
-                     "Still in feed"]
+BURN_COPY_COLUMNS = ["First dated", "Last dated", "Burn area ID (latest)", "Name",
+                     "Footprint records", "Hectares (merged)", "Type", "Why", "Still in feed"]
 _AGENCY_NAMES = {**fire_data.AGENCY_LABELS, "ffm": FFM_LABEL,
                  ESTA: "Not identified (ESTA)"}
 _HOW_NAMES = {HOW_PAGER: "CFA pager", HOW_NOT_PAGED: "Not on CFA pager (ex-MFB area)",
@@ -859,15 +969,20 @@ def card_text(snap, key):
 
 def _burn_text(snap, label):
     df = snap.burn_rows
+    b = snap.burn or {}
     n = 0 if df is None else len(df)
-    lines = [f"{label} — {snap.period.label} — {n} burn area{'s' if n != 1 else ''}, "
-             f"{snap.burn.get('ha', 0):,.1f} ha", "\t".join(BURN_COPY_COLUMNS)]
+    lines = [f"{label} — {snap.period.label} — {n} burn{'s' if n != 1 else ''}, "
+             f"{b.get('ha', 0):,.1f} ha ({b.get('planned', 0)} planned, "
+             f"{b.get('bushfire', 0)} bushfire)", "\t".join(BURN_COPY_COLUMNS)]
     if n:
-        for r in df.sort_values("started", kind="stable").to_dict("records"):
+        for r in df.sort_values("dated", kind="stable").to_dict("records"):
             lines.append("\t".join(_cell(v) for v in (
-                r.get("started"), r.get("source_id"), r.get("headline"), r.get("location"),
-                f"{r.get('ha') or 0:.1f}",
-                "No" if str(r.get("resolved")) in ("1", "1.0", "True") else "Yes")))
+                r["dated"], r["last_dated"], r["burn_id"], r["name"], r["records"],
+                f"{r['ha'] or 0:.1f}", "Bushfire" if r["kind"] == BURN_BUSHFIRE else "Planned burn",
+                r["matched"], "Yes" if r["in_feed"] else "No")))
+    if b.get("undated"):
+        lines += ["", f"Not counted — {b['undated']} burn area record"
+                      f"{'s' if b['undated'] != 1 else ''} the feed gave no date"]
     return "\n".join(lines)
 
 

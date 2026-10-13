@@ -651,13 +651,10 @@ def test_a_point_fire_growing_by_reported_size_is_growth():
     card = str(fiw.focus_card(area, snap, "rotate", NOW))
     assert "+17 ha" in card and "10 ha → 27 ha at" in card
     assert "+17 ha" in str(fiw.area_list(snap, []))
-    # The map draws the reported size as a ring, the growth red, and breathes it.
+    # No published perimeter, so the map draws no burn area for it (2026-10-14:
+    # only burn areas the feed publishes are drawn — never a made-up circle).
     layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, NOW))
-    assert any(l.get("color") == fiw.GROWTH_COLOUR and l.get("type") == "fill"
-               for l in layers)
-    assert any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
-    later = NOW + timedelta(seconds=fiw.PULSE_SECONDS + 60)
-    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, later))
+    assert not any(l.get("color") in (fiw.GROWTH_COLOUR, fiw.BURNT_COLOUR) for l in layers)
     assert not any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
 
 
@@ -721,3 +718,47 @@ def test_test_run_charlie_grows_by_reported_size():
     assert [round(a.area_ha) for a in sizes] == fire_demo.CHARLIE_HA
     keys = {e["key"] for e in fa.events(_test_snap(2)) if e["member"] == "TEST-charlie"}
     assert len(keys) == 1 and next(iter(keys)).startswith("size:TEST-charlie:")
+
+
+# --------------------------------------------------------------------------- #
+# Only PUBLISHED burn areas are drawn (2026-10-14) — and a newly published one
+# is highlighted even with no fire near it.
+# --------------------------------------------------------------------------- #
+def _published_burn(sid, seen, created, lon=146.5, lat=-37.5):
+    geom = square(lon, lat, 0.02, point=False)
+    put(sid, geom, feed_type="burn-area", category="Burn Area", lat=lat + 0.01,
+        lon=lon + 0.01, seen=seen, created=created, location=f"{sid} burn")
+    database.execute("UPDATE fire_incidents SET first_seen = ? WHERE source_id = ?",
+                     [_stamp(seen), sid])
+    history(sid, geom, seen)
+
+
+def test_a_newly_published_burn_area_is_highlighted_without_a_takeover():
+    _published_burn("nb", NOW - timedelta(minutes=4), NOW - timedelta(hours=10))
+    snap = _areas()
+    area = fa.area_for_member(snap["areas"], "nb")
+    assert area is not None                               # its own area, no fire needed
+    evs = fa.events(snap)
+    assert [e["kind"] for e in evs] == ["new_burn"]
+    flashes = fiw.update_flashes([], evs, NOW.timestamp())
+    assert fiw.hot_flash(flashes, snap["areas"], NOW.timestamp()) == (None, None)  # no takeover
+    assert "NEW" in str(fiw.area_list(snap, flashes))
+    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, NOW))
+    assert any(l.get("color") == fiw.BURNT_COLOUR for l in layers)          # drawn
+    assert any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)  # breathing
+    later = NOW + timedelta(seconds=fiw.PULSE_SECONDS + 60)
+    layers = _layers(fiw.map_figure(snap, area, fiw.DEFAULT_LAYERS, True, later))
+    assert not any(str(l.get("name", "")).startswith("wd-pulse:") for l in layers)
+
+
+def test_an_old_footprint_published_late_is_not_news():
+    _published_burn("ob", NOW - timedelta(minutes=4), NOW - timedelta(days=40))
+    snap = _areas()
+    assert fa.area_for_member(snap["areas"], "ob") is None
+    assert fa.events(snap) == []
+
+
+def test_a_burn_area_published_before_the_window_is_not_new():
+    _published_burn("pb", NOW - timedelta(hours=8), NOW - timedelta(hours=20))
+    snap = _areas(window=6)
+    assert fa.events(snap) == []

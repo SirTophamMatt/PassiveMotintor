@@ -111,7 +111,8 @@ def _event_rank(flash):
 def hot_flash(flashes, areas, now):
     """The takeover in force, if any: (flash, area). Most severe, then newest;
     a flash whose member is no longer in any area is skipped."""
-    hot = [f for f in (flashes or []) if now - f["at"] < TAKEOVER_SECONDS]
+    hot = [f for f in (flashes or []) if now - f["at"] < TAKEOVER_SECONDS
+           and f["kind"] != "new_burn"]          # NEW badge + pulse only
     hot.sort(key=lambda f: (_event_rank(f), -f["at"]))
     for flash in hot:
         area = fire_areas.area_for_member(areas, flash["member"])
@@ -325,9 +326,8 @@ def _reported_line(area, now):
         bits.append(name + text)
     return html.Div("Reported size " + " · ".join(bits),
                     className="muted fiw-reported",
-                    title="The size VicEmergency reports for the fire. With no "
-                          "mapped perimeter, the map draws it as an equal-area "
-                          "dashed circle.")
+                    title="The size VicEmergency reports for the fire. It has no "
+                          "published perimeter, so nothing is drawn for it on the map.")
 
 
 def _change_line(area, window_hours, now):
@@ -547,34 +547,19 @@ def burn_layers(snap, layers, now):
             name = f"{fire_page.PULSE_PREFIX}{int(ends.timestamp() * 1000)}"
             out += _pair([c.step_grown], GROWTH_COLOUR, 0.5, 2, name)
             out += _pair([c.step_reduced], REDUCTION_COLOUR, 0.5, 2, name)
-    out += size_ring_layers(snap, layers, now)
-    return out
-
-
-def size_ring_layers(snap, layers, now):
-    """Fires with no mapped polygon: a dashed circle of their REPORTED size
-    (equal area, centred on the incident — the real perimeter is unknown), the
-    growth over the window as a red ring, and the latest growth breathing."""
-    from app.pages import fire as fire_page
-    out = []
-    for area in snap.get("areas") or []:
-        for m, sc in area.reported:
-            ring, grown, step = fire_areas.size_rings(m, sc)
-            if ring is None:
-                continue
-            if "burnt" in layers:
-                fc = _fc([ring])
-                out += [_fill(fc, BURNT_COLOUR, 0.3),
-                        _line(fc, GROWTH_COLOUR if sc.grown_ha else BURNT_COLOUR,
-                              2, dash=[2, 1.5])]
-            if "change" not in layers:
-                continue
-            out += _pair([grown], GROWTH_COLOUR, 0.4, 1.5)
-            if step is not None and sc.step_at is not None:
-                ends = sc.step_at + timedelta(seconds=PULSE_SECONDS)
-                if now < ends:
-                    name = f"{fire_page.PULSE_PREFIX}{int(ends.timestamp() * 1000)}"
-                    out += _pair([step], GROWTH_COLOUR, 0.5, 2, name)
+    # A newly published burn area breathes for PULSE_SECONDS after it appeared.
+    if "change" in layers:
+        for area in areas:
+            for m in area.members:
+                if m.role != "burn" or m.new_at is None or m.geom is None:
+                    continue
+                ends = m.new_at + timedelta(seconds=PULSE_SECONDS)
+                if now >= ends:
+                    continue
+                name = f"{fire_page.PULSE_PREFIX}{int(ends.timestamp() * 1000)}"
+                out += _pair([fire_areas.to_geojson(m.geom)], GROWTH_COLOUR, 0.5, 2, name)
+    # A fire with no published perimeter draws nothing here: only burn areas
+    # the feed publishes are drawn (its reported size is on the card).
     return out
 
 
