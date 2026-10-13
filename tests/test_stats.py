@@ -277,3 +277,51 @@ def test_esta_structure_fire_attributed_to_frv_by_pager(db):
     assert "Structure fire (FRV) — via CFA pager" in labels
     assert "Structure fire (ESTA — agency not identified)" in labels
     stats_page.period_cards(snap, False)
+
+
+def _pager_hb(*times):
+    database.insert_rows("pager_heartbeat", [
+        {"timestamp": t, "rows_seen": 10, "new_rows": 0, "new_escalations": 0} for t in times])
+
+
+def test_esta_job_not_on_pager_is_frv_when_pager_was_running(db):
+    """Mazzanet carries CFA and the ex-CFA FRV stations, never the ex-MFB
+    metro stations: an ESTA job the pager never saw is a metro FRV job."""
+    database.insert_rows("fire_incidents", [
+        _row("ESTA:261014400", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:00:00"),
+        _row("ESTA:261014401", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 23:00:00"),
+        _row("ESTA:261014402", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 21:00:00"),
+        _row("ESTA:261014403", "Fire", "VIC/ESTA", "Non Structure Fire", "2026-10-12 20:05:00"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    # Pager running 20:00-21:30, then down (23:00 job has no cycle after it).
+    _pager_hb("2026-10-12 20:04:00", "2026-10-12 20:08:00", "2026-10-12 21:04:00")
+    database.insert_rows("pager_messages", [
+        {"msg_hash": "c", "received_at": "2026-10-12 21:01:00", "sent_at": "2026-10-12 21:01:00",
+         "message": "@@ALERT STRUC1 ... F261014402 [DAND]", "f_number": "F261014402",
+         "brigade": "DAND"},
+    ])
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    t = snap.totals
+    assert t["structure_frv"] == 1            # 20:00, pager running, never paged
+    assert t["structure_cfa"] == 1            # 21:00, paged to a CFA brigade
+    assert t["structure_esta"] == 1           # 23:00, pager not running -> not guessed
+    assert t["structure"] == 3                # Non Structure Fire is never a structure fire
+    labels = {a for *_, a in snap.check}
+    assert "Structure fire (FRV) — ESTA job not on the CFA pager (ex-MFB area)" in labels
+    assert "Structure fire (CFA) — via CFA pager" in labels
+
+
+def test_pager_tie_is_not_inferred_as_frv(db):
+    database.insert_rows("fire_incidents", [
+        _row("ESTA:261014500", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 20:00:00"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    _pager_hb("2026-10-12 20:04:00")
+    database.insert_rows("pager_messages", [
+        {"msg_hash": "d", "received_at": "2026-10-12 20:01:00", "sent_at": "2026-10-12 20:01:00",
+         "message": "x F261014500", "f_number": "F261014500", "brigade": None,
+         "units_json": '[{"service": "FRV"}, {"service": "CFA"}]'},
+    ])
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.totals["structure_esta"] == 1 and snap.totals["structure_frv"] == 0

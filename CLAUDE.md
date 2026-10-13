@@ -1534,14 +1534,17 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
 - **FRV has no feed of its own (confirmed against the live feed 2026-10-14).** Agencies seen:
   `VIC/CFA` (cfa-incident), `VIC/SES`, `VIC/DEECA`, `AU/BOM` (Met) and `VIC/ESTA`
   (`sourceFeed` esta-cad-event: raw Triple Zero dispatch events, NO agency, `id` `ESTA:<n>`,
-  `eventId` `F<n>`). Metro fire jobs arrive only as ESTA events — and ESTA is not FRV (a Boort
-  building fire was ESTA too). Structure fires read `category1` Fire / `category2` **Building
-  Fire** (CFA and ESTA alike). `stats.attribute_esta` joins `F<n>` to `pager_messages.f_number`
-  (same F + yymmdd + job format): the bracketed station `[FS35]` = FRV, a 4-letter brigade = CFA,
-  else the appliances paged (a tie stays unattributed). Unmatched ESTA fires stay in the totals as
-  **"agency not identified (ESTA)"** — never guessed. Coverage of FRV therefore depends on how many
-  FRV jobs reach the Mazzanet CFA pager page (not verifiable from the sandbox). Real feed sample:
-  `tests/fixtures/osom_incidents_sample.json`.
+  `eventId` `F<n>`). Metro fire jobs arrive only as ESTA events — and ESTA is not only FRV (a
+  Boort building fire was ESTA too). Structure fires read `category1` Fire / `category2`
+  **Structure Fire** (mostly ESTA) or **Building Fire** (CFA, some ESTA); "Non Structure Fire" is
+  neither. `stats.attribute_esta` joins `F<n>` to `pager_messages.f_number` (same F + yymmdd + job
+  format). **Mazzanet carries every CFA job and the ex-CFA FRV stations (Dandenong, Boronia …) but
+  never the ex-MFB metro stations** (user, 2026-10-14). So: on the pager -> the agency the page
+  names (bracketed `[FS35]` = FRV, 4-letter brigade = CFA, else the appliances; a tie stays
+  unattributed); NOT on the pager while the pager collector ran within `PAGER_COVER_MINUTES` (30)
+  after the job -> **FRV (ex-MFB area)**; not on the pager and no pager cycle then -> **"agency not
+  identified (ESTA)"**, still in the totals, never guessed (a CFA job would look the same). The
+  Classification check labels each route. Real feed sample: `tests/fixtures/osom_incidents_sample.json`.
 - Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
 - Tests: `tests/test_stats.py`.
 

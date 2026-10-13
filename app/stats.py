@@ -237,27 +237,82 @@ def pager_agency(messages):
     return None
 
 
+# A CFA pager cycle must have run within this long after an ESTA job started
+# for "no page seen" to mean "not paged" rather than "we weren't looking".
+PAGER_COVER_MINUTES = 30
+HOW_PAGER = "pager"
+HOW_NOT_PAGED = "not paged"
+
+
+def _pager_covered(started, heartbeats):
+    """For each start time: did a pager cycle run in (start, start + cover]?"""
+    import numpy as np
+    if not len(heartbeats):
+        return [False] * len(started)
+    hb = np.sort(pd.to_datetime(pd.Series(heartbeats), errors="coerce").dropna().values)
+    st = pd.to_datetime(pd.Series(list(started)), errors="coerce")
+    out = []
+    for t in st:
+        if pd.isna(t):
+            out.append(False)
+            continue
+        i = np.searchsorted(hb, np.datetime64(t), side="right")
+        out.append(bool(i < len(hb) and hb[i] <= np.datetime64(
+            t + timedelta(minutes=PAGER_COVER_MINUTES))))
+    return out
+
+
 def attribute_esta(df):
-    """Add `agency_hint` (+ `f_number`) to ESTA rows the CFA pager can place."""
+    """Add `agency_hint` / `agency_how` to ESTA rows (Triple Zero dispatch
+    events, which carry no agency).
+
+    The CFA pager (Mazzanet) carries every CFA job and the FRV stations that
+    were CFA stations (Dandenong, Boronia, …), but NOT the ex-MFB metro
+    stations. So an ESTA job:
+    - on the pager -> the agency the page names (`pager_agency`);
+    - NOT on the pager, while the pager collector was running -> FRV
+      (an ex-MFB metro job);
+    - not on the pager and the pager wasn't being collected then -> left
+      unidentified, because a CFA job would look the same."""
     if df.empty or "source_id" not in df:
         return df
     df = df.copy()
     df["f_number"] = df["source_id"].map(esta_f_number)
     df["agency_hint"] = None
-    fnums = sorted(set(df["f_number"].dropna()))
+    df["agency_how"] = None
+    esta = df["f_number"].notna()
+    if not esta.any():
+        return df
+    fnums = sorted(set(df.loc[esta, "f_number"]))
     found = {}
-    for i in range(0, len(fnums), 500):
-        chunk = fnums[i:i + 500]
-        try:
+    try:
+        for i in range(0, len(fnums), 500):
+            chunk = fnums[i:i + 500]
             rows = database.read_df(
                 "SELECT f_number, brigade, units_json FROM pager_messages "
                 f"WHERE f_number IN ({','.join('?' * len(chunk))}) ORDER BY sent_at",
                 chunk)
-        except Exception:               # no pager table / pager never ran
-            return df
-        for f, g in rows.groupby("f_number"):
-            found[f] = pager_agency(list(zip(g["brigade"], g["units_json"])))
-    df["agency_hint"] = df["f_number"].map(lambda f: found.get(f) if f else None)
+            for f, g in rows.groupby("f_number"):
+                found[f] = pager_agency(list(zip(g["brigade"], g["units_json"])))
+        starts = pd.to_datetime(df.loc[esta, "started"], errors="coerce").dropna()
+        heartbeats = []
+        if not starts.empty:
+            heartbeats = database.read_df(
+                "SELECT timestamp FROM pager_heartbeat WHERE timestamp > ? AND timestamp <= ?",
+                [starts.min().strftime(TS),
+                 (starts.max() + timedelta(minutes=PAGER_COVER_MINUTES)).strftime(TS)],
+            )["timestamp"].tolist()
+    except Exception:                   # no pager tables yet
+        return df
+    paged = df["f_number"].isin(found.keys())
+    df.loc[paged, "agency_hint"] = df.loc[paged, "f_number"].map(found)
+    df.loc[paged, "agency_how"] = HOW_PAGER
+    unpaged = esta & ~paged
+    if unpaged.any():
+        covered = _pager_covered(df.loc[unpaged, "started"], heartbeats)
+        idx = df.index[unpaged][covered]
+        df.loc[idx, "agency_hint"] = "frv"
+        df.loc[idx, "agency_how"] = HOW_NOT_PAGED
     return df
 
 
@@ -265,7 +320,9 @@ def counted_as(r):
     """The headline figure a classified row lands in (for the check table)."""
     if r.get("rfa"):
         return "SES RFA"
-    via = " — via CFA pager" if _s(r.get("agency_hint")) else ""
+    via = {HOW_PAGER: " — via CFA pager",
+           HOW_NOT_PAGED: " — ESTA job not on the CFA pager (ex-MFB area)"
+           }.get(_s(r.get("agency_how")), "")
     for key, label in (("structure_cfa", "Structure fire (CFA)"),
                        ("structure_frv", "Structure fire (FRV)"),
                        ("structure_esta", "Structure fire (ESTA — agency not identified)"),
@@ -302,7 +359,7 @@ def _frame(df):
     if df.empty:
         cols = ["agency", "rfa", "fire", "kind", "structure_cfa", "structure_frv",
                 "structure_esta", "grass_cfa", "grass_ffm", "grass_esta",
-                "structure", "grass", "agency_hint"]
+                "structure", "grass", "agency_hint", "agency_how"]
         return df.assign(**{c: pd.Series(dtype=object) for c in cols})
     df = attribute_esta(df)
     flags = pd.DataFrame([classify(r) for r in df.to_dict("records")], index=df.index)
