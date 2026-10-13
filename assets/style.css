@@ -1384,3 +1384,7 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 @media (max-width: 600px) { .stats-wide { min-width: 0; } .stats-card-row { grid-template-columns: 1fr; } }
 .stats-check { flex-basis: 100%; }
 .stats-check summary { cursor: pointer; font-weight: 600; }
+.stats-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.stats-copy { cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 4px;
+              border-radius: 4px; }
+.stats-copy:hover { color: var(--text); background: var(--border); }

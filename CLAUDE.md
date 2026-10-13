@@ -1545,6 +1545,14 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   after the job -> **FRV (ex-MFB area)**; not on the pager and no pager cycle then -> **"agency not
   identified (ESTA)"**, still in the totals, never guessed (a CFA job would look the same). The
   Classification check labels each route. Real feed sample: `tests/fixtures/osom_incidents_sample.json`.
+- **Admin copy button per card (2026-10-14).** Admins get a copy icon on each of the 7 cards
+  (`dcc.Clipboard` id `{"type": "stats-copy", "key": …}`, keys = `stats.CARD_ROWS`). The text is
+  built ON CLICK by a MATCH callback (not shipped with every 60 s refresh — a FY card can be
+  thousands of rows) from the same cached snapshot (`Snapshot.rows` / `.active_rows`), so the copy
+  is exactly what the card counted: a title line (card · period · count) then tab-separated rows
+  (`COPY_COLUMNS`: started, id, F-number, agency, where the agency came from, sourceOrg,
+  categories, location, status, open, counted as) — pastes straight into Excel. The callback
+  re-checks `auth.is_admin()` (guarded in `tests/test_callback_auth.py`).
 - Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
 - Tests: `tests/test_stats.py`.
 

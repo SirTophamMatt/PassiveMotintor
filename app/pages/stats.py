@@ -9,9 +9,10 @@ breakdown tables all come from one `stats.Snapshot`.
 from datetime import date, datetime
 
 import plotly.graph_objects as go
-from dash import Input, Output, dcc, html
+from dash import MATCH, Input, Output, State, dcc, html
+from dash.exceptions import PreventUpdate
 
-from app import stats, tags as tag_store, ui
+from app import auth, stats, tags as tag_store, ui
 
 # Categorical slots in fixed order (dataviz reference palette), light / dark.
 COLOURS = {
@@ -137,9 +138,22 @@ def _sparkline(trend, key, colour, unit):
                      className="stats-spark")
 
 
-def stat_card(label, value, colour, split=None, delta=None, spark=None, foot=None):
-    """A number card: label, big value, optional split / delta / sparkline."""
-    body = [html.Div(label, className="kpi-label"),
+def copy_button(key):
+    """Admin-only: copies the incidents behind a card (filled on click)."""
+    return dcc.Clipboard(id={"type": "stats-copy", "key": key}, content="",
+                         title="Copy the incidents behind this number "
+                               "(tab-separated, pastes into Excel)",
+                         className="stats-copy")
+
+
+def stat_card(label, value, colour, split=None, delta=None, spark=None, foot=None,
+              copy_key=None):
+    """A number card: label, big value, optional split / delta / sparkline.
+    With `copy_key` (admins only) a copy button sits in the corner."""
+    head = [html.Div(label, className="kpi-label")]
+    if copy_key:
+        head.append(copy_button(copy_key))
+    body = [html.Div(head, className="stats-card-head"),
             html.Div(f"{value:,}", className="kpi-value")]
     if split:
         body.append(html.Div([html.Span([html.Strong(f"{v:,}"), f" {k}"],
@@ -160,7 +174,7 @@ def _unidentified(n):
     return [("agency not identified (ESTA)", n)] if n else []
 
 
-def period_cards(snap, dark):
+def period_cards(snap, dark, admin=False):
     t, p = snap.totals, snap.previous
     lab = snap.period.previous_label
 
@@ -168,7 +182,8 @@ def period_cards(snap, dark):
         colour = _colour(key, dark)
         return stat_card(label, t[key], colour, split=split,
                          delta=_delta(t[key], p[key], lab) if p else None,
-                         spark=_sparkline(snap.trend, key, colour, snap.unit))
+                         spark=_sparkline(snap.trend, key, colour, snap.unit),
+                         copy_key=key if admin else None)
     return [
         card("rfa", "SES RFAs"),
         card("structure", "Structure fires",
@@ -182,16 +197,20 @@ def period_cards(snap, dark):
     ]
 
 
-def active_cards(snap, dark):
+def active_cards(snap, dark, admin=False):
     a = snap.active
     rfa_foot = (" · ".join(f"{k} {v}" for k, v in snap.active_rfa_types[:3])
                 if snap.active_rfa_types else None)
+
+    def key(k):
+        return k if admin else None
     return [
         stat_card("Active open incidents", a["incidents"], _colour("incidents", dark),
-                  foot="Every agency, warnings excluded"),
-        stat_card("Active SES RFAs", a["rfa"], _colour("rfa", dark), foot=rfa_foot),
+                  foot="Every agency, warnings excluded", copy_key=key("active_incidents")),
+        stat_card("Active SES RFAs", a["rfa"], _colour("rfa", dark), foot=rfa_foot,
+                  copy_key=key("active_rfa")),
         stat_card("Active fires", a["fires"], _colour("structure", dark),
-                  foot="Fire incidents only — never warnings"),
+                  foot="Fire incidents only — never warnings", copy_key=key("active_fires")),
     ]
 
 
@@ -343,18 +362,44 @@ def register_callbacks(app):
         Input("theme-store", "data"))
     def refresh(_, kind, day, fy, event, dark):
         dark = bool(dark)
-        tag = tag_store.get_tag(event) if (kind == stats.PERIOD_EVENT and event) else None
-        try:
-            day_value = date.fromisoformat(str(day)[:10]) if day else None
-        except ValueError:
-            day_value = None
-        period = stats.resolve_period(kind, day=day_value, fy=fy, tag=tag)
+        period = _period(kind, day, fy, event)
         if period is None:
             empty = ui.apply_theme(go.Figure(), dark)
             msg = html.Div("Choose an event tag (event tags are created on Admin).",
                            className="stats-note")
             return "", msg, [], [], empty, empty, []
         snap = stats.cached(period, datetime.now())
-        return (period.label, _notes(snap), period_cards(snap, dark),
-                active_cards(snap, dark), trend_figure(snap, dark),
+        admin = auth.is_admin()
+        return (period.label, _notes(snap), period_cards(snap, dark, admin),
+                active_cards(snap, dark, admin), trend_figure(snap, dark),
                 active_trend_figure(snap, dark), breakdown(snap))
+
+    @app.callback(
+        Output({"type": "stats-copy", "key": MATCH}, "content"),
+        Input({"type": "stats-copy", "key": MATCH}, "n_clicks"),
+        State({"type": "stats-copy", "key": MATCH}, "id"),
+        State("stats-period", "value"),
+        State("stats-day", "date"),
+        State("stats-fy", "value"),
+        State("stats-event", "value"),
+        prevent_initial_call=True)
+    def copy_rows(_, cid, kind, day, fy, event):
+        # Built on click, and the admin check is repeated here: the button is
+        # only rendered for admins, but a callback can be POSTed directly.
+        if not auth.is_admin():
+            raise PreventUpdate
+        key = (cid or {}).get("key")
+        period = _period(kind, day, fy, event)
+        if period is None or key not in stats.CARD_ROWS:
+            raise PreventUpdate
+        return stats.card_text(stats.cached(period, datetime.now()), key)
+
+
+def _period(kind, day, fy, event):
+    """The page's filter values -> a stats.Period (None for no event chosen)."""
+    tag = tag_store.get_tag(event) if (kind == stats.PERIOD_EVENT and event) else None
+    try:
+        day_value = date.fromisoformat(str(day)[:10]) if day else None
+    except ValueError:
+        day_value = None
+    return stats.resolve_period(kind, day=day_value, fy=fy, tag=tag)
