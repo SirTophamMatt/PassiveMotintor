@@ -1531,6 +1531,17 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   anything with "alarm" is never a fire. The page's **Classification check** panel lists sourceOrg /
   category1 / category2 exactly as published, with the figure each was counted in — check it first
   when a number looks wrong (the live wording was not visible from the dev sandbox).
+- **FRV has no feed of its own (confirmed against the live feed 2026-10-14).** Agencies seen:
+  `VIC/CFA` (cfa-incident), `VIC/SES`, `VIC/DEECA`, `AU/BOM` (Met) and `VIC/ESTA`
+  (`sourceFeed` esta-cad-event: raw Triple Zero dispatch events, NO agency, `id` `ESTA:<n>`,
+  `eventId` `F<n>`). Metro fire jobs arrive only as ESTA events — and ESTA is not FRV (a Boort
+  building fire was ESTA too). Structure fires read `category1` Fire / `category2` **Building
+  Fire** (CFA and ESTA alike). `stats.attribute_esta` joins `F<n>` to `pager_messages.f_number`
+  (same F + yymmdd + job format): the bracketed station `[FS35]` = FRV, a 4-letter brigade = CFA,
+  else the appliances paged (a tie stays unattributed). Unmatched ESTA fires stay in the totals as
+  **"agency not identified (ESTA)"** — never guessed. Coverage of FRV therefore depends on how many
+  FRV jobs reach the Mazzanet CFA pager page (not verifiable from the sandbox). Real feed sample:
+  `tests/fixtures/osom_incidents_sample.json`.
 - Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
 - Tests: `tests/test_stats.py`.
 

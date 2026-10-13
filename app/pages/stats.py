@@ -155,6 +155,11 @@ def stat_card(label, value, colour, split=None, delta=None, spark=None, foot=Non
                     style={"borderTop": f"4px solid {colour}"})
 
 
+def _unidentified(n):
+    """ESTA dispatch events the CFA pager could not place with an agency."""
+    return [("agency not identified (ESTA)", n)] if n else []
+
+
 def period_cards(snap, dark):
     t, p = snap.totals, snap.previous
     lab = snap.period.previous_label
@@ -167,9 +172,11 @@ def period_cards(snap, dark):
     return [
         card("rfa", "SES RFAs"),
         card("structure", "Structure fires",
-             [("CFA", t["structure_cfa"]), ("FRV", t["structure_frv"])]),
+             [("CFA", t["structure_cfa"]), ("FRV", t["structure_frv"])]
+             + _unidentified(t["structure_esta"])),
         card("grass", "Grass & scrub/bush fires",
-             [("CFA", t["grass_cfa"]), (stats.FFM_LABEL, t["grass_ffm"])]),
+             [("CFA", t["grass_cfa"]), (stats.FFM_LABEL, t["grass_ffm"])]
+             + _unidentified(t["grass_esta"])),
         card("incidents", "All incidents",
              [("fire" if t["fires"] == 1 else "fires", t["fires"])]),
     ]
