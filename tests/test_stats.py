@@ -168,7 +168,7 @@ def test_empty_db(db):
 def test_page_renders(data):
     snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
     cards = stats_page.period_cards(snap, False)
-    assert len(cards) == 4 and len(stats_page.active_cards(snap, True)) == 3
+    assert len(cards) == 5 and len(stats_page.active_cards(snap, True)) == 3
     assert stats_page.layout() is not None
 
 
@@ -338,6 +338,8 @@ def test_pager_tie_is_not_inferred_as_frv(db):
 def test_card_text_lists_exactly_the_counted_incidents(data):
     snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
     for key in stats.CARD_ROWS:
+        if key == "burn":
+            continue
         text = stats.card_text(snap, key)
         lines = text.split("\n")
         assert lines[1].split("\t") == stats.COPY_COLUMNS
@@ -455,3 +457,81 @@ def test_repeat_esta_calls_for_one_fire_count_once(db):
     assert "Not counted — 6 duplicate ESTA events of the incidents above" in text
     assert "ESTA:261014076" in text.split("Not counted", 1)[1]
     assert "ESTA:261014076" not in text.split("Not counted", 1)[0]
+
+
+def test_merge_window_is_20_minutes(db):
+    """Ravenhall: CFA's job at 06:46 and an ESTA event 21 minutes later are
+    two records once the window is 20 minutes; Deakin St 14 minutes apart is one."""
+    database.insert_rows("fire_incidents", [
+        _row("ESTA:261013222", "Fire", "VIC/CFA", "Building Fire", "2026-10-12 06:46:00",
+             location="Ravenhall"),
+        _row("ESTA:261013229", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 07:07:59",
+             location="Ravenhall"),
+        _row("ESTA:261014062", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 23:42:25",
+             location="Deakin St, Essendon"),
+        _row("ESTA:261014063", "Fire", "VIC/ESTA", "Structure Fire", "2026-10-12 23:56:26",
+             location="Deakin St, Essendon"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    assert stats.DUP_WINDOW_MINUTES == 20
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.totals["structure"] == 3
+
+
+def test_ffmvic_bushfire_counted_on_its_start_day(db):
+    """DEECA publishes fires a day or two late, dated when they started — the
+    live feed of 2026-10-14 carried four, all started 11-12 Oct."""
+    import json, os
+    from tests.conftest import FIXTURE_DIR
+    from app.modules.fire import scraper
+    feats = json.load(open(os.path.join(FIXTURE_DIR, "osom_incidents_sample.json")))["features"]
+    deeca = [scraper._extract(f) for f in feats if f["properties"].get("sourceOrg") == "VIC/DEECA"]
+    assert deeca
+    for r in deeca:
+        r.update(first_seen=r["created"], last_seen=NOW.strftime(TS), resolved=0)
+        c = stats.classify(r)
+        assert c["grass_ffm"], r
+    database.insert_rows("fire_incidents", deeca + [
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1)],
+        ignore_duplicates=True)
+    total = 0
+    for day in range(10, 16):
+        total += stats.build(stats.day_period(date(2026, 10, day)), NOW).totals["grass_ffm"]
+    assert total == len(deeca)
+
+
+def test_grass_reported_hectares(db):
+    database.insert_rows("fire_incidents", [
+        dict(_row("g1", "Fire", "VIC/DEECA", "Bushfire", "2026-10-12 11:00:00"), size="2.4 Ha."),
+        dict(_row("g2", "Fire", "VIC/CFA", "Grass Fire", "2026-10-12 12:00:00"), size="Small"),
+        dict(_row("g3", "Fire", "VIC/CFA", "Grass Fire", "2026-10-12 13:00:00"), size="63 ha"),
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    ha, sized = snap.grass_ha
+    assert round(ha, 1) == 65.4 and sized == 2
+    assert "reported burnt (2 of 3 fires" in str(stats_page.period_cards(snap, False))
+    assert "\t2.4 Ha.\t" in stats.card_text(snap, "grass")
+
+
+def test_burn_areas_counted_with_mapped_hectares(db):
+    import json
+    square = {"type": "Polygon", "coordinates": [[[145.0, -37.0], [145.01, -37.0],
+              [145.01, -37.01], [145.0, -37.01], [145.0, -37.0]]]}       # ~1 km x 1.1 km
+    database.insert_rows("fire_incidents", [
+        {"source_id": "b1", "feed_type": "burn-area", "category1": "Burn Area",
+         "category2": "Burn Area", "source_org": "VIC/DELWP", "location": "Cabbage Tree Rd",
+         "headline": "Cabbage Tree Rd", "geometry": json.dumps(square),
+         "created": "2026-10-12 10:00:00", "first_seen": "2026-10-12 10:00:00", "resolved": 0},
+        {"source_id": "b2", "feed_type": "burn-area", "category1": "Burn Area",
+         "source_org": "VIC/DELWP", "location": "Elsewhere", "geometry": None,
+         "created": "2026-09-01 10:00:00", "first_seen": "2026-09-01 10:00:00", "resolved": 0},
+        _row("old", "Tree Down", "VIC/SES", created="2026-09-01 10:00:00", resolved=1),
+    ], ignore_duplicates=True)
+    snap = stats.build(stats.day_period(date(2026, 10, 13)), NOW)
+    assert snap.burn["count"] == 1 and 95 < snap.burn["ha"] < 105
+    assert snap.totals["incidents"] == 0                 # never an incident
+    text = stats.card_text(snap, "burn")
+    assert text.startswith("Burn areas — ") and "Cabbage Tree Rd" in text
+    assert "b2" not in text
+    assert "Burn areas" in str(stats_page.period_cards(snap, False, admin=True))
