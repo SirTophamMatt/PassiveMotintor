@@ -23,3 +23,11 @@ dist/
 
 # Raw page saved by the pager scraper when it cannot parse the layout.
 pager_debug.html
+
+# Fire Danger Ratings tool (Intel): workbook backups, run lock, unparseable
+# feed bodies, and any workbook copies — data, never code.
+fdr_backups/
+fdr.lock
+fdr_debug_*.xml
+*.xlsx
+!seed/*.xlsx

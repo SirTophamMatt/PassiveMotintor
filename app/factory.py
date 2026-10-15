@@ -16,7 +16,8 @@ from app.config import BASE_DIR, BUNDLE_DIR
 from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
                        fire_wall, flood_wall, news_wall, storm_wall,
-                       importer_page, intel, opsum as opsum_page, overview,
+                       fdr as fdr_page, importer_page, intel, opsum as opsum_page,
+                       overview,
                        pager as pager_page,
                        power,
                        replay as replay_page, roads as roads_page,
@@ -177,6 +178,14 @@ def setup_logging():
             a.exc_type, a.exc_value, a.exc_traceback)
 
 
+def _fdr_last_success():
+    try:
+        from app.modules.fdr import store as fdr_store
+        return fdr_store.last_success()
+    except Exception:
+        return None
+
+
 def _register_health(app):
     """Lightweight health endpoint for uptime monitoring / container checks.
 
@@ -219,6 +228,8 @@ def _register_health(app):
             "storm_running": status["storm"]["running"],
             "roads_running": status["roads"]["running"],
             "pager_running": status["pager"]["running"],
+            "fdr_running": status["fdr"]["running"],
+            "fdr_last_success": _fdr_last_success(),
             "intel_running": status["intel"]["running"],
             "flood_last_heartbeat": last_hb,
             "fire_last_heartbeat": fire_last_hb,
@@ -235,6 +246,7 @@ def _register_health(app):
             "storm_last_error": status["storm"].get("last_error"),
             "roads_last_error": status["roads"].get("last_error"),
             "pager_last_error": status["pager"].get("last_error"),
+            "fdr_last_error": status["fdr"].get("last_error"),
             "intel_last_error": status["intel"].get("last_error"),
         }
         try:
@@ -343,6 +355,8 @@ def create_app(autostart=False):
         # Intel Tool's Operational Summary builder (behind the Intel gate).
         if pathname == opsum_page.PATH:
             return opsum_page.layout()
+        if pathname == fdr_page.PATH:
+            return fdr_page.layout()
         # Fire wall test run: simulated fires, admins only (see app/fire_demo.py).
         if pathname == shell.FIRE_WALL_TEST_PATH:
             return (fire_wall.layout(test=True) if auth.is_admin()
@@ -382,6 +396,7 @@ def create_app(autostart=False):
         module.register_callbacks(app)
     station.register_callbacks(app)
     opsum_page.register_callbacks(app)
+    fdr_page.register_callbacks(app)
 
     from app import ticker
     ticker.register_callbacks(app)

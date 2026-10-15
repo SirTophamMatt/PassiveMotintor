@@ -12,6 +12,7 @@ from datetime import datetime
 
 from app import intel_feed
 from app.config import load_config, credentials_set
+from app.modules.fdr import scraper as fdr_scraper
 from app.modules.fire import scraper as fire_scraper
 from app.modules.flood import scraper as flood_scraper
 from app.modules.flood.data import LIVE_EVENT
@@ -74,6 +75,7 @@ class CollectorManager:
         self._storm = None
         self._roads = None
         self._pager = None
+        self._fdr = None
         self._intel = None
         # Desired state, tracked so the watchdog can tell "admin stopped this
         # on purpose" (leave it alone) from "it should be running" (restart).
@@ -86,6 +88,7 @@ class CollectorManager:
         self._storm_desired = None
         self._roads_desired = None
         self._pager_desired = None
+        self._fdr_desired = None
         self._intel_desired = None
 
     # --- flood ---------------------------------------------------------------
@@ -262,6 +265,49 @@ class CollectorManager:
         """Stop-then-start, used by the watchdog on a stalled collector."""
         self.stop_roads()
         return self.start_roads()
+
+    # --- fdr (CFA Fire Danger Ratings + Total Fire Bans, Intel Tool) ----------
+    def start_fdr(self):
+        """Start always-on FDR/TFB collection (app/modules/fdr)."""
+        with self._lock:
+            self._fdr_desired = True
+            if self._fdr and self._fdr.is_alive():
+                return False, "FDR collection is already running."
+            cfg = load_config()
+            interval = max(5, cfg["fdr"]["interval_minutes"]) * 60
+            self._fdr = _Collector("fdr-collector", interval, fdr_scraper.collect)
+            self._fdr.start()
+            return True, "FDR collection started."
+
+    def stop_fdr(self):
+        with self._lock:
+            self._fdr_desired = False
+            if self._fdr:
+                self._fdr.stop()
+                self._fdr = None
+        return True, "FDR collection stopped."
+
+    def restart_fdr(self):
+        self.stop_fdr()
+        return self.start_fdr()
+
+    def fetch_fdr_now(self):
+        """Manual one-off FDR run (Intel page button). Runs inline."""
+        try:
+            s = fdr_scraper.run("manual")
+        except Exception as e:
+            log.exception("Manual FDR fetch failed")
+            return False, f"FDR fetch failed: {e}"
+        msg = (f"FDR run {s['run_id']} {s['status']}: {s['retrieved']} values read, "
+               f"{s['inserted']} new, {s['updated']} amended.")
+        if s["errors"]:
+            msg += " " + " ".join(s["errors"])
+        return s["status"] != "failed", msg
+
+    def fdr_wanted(self, cfg):
+        if self._fdr_desired is not None:
+            return self._fdr_desired
+        return cfg["fdr"].get("autostart", True)
 
     # --- pager (CFA pager messages, Mazzanet) ---------------------------------
     def start_pager(self):
@@ -459,6 +505,12 @@ class CollectorManager:
                 log.info("Autostart pager: %s", msg)
             except Exception:
                 log.exception("Autostart pager failed")
+        if cfg["fdr"].get("autostart", True):
+            try:
+                ok, msg = self.start_fdr()
+                log.info("Autostart fdr: %s", msg)
+            except Exception:
+                log.exception("Autostart fdr failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()
@@ -512,6 +564,10 @@ class CollectorManager:
             "pager": {
                 "running": self._pager is not None and self._pager.is_alive(),
                 **(self._pager.status if self._pager else {}),
+            },
+            "fdr": {
+                "running": self._fdr is not None and self._fdr.is_alive(),
+                **(self._fdr.status if self._fdr else {}),
             },
             "intel": {
                 "running": self._intel is not None and self._intel.is_alive(),

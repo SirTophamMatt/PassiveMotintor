@@ -37,6 +37,7 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
   visitor geolocation from a truncated IP
 - `app/fire_areas.py` — fire wall model: burn-area shape history/change + areas of operation;
   `app/fire_demo.py` — the in-memory simulated scenario behind `/wall/fire/test`
+- `app/modules/fdr/` + `app/pages/fdr.py` — Fire Danger Ratings / TFB Intel tool (see `FDR.md`)
 - `app/storm_areas.py` — storm wall model: weather-related incidents linked into areas of
   operation; `app/storm_demo.py` — the simulated storm behind `/wall/storm/test`
 - `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
@@ -1593,6 +1594,37 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   re-checks `auth.is_admin()` (guarded in `tests/test_callback_auth.py`).
 - Dash 4 date picker/dropdown are themed by `.stats-filters` CSS (they rendered white in dark mode).
 - Tests: `tests/test_stats.py`.
+
+## Fire Danger Ratings — Intel Tool /intel/fdr (built 2026-10-15)
+- **Full docs: `FDR.md`** (sources, design, workbook rules, Windows/Docker, limitations).
+- **Source:** CFA statewide RSS `cfa/rssfeed/tfbfdrforecast_rss.xml` (today + 3 days, 9
+  districts; TFB section then "Fire Danger Ratings" `District: RATING` lines). Per-district feeds
+  are an optional cross-check (`fdr.district_feeds`, off — URL pattern confirmed for 3 districts
+  only). **The live feed could not be seen from the dev sandbox**; the parser (`fdr/parse.py`)
+  works by content and the fixture `cfa_tfbfdr_sample.xml` is CONSTRUCTED — replace it with a
+  saved real copy when available. A body with no recognisable ratings is saved to
+  `fdr_debug_<source>.xml` and the run fails.
+- **Store (`fdr_*` tables):** change-only revisions per (date, district, source); repeats move
+  `last_seen`. Unrecognised values / unclear TFB never supersede good ones; nothing is deleted;
+  overrides sit on top (reason required, revocable). Timestamps carry offsets + epoch columns.
+- **`fdr/resolve.py` is the single answer** (page, CLI, workbook): confirmed only if seen within
+  `confirm_window_hours` (12) of the day; Multi Day = multi-rating value OR an amendment seen
+  during the day after `multi_amendment_after` (06:00); Multi NO only when all 9 confirmed single;
+  TFB NO only when all 9 confirmed NO — missing is unknown, never NO. Source conflicts → review.
+- **Workbook (`fdr/workbook.py`): openpyxl is READ-ONLY.** Writes patch only the target `<c>`
+  elements in the sheet XML (+ `fullCalcOnLoad`), copying every other zip part byte-for-byte —
+  an openpyxl save drops extension dropdowns etc. (a test proves it). Layout found by headers,
+  rows by DATE; formula cells never written; a value this tool didn't write is left alone and
+  flagged; temp file → validate → backup (`fdr_backups/`) → atomic replace. Rating cells on a
+  multi-rating day: the workbook's own combined dropdown value if it has one, else blank +
+  `[FDR]` comment (`multi_rating_display`).
+- **CLI** `python -m app.modules.fdr` (fetch/run/update-excel/backfill/validate/inspect/status/
+  show/override/flags/export), `fdr.lock`, `fdr.log`, exit 0/1/2/3. `init_db(backup=False)` there
+  so a 30-min schedule doesn't rotate out the DB snapshots.
+- Collector `fdr` (30 min, autostart), watchdog, `/health` `fdr_running/fdr_last_success/
+  fdr_last_error`. Tests: `tests/test_fdr.py`.
+- Not done: verified live-feed fixture; the real workbook's conventions (run `inspect`, then set
+  `tfb_mode`/`multi_rating_display`); severity-increase alerts; Op Summary TFB/FDR auto-fill.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge
