@@ -135,24 +135,20 @@ calendar day** (not "a multi-day forecast"). Detected from:
    current at midnight differs from one issued after `multi_amendment_after`
    (06:00); a revision issued before 06:00 is the day's forecast being
    finalised, not a second rating. Times are the BoM "forecast issued at"
-   time (else when the tool first saw it). The comment records the periods:
-   `Central: High until 13:30, Extreme from 13:30 (amended on the day)`.
+   time (else when the tool first saw it).
 
-Multi Day is only written once the day is OVER — whether the rating changed
-during the day can't be known at 9 am.
+**The convention (confirmed 15 Oct 2026):** the rating cell records the **most
+recent** rating, and Comments records what it was before and **when it
+changed**: `[FDR] Central: High → Extreme at 13:30 (changed during the day)`
+(several changes chain: `… → Extreme at 13:30 → Catastrophic at 15:10`).
+Multi Day is written `YES` as soon as a change is confirmed — it cannot
+un-happen — and `NO` only once the day is over with no change.
 
-Multi Day is **No** only when all nine districts are confirmed with one rating
-each; otherwise it stays blank and the day is listed for review.
-
-**What goes in the rating cell on a multi-rating day** (`multi_rating_display`):
-
-* `auto` (default): if the column's dropdown (or existing values) has a
-  combined entry for exactly those ratings (e.g. `High/Extreme`) it is used;
-  otherwise the cell is **left blank**, Multi Day is set to Yes, and the
-  Comments cell says which ratings applied — so nobody's reporting
-  convention is assumed.
-* `highest` — write the highest rating. `combined` — write `High/Extreme`.
-  `review` — always leave blank.
+`multi_rating_display` = `latest` (default). Two ratings published at the
+same moment for one district (not seen live) have no "latest": the workbook's
+own combined dropdown value is used if it has one, otherwise the cell is left
+for a person and Comments says why. Other settings: `highest`, `combined`,
+`auto`, `review`.
 
 ## 5. The workbook
 
@@ -186,15 +182,25 @@ Checked on the copy supplied 15 Oct 2026 (`python -m app.modules.fdr inspect`):
   ratings `Pick Rating…. / No Rating / Moderate / High / Extreme /
   Catastrophic`, TFB and Multi Day `YES / NO`. **`Pick Rating….` is the
   prompt pre-filled in days not yet entered — treated as empty.**
-* TFB convention: `YES`/`NO` = any district (`tfb_mode` auto → any).
+* TFB column = **"is a Total Fire Ban declared?"** — `YES` if any district has
+  one (`tfb_mode` `any`, confirmed 15 Oct 2026).
 * Rows to 15 Oct were entered by hand. With the live feed of 15 Oct the tool
   planned **zero** changes — every value already matched. Simulating the next
   morning it wrote D118 (`NO`), C119 and G119:O119 into the prompts, changing
   only `sheet1.xml` and `workbook.xml`; recalculated in LibreOffice, the
   summary counts rose by exactly those nine ratings.
-* No combined rating values exist in the dropdown, so a two-rating day's
-  district cell is left on the prompt with the detail in Comments (see §4) —
-  **confirm the reporting convention** and set `multi_rating_display`.
+* A rating that changes during the day: latest rating in the cell, the change
+  and its time in Comments (§4).
+* **Days still to come** are written as CFA's current forecast with every value
+  suffixed `(forecast)` — `Moderate (forecast)`, `NO (forecast)` — plus
+  `[FDR] Forecast (BoM issued 15/10 05:30) — future day, may change` in
+  Comments. The sheet's SEARCH-based colouring still colours them, but the
+  summary's exact-match COUNTIFs do **not** count them (verified: totals
+  unchanged after a forced recalculation), so the season statistics only ever
+  contain days that happened. They follow CFA's updates, are not logged in
+  `fdr_workbook_updates`, and are replaced by the confirmed values (logged)
+  when the day starts. CFA's placeholder fifth day gets nothing. A value a
+  person typed into a future row is left alone.
 
 ### Discovery (nothing is assumed by position)
 
@@ -215,8 +221,9 @@ found — **run it on the real workbook first**.
 
 ### Write rules
 
-* Only days that have started (`write_future_days` false) and only confirmed
-  values. Unknown stays blank.
+* Days that have started: confirmed values only; unknown stays blank.
+* Days still to come: the current forecast, marked `(forecast)`, not logged,
+  replaced when the day starts (`forecast_days`, `forecast_suffix`).
 * Formula cells are never written.
 * Empty cell → filled. A cell holding the value this tool last wrote there
   (per `fdr_workbook_updates`) → updated (amendment). Anything else was typed
@@ -285,9 +292,9 @@ shown as a correction everywhere. Revoking it restores the source value.
 | `multi_from_amendment` / `multi_amendment_after` | `true` / `06:00` | same-day amendment → Multi Day |
 | `workbook_path` / `workbook_sheet` | `""` | workbook for CLI/auto updates; sheet auto-found |
 | `auto_update_workbook` | `false` | update `workbook_path` after each collector run |
-| `multi_rating_display` | `auto` | auto / highest / combined / review |
-| `tfb_mode` | `auto` | auto / any / districts / count |
-| `write_future_days` | `false` | also write preliminary future days |
+| `multi_rating_display` | `latest` | latest / auto / highest / combined / review |
+| `tfb_mode` | `any` | any (YES if any district) / districts / count / auto |
+| `forecast_days` / `forecast_suffix` | `true` / ` (forecast)` | write future days as marked forecasts |
 | `backup_dir` / `backups_keep` | `<data>/fdr_backups` / `30` | workbook backups |
 
 No credentials are needed (public feed).
@@ -369,8 +376,9 @@ at the same file on a synced drive.
    wording is assumed and anything unclear is flagged, not guessed.
 2. **Cells already filled by hand that differ from CFA** are never overwritten
    (flagged instead) — correct them, or rerun with `--force` deliberately.
-3. **Multi Day reporting convention** (highest vs combined vs blank) must be
-   confirmed with whoever owns the statistics; default leaves the cell blank.
+3. **Forecast values sit outside the dropdown list** (`Moderate (forecast)`):
+   Excel accepts them (validation only checks typed entries) but "Circle
+   Invalid Data" would circle them — intended, they are not final values.
 4. **Same-day amendment times** use the BoM "forecast issued at" time when the
    feed gives one, else when the tool noticed (to the nearest collection
    interval).

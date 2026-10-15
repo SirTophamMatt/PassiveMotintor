@@ -109,8 +109,10 @@ def _print_result(res):
         return 1
     p = res.plan
     verb = "Would write" if res.dry_run else "Wrote"
-    print(f"{verb} {len(p.changes)} cell(s); {len(p.blocked)} left alone; "
-          f"{len(p.review)} need review.")
+    fc = sum(1 for c in p.changes if c.forecast)
+    print(f"{verb} {len(p.changes)} cell(s)"
+          + (f" ({fc} future-day forecast, not logged)" if fc else "")
+          + f"; {len(p.blocked)} left alone; {len(p.review)} need review.")
     for c in p.changes:
         print(f"  {c.cell:>6} {c.valid_date}  {c.old!r} -> {c.new!r}  ({c.reason})")
     for cell, d, old, new, why in p.blocked:

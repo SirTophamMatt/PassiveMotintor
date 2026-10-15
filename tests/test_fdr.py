@@ -294,7 +294,8 @@ def test_multi_from_an_amendment_during_the_day(db):
     c = rec.districts["Central"]
     assert c.multi and rec.multi == "YES"
     assert c.ratings == ["Extreme", "High"]
-    assert c.multi_detail == "High until 13:30, Extreme from 13:30 (amended on the day)"
+    assert c.multi_detail == "High → Extreme at 13:30 (changed during the day)"
+    assert c.latest == ["Extreme"]
 
 
 def test_overnight_revision_finalises_rather_than_multi(db):
@@ -508,6 +509,12 @@ def test_update_writes_confirmed_values_and_preserves_everything(db, wb_path):
     assert ws[f"P{r16}"].value.startswith("[FDR]")
     # The 17th is "today" but only seen two days ahead: preliminary, unwritten.
     assert ws[f"G{r17}"].value == PICK and ws[f"D{r17}"].value is None
+    # The 18th is still to come: CFA's forecast, marked as such.
+    r18 = _row(lay, D18)
+    assert ws[f"G{r18}"].value == "Moderate (forecast)"
+    assert ws[f"C{r18}"].value == "NO (forecast)"
+    assert ws[f"{COL['North Central']}{r18}"].value == PICK      # VERY HIGH: not a rating
+    assert ws[f"P{r18}"].value == "[FDR] Forecast (BoM issued 15/10 05:30) — future day, may change"
     # Formulas, note, conditional formats, extension untouched.
     assert ws["G3"].value == "=COUNTIF(G12:INDEX(G:G,ROWS(G:G)), C3)"
     assert ws[f"F{r15}"].value == f'=TEXT(E{r15},"ddd")'
@@ -526,7 +533,9 @@ def test_update_writes_confirmed_values_and_preserves_everything(db, wb_path):
         assert z.read("xl/worksheets/sheet1.xml") == before["xl/worksheets/sheet1.xml"]
     # Every written cell recorded.
     log = database.read_df("SELECT * FROM fdr_workbook_updates")
-    assert len(log) == len(res.plan.changes) and f"G{r15}" in set(log["cell_reference"])
+    logged = [c for c in res.plan.changes if not c.forecast]
+    assert len(log) == len(logged) and f"G{r15}" in set(log["cell_reference"])
+    assert f"G{r18}" not in set(log["cell_reference"])       # forecasts are not logged
 
 
 def test_rerun_is_a_no_op(db, wb_path):
@@ -565,6 +574,71 @@ def test_amendment_updates_a_value_this_tool_wrote(db, wb_path):
     assert [c.cell for c in res.plan.changes] == [f"G{r}"]
     assert "amended" in res.plan.changes[0].reason
     assert openpyxl.load_workbook(wb_path)["Sheet1"][f"G{r}"].value == "Catastrophic"
+
+
+def type_into(path, lay, cell, value):
+    """Set a cell the way a person would, keeping the dropdowns: through the
+    tool's XML writer (an openpyxl save would drop the extension lists)."""
+    tmp = path + ".tmp"
+    workbook.write_changes(path, tmp, lay.sheet_part,
+                           [workbook.Change(cell, None, None, value, "test")])
+    os.replace(tmp, path)
+
+
+def test_rating_changed_today_records_latest_and_when(db, wb_path):
+    """Multi Day convention: the sheet keeps the most recent rating and the
+    Comments cell records when it changed; Multi Day is YES straight away."""
+    run(when=at(D15, 5))
+    workbook.update_file(wb_path, now=at(D15, 9))
+    amended = FEED.replace(b"Central: HIGH&lt;br&gt;", b"Central: EXTREME&lt;br&gt;", 1) \
+        .replace(b"15 October 2026 05:30 AM", b"15 October 2026 01:30 PM", 1)
+    run(amended, when=at(D15, 13, 40))
+    res = workbook.update_file(wb_path, now=at(D15, 14))
+    r = res.layout.rows[D15]
+    ws = openpyxl.load_workbook(wb_path)["Sheet1"]
+    assert ws[f"{COL['Central']}{r}"].value == "Extreme"        # High -> Extreme
+    assert ws[f"D{r}"].value == "YES"
+    assert ws[f"P{r}"].value == ("[FDR] Central: High → Extreme at 13:30 "
+                                 "(changed during the day)")
+    reasons = {c.cell: c.reason for c in res.plan.changes}
+    assert "amended" in reasons[f"{COL['Central']}{r}"]
+
+
+def test_forecast_becomes_the_record_when_the_day_starts(db, wb_path):
+    run(when=at(D15, 20))
+    res = workbook.update_file(wb_path, now=at(D15, 21))
+    r16 = res.layout.rows[D16]
+    ws = openpyxl.load_workbook(wb_path)["Sheet1"]
+    assert ws[f"G{r16}"].value == "High (forecast)" and ws[f"C{r16}"].value == "NO (forecast)"
+    assert "Forecast" in ws[f"P{r16}"].value
+    assert all(c.forecast for c in res.plan.changes if c.valid_date == D16)
+    # Next morning the 16th has started: confirmed values replace the forecast,
+    # the forecast note goes, and these writes are logged.
+    res = workbook.update_file(wb_path, now=at(D16, 8))
+    ws = openpyxl.load_workbook(wb_path)["Sheet1"]
+    assert ws[f"G{r16}"].value == "High" and ws[f"C{r16}"].value == "NO"
+    assert "Forecast" not in (ws[f"P{r16}"].value or "")
+    log = database.read_df("SELECT cell_reference FROM fdr_workbook_updates")
+    assert f"G{r16}" in set(log["cell_reference"])
+
+
+def test_forecast_changes_are_followed_and_never_overwrite_a_person(db, wb_path):
+    run(when=at(D15, 5, 30))
+    lay = workbook.inspect(wb_path)
+    r17 = lay.rows[D17]
+    type_into(wb_path, lay, f"H{r17}", "High")   # someone typed ahead for Wimmera
+    workbook.update_file(wb_path, now=at(D15, 9))
+    ws = openpyxl.load_workbook(wb_path)["Sheet1"]
+    assert ws[f"G{r17}"].value == "Moderate (forecast)"
+    assert ws[f"H{r17}"].value == "High"                       # left alone, silently
+    assert (store.open_flags()["kind"] != "workbook-blocked").all()
+    up = FEED.replace(b"Mallee: MODERATE&lt;br&gt;North Central: MODERATE",
+                      b"Mallee: HIGH&lt;br&gt;North Central: MODERATE", 1)
+    assert up != FEED                                          # the 17th's Mallee
+    run(up, when=at(D15, 16))
+    workbook.update_file(wb_path, now=at(D15, 17))
+    ws = openpyxl.load_workbook(wb_path)["Sheet1"]
+    assert ws[f"G{r17}"].value == "High (forecast)"            # forecast moved on
 
 
 def test_user_comment_is_kept_and_tool_segment_replaced():

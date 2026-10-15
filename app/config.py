@@ -154,15 +154,20 @@ DEFAULTS = {
         "workbook_path": "",
         "workbook_sheet": "",          # "" = find the sheet by its headers
         "auto_update_workbook": False,  # update workbook_path after each run
-        # More than one rating in a district on a day: auto (use the workbook's
-        # own combined value if its dropdown has one, else leave blank for
+        # A rating that changed during the day: latest (the rating in force at
+        # the end of the day; Comments records the earlier one and when it
+        # changed) | auto (the workbook's own combined value, else blank for
         # review) | highest | combined | review
-        "multi_rating_display": "auto",
+        "multi_rating_display": "latest",
         "combined_separator": "/",
-        # TFB column convention: auto (from the dropdown/existing values) | any
-        # (Yes if any district) | districts (names) | count
-        "tfb_mode": "auto",
-        "write_future_days": False,
+        # TFB column = "is a Total Fire Ban declared?": any (YES if any
+        # district) | districts (names) | count | auto (detect from the sheet)
+        "tfb_mode": "any",
+        # Days not yet started: write CFA's current forecast, every value
+        # suffixed so it reads as provisional and is not counted by the
+        # summary COUNTIFs; replaced by the confirmed value once the day starts.
+        "forecast_days": True,
+        "forecast_suffix": " (forecast)",
         "backup_dir": "",              # "" = <data dir>/fdr_backups
         "backups_keep": 30,
     },

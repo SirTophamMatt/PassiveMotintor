@@ -138,9 +138,13 @@ def body():
         html.Div([
             html.H4("Workbook"),
             html.P(["Upload the FDR Daily Statistics workbook to see exactly which cells "
-                    "would change, then download the filled copy. Only confirmed values "
-                    "for days that have started are written; formulas, formatting, "
-                    "dropdowns and anything typed by hand are left alone. ",
+                    "would change, then download the filled copy. Days that have started "
+                    "get confirmed values; if a rating changed during the day the latest "
+                    "is recorded and Comments says when it changed. Days still to come "
+                    "get CFA's current forecast marked ", html.Code("(forecast)"),
+                    " — it may change, is replaced when the day starts, and is not "
+                    "counted by the summary table. Formulas, formatting, dropdowns and "
+                    "anything typed by hand are left alone. ",
                     html.Code("[FDR]"), " marks this tool's part of a comment."],
                    className="muted"),
             dcc.Upload(html.Button("Choose workbook…", className="btn"),
@@ -327,8 +331,10 @@ def plan_view(res):
                                                 "whiteSpace": "normal"},
                                     **{k: v for k, v in styles.items()
                                        if k != "style_cell"})
+    fc = sum(1 for c in p.changes if c.forecast)
     out = [html.Ul([html.Li(x) for x in lay.describe()], className="muted"),
-           html.B(f"{len(changes)} cell(s) to write")]
+           html.B(f"{len(changes)} cell(s) to write"
+                  + (f" — {fc} are future-day forecasts" if fc else ""))]
     if changes:
         out.append(tbl(changes))
     if blocked:
@@ -481,8 +487,10 @@ def register_callbacks(app):
         if not res.ok:
             return no_update, "Not filled: " + (res.error or "unknown error")
         n_changes = len(res.plan.changes)
+        fc = sum(1 for c in res.plan.changes if c.forecast)
         return (dcc.send_bytes(data, name),
-                f"{n_changes} cell(s) written; {len(res.plan.blocked)} left alone; "
+                f"{n_changes} cell(s) written ({fc} future-day forecasts, marked "
+                f"'(forecast)'); {len(res.plan.blocked)} left alone; "
                 f"{len(res.plan.review)} need review.")
 
     @app.callback(

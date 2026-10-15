@@ -1614,8 +1614,16 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   (G Mallee, H Wimmera, I South West, J Northern Country, K North Central, L Central, M North
   East, N W&S Gippsland, O East Gippsland). Dropdowns are x14 extensions on the `List` sheet;
   `Pick Rating….` is a prompt pre-filled in future rows = treated as empty
-  (`Layout.placeholders`). YES/NO uppercase. Multi Day's note: "did the FDR change during the
-  day" — written only once the day is over.
+  (`Layout.placeholders`). YES/NO uppercase. TFB column = "is a TFB declared" (any district).
+- **User's conventions (2026-10-15):** a rating that changed during the day → the cell holds
+  the LATEST rating (`DistrictDay.latest`, `multi_rating_display="latest"`) and Comments says
+  `[FDR] Central: High → Extreme at 13:30 (changed during the day)`; Multi Day ("did the FDR
+  change during the day") is YES as soon as a change is confirmed, NO only once the day is
+  over. **Future days** are written as CFA's forecast with a `(forecast)` suffix on every
+  value + a dated `[FDR] Forecast …` comment: coloured by the sheet's SEARCH-based CF, NOT
+  counted by its exact-match COUNTIFs (verified), not logged (`Change.forecast`), replaced
+  when the day starts; a suffixed value is the tool's to replace (no log needed). The
+  placeholder 5th day gets nothing; a person's value in a future row is left silently.
 - **Store (`fdr_*` tables):** change-only revisions per (date, district, source); repeats move
   `last_seen`. Unrecognised values / unclear TFB never supersede good ones; nothing is deleted;
   overrides sit on top (reason required, revocable). Timestamps carry offsets + epoch columns.
@@ -1635,8 +1643,7 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
   so a 30-min schedule doesn't rotate out the DB snapshots.
 - Collector `fdr` (30 min, autostart), watchdog, `/health` `fdr_running/fdr_last_success/
   fdr_last_error`. Tests: `tests/test_fdr.py`.
-- Not done: the multi-rating cell convention (`multi_rating_display`, default leaves the prompt +
-  comment); a live TFB-day fixture; severity-increase alerts; Op Summary TFB/FDR auto-fill.
+- Not done: a live TFB-day fixture; severity-increase alerts; Op Summary TFB/FDR auto-fill.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

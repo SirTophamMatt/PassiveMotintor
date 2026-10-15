@@ -50,6 +50,11 @@ class DistrictDay:
     state: str = "none"        # confirmed | preliminary | unrecognised | conflict | none
     multi: bool = False
     multi_detail: str = None
+    # The rating in force at the END of the day (or now): what the workbook
+    # records when the rating changed during the day. Equals ``ratings``
+    # unless an amendment changed it.
+    latest: list = field(default_factory=list)
+    issued: str = None         # BoM "forecast issued at" of the current revision
     tfb: str = None            # YES | NO | None (unknown)
     tfb_state: str = "none"    # confirmed | preliminary | none
     tfb_source: str = None
@@ -74,6 +79,16 @@ class DayRecord:
     review: list = field(default_factory=list)
     comment_extra: str = ""
     no_data: bool = False      # nothing stored at all (e.g. before collection began)
+    # Forecast view for days not yet started: TFB from any (incl. preliminary)
+    # district value — what CFA currently says, which may still change.
+    tfb_forecast: str = None
+
+    @property
+    def forecast_issued(self):
+        """Latest BoM issue time among the districts (ISO string) or None."""
+        times = [d.issued for d in self.districts.values()
+                 if isinstance(d.issued, str) and d.issued]
+        return max(times) if times else None
 
     @property
     def complete(self):
@@ -196,6 +211,8 @@ def _resolve_day(d, fc_by, tf_by, ov_by, window, after, use_amend, now):
             src = next(s for s in SOURCE_PRIORITY if s in ok)
             row, rows = ok[src]
             dd.ratings = json.loads(row["ratings_json"] or "[]")
+            dd.latest = list(dd.ratings)
+            dd.issued = row.get("issue_ts") if isinstance(row.get("issue_ts"), str) else None
             dd.source = src
             dd.revisions = int(row["revision"])
             dd.last_seen = row["last_seen_at"]
@@ -219,12 +236,12 @@ def _resolve_day(d, fc_by, tf_by, ov_by, window, after, use_amend, now):
                     dd.multi = True
                     dd.ratings = sorted({x for s in spans for x in s[0]},
                                         key=lambda r: -model.RANK[r])
-                    bits = []
-                    for i, (rt, frm, to) in enumerate(spans):
-                        when = (f"until {_fmt(to)}" if i == 0 else
-                                f"from {_fmt(frm)}")
-                        bits.append(f"{model.display(rt)} {when}")
-                    dd.multi_detail = ", ".join(bits) + " (amended on the day)"
+                    dd.latest = list(spans[-1][0])
+                    # "High → Extreme at 13:30" — each change and the time it
+                    # took effect (BoM issue time, else when it was seen).
+                    dd.multi_detail = model.display(spans[0][0]) + "".join(
+                        f" → {model.display(rt)} at {_fmt(frm)}"
+                        for rt, frm, _ in spans[1:]) + " (changed during the day)"
         elif current:
             row = current[next(s for s in SOURCE_PRIORITY if s in current)][0]
             dd.state = "unrecognised"
@@ -243,6 +260,7 @@ def _resolve_day(d, fc_by, tf_by, ov_by, window, after, use_amend, now):
         o = ov_by.get((vd, dist, "rating"))
         if o is not None:
             dd.ratings = json.loads(o["value"])
+            dd.latest = list(dd.ratings)
             dd.source, dd.state = "override", "confirmed"
             dd.multi = len(dd.ratings) > 1
             dd.multi_detail = (f"{model.display(dd.ratings, ' and ')} (manual correction)"
@@ -256,6 +274,10 @@ def _resolve_day(d, fc_by, tf_by, ov_by, window, after, use_amend, now):
     ds = rec.districts.values()
     confirmed_tfb = [x for x in ds if x.tfb_state == "confirmed"]
     rec.tfb_districts = [x.district for x in confirmed_tfb if x.tfb == model.TFB_YES]
+    if any(x.tfb == model.TFB_YES for x in ds):
+        rec.tfb_forecast = "YES"
+    elif all(x.tfb == model.TFB_NO for x in ds):
+        rec.tfb_forecast = "NO"
     if rec.tfb_districts:
         rec.tfb_any = "YES"
     elif len(confirmed_tfb) == len(model.DISTRICTS):

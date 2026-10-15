@@ -31,8 +31,11 @@ Write rules (``plan``)
 * an empty cell is filled; a cell holding the value this tool last wrote there
   is updated (an amendment); a cell holding anything else was typed by a
   person and is left alone and flagged (``force`` overrides);
-* only dates that have started (``write_future_days`` off) and only
-  CONFIRMED values (see ``resolve``) are written; unknown stays blank.
+* days that have started get CONFIRMED values only (see ``resolve``);
+  unknown stays blank. A rating that changed during the day records the
+  LATEST rating, with what it was and when it changed in Comments;
+* days still to come get CFA's current forecast marked "(forecast)" plus a
+  dated Comments note — provisional, replaced when the day starts, not logged.
 """
 import io
 import logging
@@ -138,6 +141,7 @@ class Change:
     old: object
     new: object
     reason: str
+    forecast: bool = False     # a future day's provisional value: not logged
 
 
 @dataclass
@@ -409,9 +413,13 @@ def inspect(path, cfg=None):
             if not model.parse_ratings(v)[1] and v.lower() not in (
                     "yes", "no", "y", "n", "true", "false"):
                 lay.placeholders.add(v.lower())
+    # Prompts and this tool's own forecast values say nothing about how the
+    # workbook spells a real value.
+    ftag = (cfg.get("forecast_suffix") or "").strip().lower()
     for col in list(lay.existing):
         lay.existing[col] = {v for v in lay.existing[col]
-                             if v.lower() not in lay.placeholders}
+                             if v.lower() not in lay.placeholders
+                             and not (ftag and v.lower().endswith(ftag))}
     lay.tfb_mode = _tfb_mode(lay, cfg.get("tfb_mode", "auto"))
     return lay
 
@@ -495,34 +503,65 @@ def _same(a, b):
     return _text(a).lower() == _text(b).lower()
 
 
-def plan(lay, records, written, *, policy="auto", sep="/", force=False,
-         write_future=False):
-    """Plan the cell changes for ``records`` ({date: DayRecord})."""
-    p = Plan()
+def plan(lay, records, written, *, policy="latest", sep="/", force=False,
+         forecasts=True, suffix=" (forecast)"):
+    """Plan the cell changes for ``records`` ({date: DayRecord}).
 
-    def want(cell, d, new, reason):
+    Days that have started get their confirmed values (logged in
+    fdr_workbook_updates). Days still to come get CFA's current forecast with
+    ``suffix`` on every value ("Moderate (forecast)") and a dated note in
+    Comments: visibly provisional, coloured by the sheet's own SEARCH-based
+    formatting, NOT counted by the summary's exact-match COUNTIFs, and not
+    logged. A forecast cell is the tool's to replace — until the day starts
+    and the confirmed value takes its place."""
+    p = Plan()
+    tag = suffix.strip().lower()
+
+    def is_forecast(value):
+        return bool(tag) and _text(value).lower().endswith(tag)
+
+    def want(cell, d, new, reason, forecast=False):
         if new is None:
             return
         old = lay.values.get(cell)
         if cell in lay.formulas:
-            p.blocked.append((cell, d, old, new, "cell holds a formula"))
+            if not forecast:
+                p.blocked.append((cell, d, old, new, "cell holds a formula"))
             return
         if _same(old, new):
             return
-        if _text(old) == "" or _text(old).lower() in lay.placeholders:
-            p.changes.append(Change(cell, d, old, new, reason))
+        if _text(old) == "" or _text(old).lower() in lay.placeholders \
+                or is_forecast(old):
+            p.changes.append(Change(cell, d, old, new, reason, forecast))
         elif force or _same(written.get((lay.sheet, cell)), old):
             p.changes.append(Change(cell, d, old, new,
                                     reason + (" (forced)" if force else " (amended)")))
-        else:
+        elif not forecast:
+            # A person's entry. For a future day it is left silently — the
+            # forecast is only provisional anyway.
             p.blocked.append((cell, d, old, new,
                               "holds a value this tool did not write — left as is"))
+
+    def comment(d, r, ours):
+        if not lay.comment_col:
+            return
+        cell = f"{lay.comment_col}{r}"
+        old = lay.values.get(cell)
+        new = merge_comment(old, ours)
+        if not _same(old, new) and cell not in lay.formulas:
+            # Comments are merged, never overwritten: a person's text is kept
+            # and only this tool's [FDR] segment is replaced.
+            p.changes.append(Change(cell, d, old, new or None, "Comments",
+                                    is_forecast_day))
 
     for d, rec in sorted(records.items()):
         r = lay.rows.get(d)
         if r is None:
             continue
-        if rec.stage == "future" and not write_future:
+        is_forecast_day = rec.stage == "future"
+        if is_forecast_day:
+            if forecasts and not rec.no_data:
+                _plan_forecast(lay, rec, d, r, want, comment, sep, suffix)
             continue
         if rec.no_data:
             p.no_data.append(d)
@@ -532,44 +571,79 @@ def plan(lay, records, written, *, policy="auto", sep="/", force=False,
             dd = rec.districts[dist]
             if dd.state != "confirmed" or not dd.ratings:
                 continue
-            val, note = rating_value(lay, col, dd.ratings, policy, sep)
+            ratings, pol = dd.ratings, policy
+            if policy == "latest":
+                # The rating changed during the day: record the one in force
+                # at the end (Comments says what it was before, and when).
+                # Two ratings published at once have no "latest" — they fall
+                # back to the workbook's own combined value or review.
+                if dd.multi and len(dd.latest) == 1:
+                    ratings = dd.latest
+                pol = "auto"
+            val, note = rating_value(lay, col, ratings, pol, sep)
             if note:
                 notes.append(f"{dist}: {note}")
                 p.review.append((d, f"{dist} ({col}{r}): {note}"))
             want(f"{col}{r}", d, val, f"{dist} rating ({dd.source})")
-        # Multi Day asks whether the rating changed DURING the day, which is
-        # only known once the day is over.
-        if lay.multi_col and rec.multi and rec.stage == "past":
+        # Multi Day: "did the FDR change during the day". YES as soon as a
+        # change is confirmed (it cannot un-happen); NO only once the day is
+        # over and nothing changed.
+        if lay.multi_col and (rec.multi == "YES" or
+                              (rec.multi == "NO" and rec.stage == "past")):
             want(f"{lay.multi_col}{r}", d, yes_no_value(lay, lay.multi_col,
                                                         rec.multi == "YES"),
                  f"Multi Day ({rec.multi_source})")
         if lay.tfb_col and rec.tfb_any:
-            if lay.tfb_mode == "any":
-                v = yes_no_value(lay, lay.tfb_col, rec.tfb_any == "YES")
-            elif lay.tfb_mode == "districts":
-                v = ", ".join(rec.tfb_districts) if rec.tfb_any == "YES" else None
-            elif lay.tfb_mode == "count":
-                v = len(rec.tfb_districts)
-            else:
-                v = None
-            want(f"{lay.tfb_col}{r}", d, v, "Total Fire Ban")
-        if lay.comment_col:
-            ours = rec.comment()
-            blank = [n.split(":")[0] for n in notes if "left blank" in n]
-            if blank:
-                ours = (ours + "; " if ours else "") + \
-                    "rating left blank for: " + ", ".join(blank)
-            cell = f"{lay.comment_col}{r}"
-            old = lay.values.get(cell)
-            new = merge_comment(old, ours)
-            if not _same(old, new) and cell not in lay.formulas:
-                # Comments are merged, never overwritten, so they are always safe
-                # to update.
-                p.changes.append(Change(cell, d, old, new or None, "Comments"))
-        if rec.stage != "future":
-            for n in rec.review:
-                p.review.append((d, n))
+            want(f"{lay.tfb_col}{r}", d, _tfb_value(lay, rec, rec.tfb_any),
+                 "Total Fire Ban")
+        ours = rec.comment()
+        blank = [n.split(":")[0] for n in notes if "left blank" in n]
+        if blank:
+            ours = (ours + "; " if ours else "") + \
+                "rating left blank for: " + ", ".join(blank)
+        comment(d, r, ours)
+        for n in rec.review:
+            p.review.append((d, n))
     return p
+
+
+def _tfb_value(lay, rec, status, districts=None):
+    """The TFB cell value. The FDR workbook's column asks "is a Total Fire Ban
+    declared?" — YES if any district has one (mode ``any``)."""
+    districts = rec.tfb_districts if districts is None else districts
+    if lay.tfb_mode == "any":
+        return yes_no_value(lay, lay.tfb_col, status == "YES")
+    if lay.tfb_mode == "districts":
+        return ", ".join(districts) if status == "YES" else None
+    if lay.tfb_mode == "count":
+        return len(districts) if status == "YES" else 0
+    return None
+
+
+def _plan_forecast(lay, rec, d, r, want, comment, sep, suffix):
+    """A day not yet started: CFA's current forecast, marked as such."""
+    wrote = False
+    for dist, col in lay.district_cols.items():
+        dd = rec.districts[dist]
+        if dd.state in ("conflict", "unrecognised") or len(dd.latest) != 1:
+            continue
+        val, _ = rating_value(lay, col, dd.latest, "auto", sep)
+        if val:
+            want(f"{col}{r}", d, val + suffix, f"{dist} forecast", forecast=True)
+            wrote = True
+    # A day CFA has no issued forecast for yet (its placeholder fifth day)
+    # gets nothing — a TFB "forecast" alone would look like more than it is.
+    if wrote and lay.tfb_col and rec.tfb_forecast and lay.tfb_mode in ("any", "count"):
+        yes = [x.district for x in rec.districts.values() if x.tfb == model.TFB_YES]
+        v = _tfb_value(lay, rec, rec.tfb_forecast, yes)
+        want(f"{lay.tfb_col}{r}", d, f"{v}{suffix}", "TFB forecast", forecast=True)
+        wrote = True
+    if wrote:
+        issued = rec.forecast_issued
+        when = (datetime.fromisoformat(issued).strftime("%d/%m %H:%M")
+                if issued else None)
+        comment(d, r, "Forecast" + (f" (BoM issued {when})" if when else "")
+                + " — future day, may change")
 
 
 # --------------------------------------------------------------------------- #
@@ -766,9 +840,10 @@ def update_file(path, *, run_id=None, cfg=None, dry_run=False, force=False,
         recs = records_for(lay, start, end, full, now)
         written = store.written_cells(name)
         res.plan = plan(lay, recs, written,
-                        policy=c.get("multi_rating_display", "auto"),
+                        policy=c.get("multi_rating_display", "latest"),
                         sep=c.get("combined_separator", "/"), force=force,
-                        write_future=c.get("write_future_days", False))
+                        forecasts=c.get("forecast_days", True),
+                        suffix=c.get("forecast_suffix", " (forecast)"))
         if dry_run or not res.plan.changes:
             res.ok = True
             _flag_blocked(res.plan, name)
@@ -792,13 +867,14 @@ def update_file(path, *, run_id=None, cfg=None, dry_run=False, force=False,
             store.finish_run(run_id, "ok", {"updated": len(res.plan.changes)}, [])
         res.run_id = run_id
         stamp = model.iso(model.now())
+        # Forecast cells (future days) are provisional and not logged.
         store.record_cell_updates([{
             "run_id": run_id, "workbook_name": name, "worksheet": lay.sheet,
             "cell_reference": ch.cell, "valid_date": ch.valid_date.isoformat(),
             "previous_value": None if ch.old is None else _text(ch.old),
             "new_value": None if ch.new is None else _text(ch.new),
             "reason": ch.reason, "dry_run": 0, "updated_at": stamp}
-            for ch in res.plan.changes])
+            for ch in res.plan.changes if not ch.forecast])
         _flag_blocked(res.plan, name)
         res.ok = True
     except WorkbookLocked as e:
