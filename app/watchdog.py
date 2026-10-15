@@ -44,7 +44,7 @@ class Supervisor(threading.Thread):
         self._stop_event = threading.Event()
         self._restarts = {"flood": [], "power": [], "fire": [], "weather": [],
                           "rainfall": [], "storm": [], "roads": [], "pager": [],
-                          "intel": []}
+                          "fdr": [], "intel": []}
         self._last_power_level = None      # None until first evaluation
         self._flooding = {}                # station -> (priority, label)
         self._first_flood_check = True
@@ -59,13 +59,14 @@ class Supervisor(threading.Thread):
         self._pager_last_id = None         # None until first evaluation
         self._last_errors = {"flood": None, "power": None, "fire": None,
                              "weather": None, "rainfall": None, "storm": None,
-                             "roads": None, "pager": None, "intel": None}
+                             "roads": None, "pager": None, "fdr": None,
+                             "intel": None}
         self.state = {"started": None, "checks": 0, "last_check": None,
                       "flood_restarts": 0, "power_restarts": 0,
                       "fire_restarts": 0, "weather_restarts": 0,
                       "rainfall_restarts": 0, "storm_restarts": 0,
                       "roads_restarts": 0, "pager_restarts": 0,
-                      "intel_restarts": 0,
+                      "fdr_restarts": 0, "intel_restarts": 0,
                       "last_action": None}
 
     def ensure_started(self):
@@ -181,6 +182,13 @@ class Supervisor(threading.Thread):
                 ok, msg = manager.restart_pager()
                 self._record_restart("pager", reason, msg)
 
+        if manager.fdr_wanted(cfg):
+            reason = self._stall_reason(status["fdr"],
+                                        max(5, cfg["fdr"]["interval_minutes"]) * 60)
+            if reason and self._can_restart("fdr"):
+                ok, msg = manager.restart_fdr()
+                self._record_restart("fdr", reason, msg)
+
         if manager.intel_wanted(cfg):
             reason = self._stall_reason(status["intel"],
                                         max(15, cfg["intel"]["interval_seconds"]))
@@ -191,7 +199,7 @@ class Supervisor(threading.Thread):
         # Notify once per DISTINCT collector error (a failing-every-cycle
         # scraper should ping you once, not every minute).
         for which in ("flood", "power", "fire", "weather", "rainfall", "storm",
-                      "roads", "pager", "intel"):
+                      "roads", "pager", "fdr", "intel"):
             err = status[which].get("last_error")
             if err and err != self._last_errors[which]:
                 notify.send(f"⚠ {which} collector error: {err}", kind="watchdog")

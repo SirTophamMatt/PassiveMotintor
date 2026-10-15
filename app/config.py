@@ -130,6 +130,47 @@ DEFAULTS = {
         "page_limit": 0,
         "max_pages": 20,
     },
+    "fdr": {
+        # Fire Danger Ratings + Total Fire Bans (Intel Tool, app/modules/fdr).
+        # CFA's statewide RSS: today + 3 days, all nine districts.
+        "state_feed_url": "https://www.cfa.vic.gov.au/cfa/rssfeed/tfbfdrforecast_rss.xml",
+        # Per-district feeds as a cross-check (9 extra requests per run; all nine
+        # URLs confirmed live 2026-10-15). Off: they repeat the statewide feed.
+        "district_feeds": False,
+        "district_feed_url": "https://www.cfa.vic.gov.au/cfa/rssfeed/{slug}-firedistrict_rss.xml",
+        "interval_minutes": 30,
+        "timeout_seconds": 30,
+        "autostart": True,
+        # A day's forecast is CONFIRMED (written as the day's record) only if
+        # it was still being published within this many hours before the day
+        # began, or during it.
+        "confirm_window_hours": 12,
+        # Multi Day from an amendment during the day; one noticed before this
+        # local time finalises the day's forecast instead.
+        "multi_from_amendment": True,
+        "multi_amendment_after": "06:00",
+        # Workbook. Path on THIS machine (CLI/Windows, or a file on the server
+        # volume); the Intel page also fills an uploaded copy.
+        "workbook_path": "",
+        "workbook_sheet": "",          # "" = find the sheet by its headers
+        "auto_update_workbook": False,  # update workbook_path after each run
+        # A rating that changed during the day: latest (the rating in force at
+        # the end of the day; Comments records the earlier one and when it
+        # changed) | auto (the workbook's own combined value, else blank for
+        # review) | highest | combined | review
+        "multi_rating_display": "latest",
+        "combined_separator": "/",
+        # TFB column = "is a Total Fire Ban declared?": any (YES if any
+        # district) | districts (names) | count | auto (detect from the sheet)
+        "tfb_mode": "any",
+        # Days not yet started: write CFA's current forecast, every value
+        # suffixed so it reads as provisional and is not counted by the
+        # summary COUNTIFs; replaced by the confirmed value once the day starts.
+        "forecast_days": True,
+        "forecast_suffix": " (forecast)",
+        "backup_dir": "",              # "" = <data dir>/fdr_backups
+        "backups_keep": 30,
+    },
     "pager": {
         # CFA pager messages from Mazzanet (scraped with the site owner's
         # permission). One GET per cycle; overlap between reads is de-duped.

@@ -1,9 +1,10 @@
 # Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Intel Tool: a small internal-tools area behind a simple shared password.
 
-Hosts two tools, reached by the tab strip at the top of the unlocked page:
-the **Operational Summary** builder (``/intel/summary``, ``pages/opsum.py``)
-and the **Fire burnt-area chart generator** — a self-contained
+Hosts three tools, reached by the tab strip at the top of the unlocked page:
+the **Operational Summary** builder (``/intel/summary``, ``pages/opsum.py``),
+**Fire Danger Ratings** (``/intel/fdr``, ``pages/fdr.py``) and the **Fire
+burnt-area chart generator** — a self-contained
 HTML/SVG/JS tool (``assets/intel_fire_chart.html``) embedded in an isolated
 ``<iframe srcDoc=...>`` so its own light-themed UI and client-side logic run
 untouched inside the dark dashboard shell.
@@ -87,15 +88,19 @@ def body_for(pathname):
     """The unlocked tool for ``pathname``, or the password gate."""
     if not unlocked():
         return _gate()
-    from app.pages import opsum as opsum_page
+    from app.pages import fdr as fdr_page, opsum as opsum_page
     if pathname == opsum_page.PATH:
         return opsum_page.body()
+    if pathname == fdr_page.PATH:
+        return fdr_page.body()
     return _tool()
 
 
 def tabs(active):
-    from app.pages import opsum as opsum_page
-    items = [(opsum_page.PATH, "Operational Summary"), (CHART_PATH, "Fire chart generator")]
+    from app.pages import fdr as fdr_page, opsum as opsum_page
+    items = [(opsum_page.PATH, "Operational Summary"),
+             (fdr_page.PATH, "Fire Danger Ratings"),
+             (CHART_PATH, "Fire chart generator")]
     links = [dcc.Link(label, href=path,
                       className="btn" + (" btn-primary" if path == active else ""),
                       style={"marginRight": "8px", "textDecoration": "none"})

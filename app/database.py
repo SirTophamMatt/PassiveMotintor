@@ -546,6 +546,150 @@ CREATE TABLE IF NOT EXISTS pager_heartbeat (
 );
 CREATE INDEX IF NOT EXISTS idx_pager_hb_time ON pager_heartbeat (timestamp);
 
+-- Fire Danger Ratings + Total Fire Bans (Intel Tool, app/modules/fdr). Every
+-- timestamp is ISO-8601 WITH its offset (Australia/Melbourne); *_epoch columns
+-- carry the same instant as Unix seconds because offset strings do not sort
+-- across a DST change. valid_date is the Victorian calendar day it applies to.
+-- One row per collection attempt (scheduled, manual, CLI).
+CREATE TABLE IF NOT EXISTS fdr_runs (
+    run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    trigger TEXT,                -- collector | manual | cli | workbook
+    status TEXT,                 -- running | ok | partial | failed
+    records_retrieved INTEGER DEFAULT 0,
+    records_inserted INTEGER DEFAULT 0,
+    records_updated INTEGER DEFAULT 0,
+    records_unchanged INTEGER DEFAULT 0,
+    errors TEXT                  -- JSON list
+);
+-- Raw feed bodies, stored once per distinct body (sha1), so any stored value
+-- can be traced to the exact bytes it was parsed from.
+CREATE TABLE IF NOT EXISTS fdr_raw (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha1 TEXT NOT NULL UNIQUE,
+    source TEXT NOT NULL,
+    url TEXT,
+    first_fetched_at TEXT NOT NULL,
+    last_fetched_at TEXT NOT NULL,
+    body BLOB
+);
+-- Rating revisions. A row is written only when the published content changes
+-- (ratings or status); a re-read of the same content just moves last_seen.
+-- is_current marks the newest revision per (valid_date, district, source).
+CREATE TABLE IF NOT EXISTS fdr_forecasts (
+    forecast_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    valid_date TEXT NOT NULL,
+    district TEXT NOT NULL,
+    source TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL,        -- ok | unrecognised
+    ratings_json TEXT,           -- ["Extreme", "High"] highest first
+    rating TEXT,                 -- display label: "High" or "High/Extreme"
+    rating_rank INTEGER,         -- rank of the highest rating (0..4)
+    multi INTEGER NOT NULL DEFAULT 0,
+    raw_text TEXT,
+    issue_ts TEXT,               -- the feed's own time, when it gives one
+    retrieved_at TEXT NOT NULL,
+    retrieved_epoch INTEGER NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_seen_epoch INTEGER NOT NULL,
+    seen_count INTEGER NOT NULL DEFAULT 1,
+    source_url TEXT,
+    raw_id INTEGER,              -- fdr_raw.id
+    run_id INTEGER,
+    is_current INTEGER NOT NULL DEFAULT 1,
+    superseded_at TEXT,
+    content_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fdr_fc_key
+    ON fdr_forecasts (valid_date, district, source, is_current);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fdr_fc_rev
+    ON fdr_forecasts (valid_date, district, source, revision);
+-- One row per rating when a district has more than one on a day: a multi-
+-- rating value in the source, or a rating changed by an amendment on the day.
+CREATE TABLE IF NOT EXISTS fdr_rating_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_id INTEGER,
+    valid_date TEXT NOT NULL,
+    district TEXT NOT NULL,
+    rating TEXT NOT NULL,
+    applicable_area TEXT,
+    applicable_period TEXT,
+    source TEXT,
+    basis TEXT,                  -- multi-value | same-day amendment
+    UNIQUE (valid_date, district, rating, basis, applicable_period)
+);
+-- Total Fire Ban revisions per district; same change-only rule as ratings.
+-- UNKNOWN is stored only when no YES/NO was ever seen; it never supersedes one.
+CREATE TABLE IF NOT EXISTS fdr_tfb (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    valid_date TEXT NOT NULL,
+    district TEXT NOT NULL,
+    source TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    declaration_status TEXT NOT NULL,   -- YES | NO | UNKNOWN
+    basis TEXT,                         -- district | statewide statement | ...
+    raw_text TEXT,
+    issue_ts TEXT,
+    retrieved_at TEXT NOT NULL,
+    retrieved_epoch INTEGER NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    last_seen_epoch INTEGER NOT NULL,
+    seen_count INTEGER NOT NULL DEFAULT 1,
+    raw_id INTEGER,
+    run_id INTEGER,
+    is_current INTEGER NOT NULL DEFAULT 1,
+    superseded_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fdr_tfb_key
+    ON fdr_tfb (valid_date, district, source, is_current);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fdr_tfb_rev
+    ON fdr_tfb (valid_date, district, source, revision);
+-- Manual corrections. Never edit source rows: an override sits on top and is
+-- revoked (active=0), never deleted. district '*' = the whole day's row.
+CREATE TABLE IF NOT EXISTS fdr_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    valid_date TEXT NOT NULL,
+    district TEXT NOT NULL,
+    field TEXT NOT NULL,         -- rating | tfb | multi | comment
+    value TEXT,
+    reason TEXT NOT NULL,
+    entered_by TEXT,
+    entered_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fdr_ovr ON fdr_overrides (valid_date, active);
+-- Things a person should look at: conflicts, unrecognised values, missing
+-- districts, blocked workbook writes. Unique so a re-run never repeats one.
+CREATE TABLE IF NOT EXISTS fdr_flags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    valid_date TEXT,
+    district TEXT,
+    kind TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    UNIQUE (valid_date, district, kind, detail)
+);
+-- Every workbook cell this tool has written (or would write, dry_run=1).
+CREATE TABLE IF NOT EXISTS fdr_workbook_updates (
+    update_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER,
+    workbook_name TEXT NOT NULL,
+    worksheet TEXT NOT NULL,
+    cell_reference TEXT NOT NULL,
+    valid_date TEXT,
+    previous_value TEXT,
+    new_value TEXT,
+    reason TEXT,
+    dry_run INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fdr_wb_cell
+    ON fdr_workbook_updates (workbook_name, worksheet, cell_reference, dry_run);
+
 -- Event tags: named date ranges applied over the always-on data stream. An
 -- event is no longer a collection-time label but a (name, start, end) window
 -- used to slice flood + power data for viewing and export. NULL end = ongoing.
@@ -757,8 +901,9 @@ def backup_db(keep=15):
         log.warning("Database backup failed (non-fatal): %s", e)
 
 
-def init_db():
-    backup_db()
+def init_db(backup=True):
+    if backup:
+        backup_db()
     conn = get_connection()
     try:
         conn.execute("PRAGMA journal_mode=WAL")

@@ -1388,3 +1388,18 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
 .stats-copy { cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 4px;
               border-radius: 4px; }
 .stats-copy:hover { color: var(--text); background: var(--border); }
+
+/* Fire Danger Ratings (Intel Tool, /intel/fdr). Rating colours are AFDRS and
+   set inline; they never change with the colour scheme. */
+.fdr-grid { border-collapse: collapse; font-size: 13px; }
+.fdr-grid th, .fdr-grid td { border: 1px solid var(--border); padding: 4px 8px;
+  text-align: center; white-space: nowrap; }
+.fdr-grid th { background: var(--bg-sidebar); color: var(--text); font-weight: 600; }
+.fdr-grid th.fdr-dist { text-align: left; }
+.fdr-grid td.fdr-date { text-align: left; color: var(--text); }
+.fdr-grid td.fdr-cell { min-width: 64px; color: var(--text); }
+.fdr-grid td.fdr-none { color: var(--muted); }
+.fdr-grid .fdr-tfb { margin-left: 4px; padding: 0 3px; border-radius: 3px;
+  background: #b00020; color: #fff; font-size: 11px; }
+.fdr-grid .fdr-multi { font-weight: 700; }
+.fdr-season td.fdr-cell { min-width: 52px; font-size: 12px; }
