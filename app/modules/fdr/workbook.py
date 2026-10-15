@@ -99,6 +99,9 @@ class Layout:
     values: dict = field(default_factory=dict)      # "G12" -> current value
     formulas: set = field(default_factory=set)      # cells holding a formula
     allowed: dict = field(default_factory=dict)     # column -> [allowed values]
+    # Dropdown entries that are prompts, not values ("Pick Rating…."): a cell
+    # holding one is treated as empty.
+    placeholders: set = field(default_factory=set)
     existing: dict = field(default_factory=dict)    # column -> {values seen}
     formula_count: int = 0
     sheet_names: list = field(default_factory=list)
@@ -148,9 +151,9 @@ class Plan:
         if not self.no_data:
             return None
         return (f"{len(self.no_data)} started day(s) have no stored data "
-                f"({self.no_data[0]:%d/%m/%Y} .. {self.no_data[-1]:%d/%m/%Y}) and are "
-                "left blank — CFA publishes no archive, so only days collected by "
-                "this tool (or corrected by hand) can be filled")
+                f"({self.no_data[0]:%d/%m/%Y} .. {self.no_data[-1]:%d/%m/%Y}); their "
+                "cells are left exactly as they are — CFA publishes no archive, so "
+                "only days collected by this tool (or corrected here) can be filled")
 
 
 @dataclass
@@ -280,14 +283,17 @@ def _validations(sheet_xml, wb_values):
 
 
 def _find_header(ws, max_rows=40):
-    """(header row, {district: col}) — the first row naming >= 7 districts."""
+    """(header row, {district: col}) — the first row naming >= 7 districts
+    that also has a Date column. A summary table above the data (the FDR
+    workbook's rows 2–8: district totals per rating) names the districts too,
+    but has no Date, so it is skipped."""
     for row in ws.iter_rows(min_row=1, max_row=min(max_rows, ws.max_row)):
         found = {}
         for c in row:
             d = model.normalise_district(_text(c.value))
             if d and d not in found:
                 found[d] = c.column_letter
-        if len(found) >= 7:
+        if len(found) >= 7 and "date" in _label_cols(ws, row[0].row):
             return row[0].row, found
     return None, {}
 
@@ -398,6 +404,14 @@ def inspect(path, cfg=None):
     if not lay.rows:
         raise WorkbookError(f"No dates found in column {lay.date_col} below row "
                             f"{header_row}.")
+    for vals in allowed.values():
+        for v in vals:
+            if not model.parse_ratings(v)[1] and v.lower() not in (
+                    "yes", "no", "y", "n", "true", "false"):
+                lay.placeholders.add(v.lower())
+    for col in list(lay.existing):
+        lay.existing[col] = {v for v in lay.existing[col]
+                             if v.lower() not in lay.placeholders}
     lay.tfb_mode = _tfb_mode(lay, cfg.get("tfb_mode", "auto"))
     return lay
 
@@ -495,7 +509,7 @@ def plan(lay, records, written, *, policy="auto", sep="/", force=False,
             return
         if _same(old, new):
             return
-        if _text(old) == "":
+        if _text(old) == "" or _text(old).lower() in lay.placeholders:
             p.changes.append(Change(cell, d, old, new, reason))
         elif force or _same(written.get((lay.sheet, cell)), old):
             p.changes.append(Change(cell, d, old, new,
@@ -523,7 +537,9 @@ def plan(lay, records, written, *, policy="auto", sep="/", force=False,
                 notes.append(f"{dist}: {note}")
                 p.review.append((d, f"{dist} ({col}{r}): {note}"))
             want(f"{col}{r}", d, val, f"{dist} rating ({dd.source})")
-        if lay.multi_col and rec.multi:
+        # Multi Day asks whether the rating changed DURING the day, which is
+        # only known once the day is over.
+        if lay.multi_col and rec.multi and rec.stage == "past":
             want(f"{lay.multi_col}{r}", d, yes_no_value(lay, lay.multi_col,
                                                         rec.multi == "YES"),
                  f"Multi Day ({rec.multi_source})")

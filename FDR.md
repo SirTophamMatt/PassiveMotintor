@@ -18,26 +18,31 @@ anything else in it.
 | Source | Machine-readable? | What it carries | Used |
 |---|---|---|---|
 | **CFA "Total Fire Bans and Fire Danger Ratings" RSS** — `https://www.cfa.vic.gov.au/cfa/rssfeed/tfbfdrforecast_rss.xml` | Yes — RSS 2.0, refreshed every minute (CFA) | One item per day (today + 3), all 9 districts: a TFB section then a "Fire Danger Ratings" section of `District: RATING` lines | **Primary** |
-| CFA per-district feeds — `…/rssfeed/<slug>-firedistrict_rss.xml` | Yes, same family | One district each | Optional cross-check (off) |
+| CFA per-district feeds — `…/rssfeed/<slug>-firedistrict_rss.xml` | Yes, same family | One district each | Optional cross-check (off; all 9 URLs confirmed live) |
 | BoM | Fire weather products exist, but no FDR/TFB source was verified | — | Not used |
 | VicEmergency | Incidents/warnings GeoJSON (already collected by the Fire module); no FDR/TFB in it | — | Not used |
 
-How this was established, honestly:
+**Verified against the live feed (15 Oct 2026)** — a copy is committed as
+`tests/fixtures/cfa_tfbfdr_live_20261015.xml` (+ the Central district feed):
 
-* The development sandbox **cannot reach** cfa.vic.gov.au, bom.gov.au or
-  emergency.vic.gov.au (the egress proxy blocks them), so the live XML was
-  **not** inspected directly.
-* The statewide feed URL and the district-feed family are listed on CFA's RSS
-  page and in the Victorian Government data catalogue
-  (data.vic.gov.au, "CFA data feeds for Incidents, Total Fire Bans & Fire
-  Danger Ratings and latest news"). District URLs following the
-  `<slug>-firedistrict_rss.xml` pattern are confirmed there for **Central,
-  North Central and West and South Gippsland**; the other six are inferred
-  from the pattern — which is why district feeds are off by default.
-* The item structure (date in the title, TFB section before a "Fire Danger
-  Ratings" heading, `District: RATING` lines) was confirmed from the source of
-  an open-source Home Assistant integration that parses this exact feed
-  (`joelg12345/victoria-fire-danger`).
+* **5 items**: today + 4 days, titled `Thursday, 15 October 2026`.
+* Each item: a statewide sentence (`Today, Thu, 15 Oct 2026 is not currently a
+  day of Total Fire Ban.`), then one TFB line per district
+  (`Central: NO - RESTRICTIONS MAY APPLY`), then `Fire Danger Ratings` /
+  `Bureau of Meteorology forecast issued at: Thursday, 15 October 2026 05:30
+  AM`, then `District: RATING` lines (`MODERATE`, `NO RATING`, …).
+* **The 5th day has no "forecast issued at" line and is all `NO RATING`** — a
+  placeholder before the Bureau has forecast it. It is recognised and NOT
+  stored; it is collected once it carries an issue time.
+* **The BoM issue time is the real forecast time** and is stored as
+  `issue_ts`; an amendment is timed by it (falling back to when the tool saw
+  it).
+* District feeds (`<slug>-firedistrict_rss.xml`) carry one district, the TFB
+  sentence only, and a legend line "Displays when Total Fire Ban in force"
+  that appears on EVERY item — it is ignored, never read as a ban.
+* Not yet seen live: a **Total Fire Ban day** (wording assumed
+  `District: YES - TOTAL FIRE BAN IN FORCE`; anything other than a clear YES/NO
+  is UNKNOWN and flagged) and a **multi-rating value** (none published).
 * **CFA terms:** the feeds are for personal, non-commercial use, must be used
   as provided, and a website showing them should link back to CFA (the page
   does). Catalogue licence metadata disagrees (CC-BY 3.0 vs 4.0); CFA's own
@@ -48,10 +53,10 @@ Gaps that matter:
 * **No archive.** CFA publishes today + 3 days only. Past ratings cannot be
   fetched, so **backfill can only re-apply what this tool already stored**
   (or what someone enters as a correction). Nothing is reconstructed.
-* **Issue time.** Items carry a `pubDate`; with a feed regenerated every
-  minute it may be the generation time rather than the forecast's issue time.
-  It is stored (`issue_ts`) but revisions are detected by **content**, and
-  "when we saw it" is always recorded alongside.
+* **Issue time.** The channel `pubDate` is just when CFA regenerated the
+  feed (every minute); the forecast's own time is the "forecast issued at"
+  line. Revisions are detected by **content**; both the issue time and "when
+  we saw it" are recorded.
 * **Multiple ratings per district.** The feed shows one line per district.
   Victoria rates per fire weather district, so a second rating in the same
   district on the same day is expected to appear either as a value naming more
@@ -125,12 +130,16 @@ calendar day** (not "a multi-day forecast"). Detected from:
 
 1. **A published value naming more than one rating** — `High and Extreme`,
    `HIGH/EXTREME`, or the district listed twice with different ratings.
-2. **An amendment during the day** — the rating current at midnight differs
-   from one first seen after `multi_amendment_after` (06:00). A revision seen
-   before 06:00 is treated as the day's forecast being finalised, not a second
-   rating. The comment records the periods: `Central: High until 13:40,
-   Extreme from 13:40 (amended on the day)`. Times are when the tool *saw* the
-   change, so they are only as precise as the collection interval.
+2. **An amendment during the day** — this is what the workbook's own note on
+   Multi Day asks ("YES/NO - did the FDR change during the day"). The rating
+   current at midnight differs from one issued after `multi_amendment_after`
+   (06:00); a revision issued before 06:00 is the day's forecast being
+   finalised, not a second rating. Times are the BoM "forecast issued at"
+   time (else when the tool first saw it). The comment records the periods:
+   `Central: High until 13:30, Extreme from 13:30 (amended on the day)`.
+
+Multi Day is only written once the day is OVER — whether the rating changed
+during the day can't be known at 9 am.
 
 Multi Day is **No** only when all nine districts are confirmed with one rating
 each; otherwise it stays blank and the day is listed for review.
@@ -159,6 +168,33 @@ So openpyxl is used **read-only** (discovery), and the write edits only the
 target `<c>` elements inside the one worksheet's XML, sets
 `fullCalcOnLoad="1"` so Excel recalculates the summaries on open, and copies
 every other part of the file byte-for-byte.
+
+### The real workbook (FDR Daily Statistics Spreadsheet - 2026-27.xlsx)
+
+Checked on the copy supplied 15 Oct 2026 (`python -m app.modules.fdr inspect`):
+
+* `Sheet1`; a summary table in rows 2–8 (`=COUNTIF(G12:INDEX(G:G,…), C3)` per
+  rating × district) that also names every district — skipped because it has
+  no Date column; the data header is **row 11**; dates 1 Jul 2026 – 30 Jun
+  2027 in E12:E376.
+* Columns: C `TFB declared (Yes/No)` · D `Multi Day` (note: "did the FDR change
+  during the day") · E `Date` · G Mallee · H Wimmera · I South West · J Northern
+  Country · K North Central · L Central · M North East · N West and South
+  Gippsland · O East Gippsland · P Comments. (Not CFA's order — mapped by
+  header.)
+* Dropdowns live on the `List` sheet as Excel-extension validations:
+  ratings `Pick Rating…. / No Rating / Moderate / High / Extreme /
+  Catastrophic`, TFB and Multi Day `YES / NO`. **`Pick Rating….` is the
+  prompt pre-filled in days not yet entered — treated as empty.**
+* TFB convention: `YES`/`NO` = any district (`tfb_mode` auto → any).
+* Rows to 15 Oct were entered by hand. With the live feed of 15 Oct the tool
+  planned **zero** changes — every value already matched. Simulating the next
+  morning it wrote D118 (`NO`), C119 and G119:O119 into the prompts, changing
+  only `sheet1.xml` and `workbook.xml`; recalculated in LibreOffice, the
+  summary counts rose by exactly those nine ratings.
+* No combined rating values exist in the dropdown, so a two-rating day's
+  district cell is left on the prompt with the detail in Comments (see §4) —
+  **confirm the reporting convention** and set `multi_rating_display`.
 
 ### Discovery (nothing is assumed by position)
 
@@ -328,23 +364,19 @@ at the same file on a synced drive.
 
 ## 10. Limitations and things to validate
 
-1. **Not yet verified against the live CFA feed** (blocked from the build
-   environment). The parser works by content, so wording differences are
-   tolerated, but the first live runs should be checked on the Intel page
-   (Revision history shows the text exactly as published). Replace
-   `tests/fixtures/cfa_tfbfdr_sample.xml` (constructed test data) with a saved
-   copy of the real feed.
-2. **The real workbook was not available.** The tests use a workbook built to
-   the described layout (C/D/E/G–O/P, row 12, FY 2026-27). Run `inspect` on
-   the real one and confirm: the sheet, the column mapping, the TFB convention
-   and the dropdown spellings. Then set `tfb_mode` and `multi_rating_display`
-   explicitly.
+1. **Verified against the live feed and the real workbook (15 Oct 2026)**, but
+   no Total Fire Ban day or multi-rating value has been seen live yet; their
+   wording is assumed and anything unclear is flagged, not guessed.
+2. **Cells already filled by hand that differ from CFA** are never overwritten
+   (flagged instead) — correct them, or rerun with `--force` deliberately.
 3. **Multi Day reporting convention** (highest vs combined vs blank) must be
    confirmed with whoever owns the statistics; default leaves the cell blank.
-4. **Same-day amendment times** are when the tool noticed, to the nearest
-   collection interval.
+4. **Same-day amendment times** use the BoM "forecast issued at" time when the
+   feed gives one, else when the tool noticed (to the nearest collection
+   interval).
 5. **No historical backfill from CFA** — only from this tool's own history.
-6. District feeds: URL pattern confirmed for three districts only.
+6. District feeds: all nine URLs confirmed live (15 Oct 2026); off by default
+   only because they repeat the statewide feed at nine times the requests.
 7. BoM is not used: no official BoM FDR/TFB endpoint could be verified from
    here, and inventing one was out of scope.
 

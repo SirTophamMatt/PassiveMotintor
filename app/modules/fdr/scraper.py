@@ -6,8 +6,7 @@ Sources, in priority order (``resolve.SOURCE_PRIORITY``):
 1. ``cfa-state`` — CFA's statewide "Total Fire Bans and Fire Danger Ratings"
    RSS (all nine districts, today + 3 days). Primary.
 2. ``cfa-district`` — the nine per-district CFA feeds. OFF by default
-   (``fdr.district_feeds``): the URL pattern is confirmed in the data.vic
-   catalogue for Central, North Central and West and South Gippsland only, and
+   (``fdr.district_feeds``): all nine URLs answer (checked 15 Oct 2026), but
    it is nine more requests per run for what is normally the same information.
    When on, each is a cross-check; a disagreement with the state feed is
    flagged, never silently resolved.
@@ -74,15 +73,18 @@ def _store_feed(conn, source, url, hint, body, result, when, run_id, counts):
     for day in result.days:
         expected = [hint] if hint else model.DISTRICTS
         for d in expected:
-            dr = day.ratings.get(d)
-            if dr is None:
+            dr = None if day.unissued else day.ratings.get(d)
+            if dr is None and day.unissued:
+                pass        # placeholder day: no forecast yet, nothing to store
+            elif dr is None:
                 store.add_flag(conn, day.valid_date.isoformat(), d, "missing",
                                f"{source}: no rating published for {d}", when)
                 continue
-            counts["retrieved"] += 1
-            counts[_bucket(store.record_rating(
-                conn, day.valid_date, d, source, dr, issued=day.issued, when=when,
-                raw_id=raw_id, run_id=run_id, url=url))] += 1
+            else:
+                counts["retrieved"] += 1
+                counts[_bucket(store.record_rating(
+                    conn, day.valid_date, d, source, dr, issued=day.issued, when=when,
+                    raw_id=raw_id, run_id=run_id, url=url))] += 1
             ts = day.tfb.get(d)
             if ts is not None:
                 store.record_tfb(conn, day.valid_date, d, source, ts,

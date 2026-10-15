@@ -17,7 +17,7 @@ import openpyxl
 import pytest
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import PatternFill
-from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.comments import Comment
 
 from app import database
 from app.modules.fdr import model, parse, resolve, scraper, store, workbook
@@ -83,7 +83,7 @@ def test_parse_normal_day():
     assert day.ratings["Mallee"].ratings == ["Extreme"]
     assert day.ratings["West and South Gippsland"].ratings == ["Moderate"]
     assert day.tfb["Mallee"].status == "YES" and day.tfb["Central"].status == "NO"
-    assert day.issued.isoformat() == "2026-10-15T05:10:00+11:00"
+    assert day.issued.isoformat() == "2026-10-15T05:30:00+11:00"   # BoM issue time
 
 
 def test_statewide_no_tfb_statement_is_explicit_no():
@@ -133,6 +133,44 @@ def test_garbage_feed_reports_a_problem():
     assert res.days == []
 
 
+LIVE = load_fixture("cfa_tfbfdr_live_20261015.xml")
+LIVE_CENTRAL = load_fixture("cfa_central_live_20261015.xml")
+
+
+def test_live_feed_captured_15_oct_2026():
+    """The real CFA statewide feed: 5 items, the 5th a placeholder."""
+    res = parse.parse_feed(LIVE, fetched_at=at(D15, 15))
+    assert [d.valid_date for d in res.days] == [D15 + timedelta(days=i) for i in range(5)]
+    assert [d.unissued for d in res.days] == [False] * 4 + [True]
+    assert res.days[0].issued.isoformat() == "2026-10-15T05:30:00+11:00"
+    today = res.days[0]
+    assert {d: r.ratings[0] for d, r in today.ratings.items()} == {
+        "Central": "Moderate", "East Gippsland": "Moderate", "Mallee": "Moderate",
+        "North Central": "Moderate", "North East": "Moderate",
+        "Northern Country": "No Rating", "South West": "No Rating",
+        "West and South Gippsland": "Moderate", "Wimmera": "No Rating"}
+    assert all(r.recognised for r in today.ratings.values())
+    assert {t.status for t in today.tfb.values()} == {"NO"} and len(today.tfb) == 9
+    assert today.tfb["Mallee"].raw == "Mallee: NO - RESTRICTIONS MAY APPLY"
+
+
+def test_live_placeholder_day_is_not_stored(db):
+    s = scraper.run("test", fetcher=fetcher(LIVE), when=at(D15, 15))
+    assert s["status"] == "ok" and s["inserted"] == 36          # 4 issued days x 9
+    assert store.forecasts(date(2026, 10, 19), date(2026, 10, 19)).empty
+    assert store.open_flags().empty
+
+
+def test_live_district_feed_legend_is_not_a_ban():
+    """Every district item ends 'Displays when Total Fire Ban in force' (an
+    icon legend) — it must never read as a declaration."""
+    res = parse.parse_feed(LIVE_CENTRAL, district_hint="Central", fetched_at=at(D15, 15))
+    day = res.days[0]
+    assert day.ratings["Central"].ratings == ["Moderate"]
+    assert day.tfb["Central"].status == "NO"
+    assert list(day.ratings) == ["Central"]
+
+
 # --------------------------------------------------------------------------- #
 # Collection + history
 # --------------------------------------------------------------------------- #
@@ -159,7 +197,7 @@ def test_duplicate_retrieval_adds_nothing(db):
 
 def test_amendment_is_a_new_revision(db):
     run()
-    amended = FEED.replace(b"<p>Central: HIGH</p>", b"<p>Central: EXTREME</p>", 1)
+    amended = FEED.replace(b"Central: HIGH&lt;br&gt;", b"Central: EXTREME&lt;br&gt;", 1)
     s = run(amended, when=at(D15, 13, 40))
     assert s["updated"] == 1
     hist = store.forecasts(D15, D15)
@@ -170,7 +208,7 @@ def test_amendment_is_a_new_revision(db):
 
 def test_unrecognised_value_never_replaces_a_good_one(db):
     run()
-    garbled = FEED.replace(b"<p>Mallee: EXTREME</p>", b"<p>Mallee: TBA</p>", 1)
+    garbled = FEED.replace(b"Mallee: EXTREME&lt;br&gt;", b"Mallee: TBA&lt;br&gt;", 1)
     run(garbled, when=at(D15, 7))
     cur = store.forecasts(D15, D15, current_only=True)
     assert cur[cur.district == "Mallee"]["rating"].iloc[0] == "Extreme"
@@ -247,18 +285,21 @@ def test_multi_from_published_values(db):
 
 def test_multi_from_an_amendment_during_the_day(db):
     run(when=at(D15, 5))
-    amended = FEED.replace(b"<p>Central: HIGH</p>", b"<p>Central: EXTREME</p>", 1)
+    # CFA re-issues: the day's "forecast issued at" moves to 1:30 PM. The
+    # tool sees it at 13:40, but the change took effect when BoM issued it.
+    amended = FEED.replace(b"Central: HIGH&lt;br&gt;", b"Central: EXTREME&lt;br&gt;", 1) \
+        .replace(b"15 October 2026 05:30 AM", b"15 October 2026 01:30 PM", 1)
     run(amended, when=at(D15, 13, 40))
     rec = resolve.resolve_day(D15, now=at(D15, 18))
     c = rec.districts["Central"]
     assert c.multi and rec.multi == "YES"
     assert c.ratings == ["Extreme", "High"]
-    assert c.multi_detail == "High until 13:40, Extreme from 13:40 (amended on the day)"
+    assert c.multi_detail == "High until 13:30, Extreme from 13:30 (amended on the day)"
 
 
 def test_overnight_revision_finalises_rather_than_multi(db):
     # Forecast read the evening before, revised at 04:00 on the day.
-    early = FEED.replace(b"<p>Central: HIGH</p>", b"<p>Central: MODERATE</p>", 1)
+    early = FEED.replace(b"Central: HIGH&lt;br&gt;", b"Central: MODERATE&lt;br&gt;", 1)
     run(early, when=at(D15 - timedelta(days=1), 18))
     run(when=at(D15, 4))
     rec = resolve.resolve_day(D15, now=at(D15, 9))
@@ -313,35 +354,56 @@ def test_override_validation(db, args, err):
 # --------------------------------------------------------------------------- #
 # Workbook
 # --------------------------------------------------------------------------- #
+# The real workbook's validations: all three dropdowns are Excel extensions
+# (lists on the "List" sheet), exactly as in FDR Daily Statistics 2026-27.
 X14_EXT = (
     '<extLst><ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}" '
     'xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">'
-    '<x14:dataValidations count="1" '
+    '<x14:dataValidations count="3" '
     'xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">'
     '<x14:dataValidation type="list" allowBlank="1" showInputMessage="1" '
-    'showErrorMessage="1"><x14:formula1><xm:f>Lists!$B$1:$B$2</xm:f></x14:formula1>'
+    'showErrorMessage="1" promptTitle="Rating" prompt="Input rating"><x14:formula1>'
+    '<xm:f>List!$A$3:$A$%d</xm:f></x14:formula1>'
+    '<xm:sqref>G109:P109 G12:O108 G110:O376</xm:sqref></x14:dataValidation>'
+    '<x14:dataValidation type="list" allowBlank="1" showInputMessage="1" '
+    'showErrorMessage="1"><x14:formula1><xm:f>List!$B$3:$B$5</xm:f></x14:formula1>'
+    '<xm:sqref>C12:C376</xm:sqref></x14:dataValidation>'
+    '<x14:dataValidation type="list" allowBlank="1" showInputMessage="1" '
+    'showErrorMessage="1"><x14:formula1><xm:f>List!$C$3:$C$5</xm:f></x14:formula1>'
     '<xm:sqref>D12:D376</xm:sqref></x14:dataValidation></x14:dataValidations>'
     '</ext></extLst>')
+# Column order of the real workbook (NOT CFA's order).
+WB_DISTRICTS = ["Mallee", "Wimmera", "South West", "Northern Country", "North Central",
+                "Central", "North East", "West and South Gippsland", "East Gippsland "]
+COL = dict(zip([d.strip() for d in WB_DISTRICTS], "GHIJKLMNO"))
+PICK = "Pick Rating\u2026."
 
 
 def build_workbook(path, *, ratings=("No Rating", "Moderate", "High", "Extreme",
                                      "Catastrophic")):
+    """A workbook laid out like the real FDR Daily Statistics 2026-27: a
+    summary table (rows 2-8) that ALSO names every district, the data header at
+    row 11, real district order, YES/NO, a "Pick Rating…." prompt pre-filled in
+    days not yet entered, a cell note, and extension dropdowns. Values are
+    invented."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Daily Stats"
-    ws["A1"] = "FDR Daily Statistics 2026-27"
-    ws["A3"] = "Extreme days"
-    ws["B3"] = '=COUNTIF(G12:O376,"Extreme")'
-    ws["A4"] = "TFB days"
-    ws["B4"] = '=COUNTIF(C12:C376,"Yes")'
-    ws["G10"] = "Fire Danger Rating"
-    heads = {"C": "TFB Declared", "D": "Multi Day", "E": "Date", "F": "Day",
+    ws.title = "Sheet1"
+    ws["C2"], ws["E2"], ws["F2"] = "Rating", "Totals", "%"
+    for i, name in enumerate(WB_DISTRICTS):
+        ws.cell(row=2, column=7 + i, value=name)
+    for k, rating in enumerate(model.RATINGS):
+        r = 3 + k
+        ws[f"C{r}"], ws[f"D{r}"] = rating, k + 1
+        ws[f"E{r}"] = f"=SUM(G{r}:O{r})"
+        for col in "GHIJKLMNO":
+            ws[f"{col}{r}"] = f"=COUNTIF({col}12:INDEX({col}:{col},ROWS({col}:{col})), C{r})"
+    heads = {"C": "TFB declared (Yes/No)", "D": "Multi Day", "E": "Date", "F": "Day",
              "P": "Comments"}
     for col, h in heads.items():
         ws[f"{col}11"] = h
-    short = ["Mallee", "Wimmera", "Northern Country", "North Central", "North East",
-             "East Gippsland", "W&S Gippsland", "Central", "South West"]
-    for i, name in enumerate(short):
+    ws["D11"].comment = Comment("YES/NO - did the FDR change during the day", "SCC")
+    for i, name in enumerate(WB_DISTRICTS):
         ws.cell(row=11, column=7 + i, value=name)
     d = date(2026, 7, 1)
     r = 12
@@ -351,30 +413,29 @@ def build_workbook(path, *, ratings=("No Rating", "Moderate", "High", "Extreme",
         ws[f"E{r}"] = datetime(d.year, d.month, d.day) if r == 12 else f"=E{r - 1}+1"
         ws[f"E{r}"].number_format = "dd/mm/yyyy"
         ws[f"F{r}"] = f'=TEXT(E{r},"ddd")'
+        if d >= D15:                       # not yet entered: the prompt value
+            for col in "GHIJKLMNO":
+                ws[f"{col}{r}"] = PICK
         d += timedelta(days=1)
         r += 1
-    lists = wb.create_sheet("Lists")
-    for i, v in enumerate(ratings, 1):
+    lists = wb.create_sheet("List")
+    lists["A2"], lists["B2"], lists["C2"] = ("Rating", "TFB declared (YES/NO)",
+                                             "Multi Day (YES/NO)")
+    for i, v in enumerate((PICK,) + tuple(ratings), 3):
         lists[f"A{i}"] = v
-    lists["B1"], lists["B2"] = "Yes", "No"
-    dv = DataValidation(type="list", formula1="=Lists!$A$1:$A$%d" % len(ratings))
-    dv.add("G12:O376")
-    ws.add_data_validation(dv)
-    dv2 = DataValidation(type="list", formula1='"Yes,No"')
-    dv2.add("C12:C376")
-    ws.add_data_validation(dv2)
+    lists["B3"], lists["B4"] = "YES", "NO"
+    lists["C3"], lists["C4"] = "YES", "NO"
     ws.conditional_formatting.add(
         "G12:O376", CellIsRule(operator="equal", formula=['"Extreme"'],
                                fill=PatternFill("solid", start_color="F47E20")))
     ws["P20"] = "Hand-typed note"
     ws["G13"] = "High"            # someone typed a value for 2 Jul
     wb.save(path)
-    # Inject the extension dropdown on Multi Day, as Excel writes it when the
-    # list lives on another sheet.
     with zipfile.ZipFile(path) as z:
         parts = {n: z.read(n) for n in z.namelist()}
     sheet = parts["xl/worksheets/sheet1.xml"].decode()
-    sheet = sheet.replace("</worksheet>", X14_EXT + "</worksheet>")
+    sheet = sheet.replace("</worksheet>",
+                          X14_EXT % (2 + 1 + len(ratings)) + "</worksheet>")
     parts["xl/worksheets/sheet1.xml"] = sheet.encode()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for n, b in parts.items():
@@ -397,15 +458,17 @@ def cfg_with(**fdr):
 
 def test_inspect_finds_the_layout(wb_path):
     lay = workbook.inspect(wb_path)
-    assert lay.sheet == "Daily Stats" and lay.header_row == 11
+    # Row 2's summary table names every district too; it has no Date column,
+    # so the data header (row 11) is the one used.
+    assert lay.sheet == "Sheet1" and lay.header_row == 11
     assert (lay.tfb_col, lay.multi_col, lay.date_col, lay.comment_col) == ("C", "D", "E", "P")
-    assert lay.district_cols["West and South Gippsland"] == "M"
-    assert lay.district_cols["Mallee"] == "G" and lay.district_cols["South West"] == "O"
+    assert lay.district_cols == COL
     assert lay.rows[date(2026, 7, 1)] == 12
     assert lay.rows[date(2027, 6, 30)] == 376          # followed =E(n-1)+1
     assert lay.rows[D15] == 12 + (D15 - date(2026, 7, 1)).days
-    assert lay.allowed["G"][0] == "No Rating"
-    assert lay.allowed["D"] == ["Yes", "No"]           # read from the x14 extension
+    assert lay.allowed["G"][:2] == [PICK, "No Rating"]  # read from the x14 extension
+    assert lay.allowed["C"] == ["YES", "NO"] and lay.allowed["D"] == ["YES", "NO"]
+    assert lay.placeholders == {PICK.lower()}
     assert lay.tfb_mode == "any"
     assert "dropdown lists stored as Excel extensions" in lay.features
 
@@ -427,26 +490,29 @@ def test_update_writes_confirmed_values_and_preserves_everything(db, wb_path):
     run(when=at(D15, 20))
     with zipfile.ZipFile(wb_path) as z:
         before = {n: z.read(n) for n in z.namelist()}
-    res = workbook.update_file(wb_path, now=at(D16, 10))
+    res = workbook.update_file(wb_path, now=at(D17, 10))
     assert res.ok, res.error
     lay = res.layout
     r15, r16, r17 = _row(lay, D15), _row(lay, D16), _row(lay, D17)
     wb = openpyxl.load_workbook(wb_path)
-    ws = wb["Daily Stats"]
-    assert ws[f"G{r15}"].value == "Extreme" and ws[f"M{r15}"].value == "Moderate"
-    assert ws[f"C{r15}"].value == "Yes" and ws[f"D{r15}"].value == "No"
-    assert ws[f"C{r16}"].value == "No" and ws[f"D{r16}"].value == "Yes"
+    ws = wb["Sheet1"]
+    assert ws[f"G{r15}"].value == "Extreme"               # replaced the prompt
+    assert ws[f"{COL['West and South Gippsland']}{r15}"].value == "Moderate"
+    assert ws[f"I{r15}"].value == "High"                   # South West, real column
+    assert ws[f"C{r15}"].value == "YES" and ws[f"D{r15}"].value == "NO"
+    assert ws[f"C{r16}"].value == "NO" and ws[f"D{r16}"].value == "YES"
     # Central on the 16th had two ratings; the dropdown has no combined value,
     # so the cell is left for a person and the comment says why.
-    assert ws[f"N{r16}"].value is None
+    assert ws[f"{COL['Central']}{r16}"].value == PICK
     assert "Central: High and Extreme" in ws[f"P{r16}"].value
     assert ws[f"P{r16}"].value.startswith("[FDR]")
-    assert ws[f"G{r17}"].value is None                  # future day: not written
-    # Formulas, validations, conditional formats, extension untouched.
-    assert ws["B3"].value == '=COUNTIF(G12:O376,"Extreme")'
+    # The 17th is "today" but only seen two days ahead: preliminary, unwritten.
+    assert ws[f"G{r17}"].value == PICK and ws[f"D{r17}"].value is None
+    # Formulas, note, conditional formats, extension untouched.
+    assert ws["G3"].value == "=COUNTIF(G12:INDEX(G:G,ROWS(G:G)), C3)"
     assert ws[f"F{r15}"].value == f'=TEXT(E{r15},"ddd")'
+    assert ws["D11"].comment.text.startswith("YES/NO")
     assert ws.conditional_formatting
-    assert len(ws.data_validations.dataValidation) == 2
     with zipfile.ZipFile(wb_path) as z:
         after = {n: z.read(n) for n in z.namelist()}
         sheet = z.read("xl/worksheets/sheet1.xml")
@@ -478,27 +544,27 @@ def test_manual_values_are_never_overwritten(db, wb_path):
     run(when=at(D15, 5, 30))
     lay = workbook.inspect(wb_path)
     wb = openpyxl.load_workbook(wb_path)
-    wb["Daily Stats"][f"G{lay.rows[D15]}"] = "High"   # typed by a person
+    wb["Sheet1"][f"G{lay.rows[D15]}"] = "High"   # typed by a person
     wb.save(wb_path)        # (openpyxl save is fine for SETTING UP the test)
     res = workbook.update_file(wb_path, now=at(D15, 10))
     assert any(c == f"G{lay.rows[D15]}" for c, *_ in res.plan.blocked)
-    assert openpyxl.load_workbook(wb_path)["Daily Stats"][f"G{lay.rows[D15]}"].value == "High"
+    assert openpyxl.load_workbook(wb_path)["Sheet1"][f"G{lay.rows[D15]}"].value == "High"
     assert (store.open_flags()["kind"] == "workbook-blocked").any()
     # --force overrides.
     res = workbook.update_file(wb_path, now=at(D15, 10), force=True)
-    assert openpyxl.load_workbook(wb_path)["Daily Stats"][f"G{lay.rows[D15]}"].value == "Extreme"
+    assert openpyxl.load_workbook(wb_path)["Sheet1"][f"G{lay.rows[D15]}"].value == "Extreme"
 
 
 def test_amendment_updates_a_value_this_tool_wrote(db, wb_path):
     run(when=at(D15, 5, 30))
     workbook.update_file(wb_path, now=at(D15, 10))
-    amended = FEED.replace(b"<p>Mallee: EXTREME</p>", b"<p>Mallee: CATASTROPHIC</p>", 1)
-    run(amended, when=at(D15, 5, 45))     # before the 06:00 cut: not multi
+    amended = FEED.replace(b"Mallee: EXTREME&lt;br&gt;", b"Mallee: CATASTROPHIC&lt;br&gt;", 1)
+    run(amended, when=at(D15, 5, 45))     # issued 05:30, before the 06:00 cut: not multi
     res = workbook.update_file(wb_path, now=at(D15, 11))
     r = res.layout.rows[D15]
     assert [c.cell for c in res.plan.changes] == [f"G{r}"]
     assert "amended" in res.plan.changes[0].reason
-    assert openpyxl.load_workbook(wb_path)["Daily Stats"][f"G{r}"].value == "Catastrophic"
+    assert openpyxl.load_workbook(wb_path)["Sheet1"][f"G{r}"].value == "Catastrophic"
 
 
 def test_user_comment_is_kept_and_tool_segment_replaced():
@@ -515,7 +581,7 @@ def test_combined_value_used_when_the_dropdown_has_one(db, tmp_path, monkeypatch
     run(when=at(D15, 20))
     res = workbook.update_file(path, now=at(D16, 10))
     r = res.layout.rows[D16]
-    assert openpyxl.load_workbook(path)["Daily Stats"][f"N{r}"].value == "High/Extreme"
+    assert openpyxl.load_workbook(path)["Sheet1"][f"L{r}"].value == "High/Extreme"
 
 
 def test_highest_policy(db, wb_path):
@@ -523,7 +589,7 @@ def test_highest_policy(db, wb_path):
     res = workbook.update_file(wb_path, now=at(D16, 10),
                                cfg=cfg_with(multi_rating_display="highest"))
     r = res.layout.rows[D16]
-    assert openpyxl.load_workbook(wb_path)["Daily Stats"][f"N{r}"].value == "Extreme"
+    assert openpyxl.load_workbook(wb_path)["Sheet1"][f"L{r}"].value == "Extreme"
 
 
 def test_formula_cells_are_never_written(db, tmp_path, monkeypatch):
@@ -531,11 +597,11 @@ def test_formula_cells_are_never_written(db, tmp_path, monkeypatch):
     path = build_workbook(str(tmp_path / "wb.xlsx"))
     lay = workbook.inspect(path)
     wb = openpyxl.load_workbook(path)
-    wb["Daily Stats"][f"D{lay.rows[D15]}"] = '=IF(COUNTA(G{0}:O{0})>9,"Yes","No")'.format(
+    wb["Sheet1"][f"D{lay.rows[D15]}"] = '=IF(COUNTA(G{0}:O{0})>9,"Yes","No")'.format(
         lay.rows[D15])
     wb.save(path)
     run(when=at(D15, 5, 30))
-    res = workbook.update_file(path, now=at(D15, 10))
+    res = workbook.update_file(path, now=at(D16, 10))
     assert any(c == f"D{lay.rows[D15]}" and "formula" in why
                for c, _, _, _, why in res.plan.blocked)
 
@@ -593,7 +659,7 @@ def test_duplicate_dates_are_noted(tmp_path, monkeypatch):
     monkeypatch.setattr(workbook, "BASE_DIR", str(tmp_path))
     path = build_workbook(str(tmp_path / "wb.xlsx"))
     wb = openpyxl.load_workbook(path)
-    wb["Daily Stats"]["E14"] = datetime(2026, 7, 1)   # a mistyped date
+    wb["Sheet1"]["E14"] = datetime(2026, 7, 1)   # a mistyped date
     wb.save(path)
     lay = workbook.inspect(path)
     assert any("appears on rows" in n for n in lay.notes)

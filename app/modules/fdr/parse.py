@@ -51,12 +51,17 @@ _NEG = re.compile(r"\b(no|not|nil|none)\b", re.I)
 _POS = re.compile(r"\b(declared|in force|applies|current)\b", re.I)
 _TFB_WORD = re.compile(r"total\s+fire\s+bans?|\btfbs?\b", re.I)
 _STATEWIDE_NO = re.compile(
+    r"\bis\s+not\s+(currently\s+)?a\s+day\s+of\s+total\s+fire\s+ban\b|"
     r"\bno\s+(total\s+fire\s+bans?|tfbs?)\b|\bthere\s+(are|is)\s+(currently\s+)?no\s+"
     r"(total\s+fire\s+bans?|tfbs?)\b|\b(total\s+fire\s+bans?|tfbs?)\s+(has|have)\s+not\s+been",
     re.I)
 _STATEWIDE_YES = re.compile(
     r"\b(whole|all|entire)\s+(of\s+)?(the\s+)?(state|victoria)\b|\ball\s+(fire\s+)?"
     r"districts\b|\bstate-?wide\b", re.I)
+# "Bureau of Meteorology forecast issued at: Thursday, 15 October 2026 05:30 AM"
+_ISSUED_RE = re.compile(r"forecast\s+issued\s+at\s*:?\s*(.+)$", re.I)
+_ISSUED_FORMATS = ("%A, %d %B %Y %I:%M %p", "%d %B %Y %I:%M %p", "%A, %d %B %Y %H:%M",
+                   "%A %d %B %Y %I:%M %p", "%A, %d %b %Y %I:%M %p")
 _BLOCK_TAGS = ("p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6",
                "ul", "ol", "table", "section")
 
@@ -79,7 +84,12 @@ class TfbStatus:
 class DayFeed:
     valid_date: date
     title: str
-    issued: datetime = None          # item pubDate (feed time), if any
+    issued: datetime = None          # BoM forecast issue time ("forecast issued at")
+    feed_time: datetime = None       # item/channel pubDate: when CFA generated the feed
+    # True when other days in the same feed carry a BoM issue time and this one
+    # does not: CFA lists a fifth day of "NO RATING" placeholders before the
+    # Bureau has forecast it. Its ratings are not a forecast and are not stored.
+    unissued: bool = False
     ratings: dict = field(default_factory=dict)   # district -> DistrictRating
     tfb: dict = field(default_factory=dict)       # district -> TfbStatus
     text: str = ""
@@ -120,11 +130,27 @@ def title_date(title):
         d = date(int(m.group(3)), month, int(m.group(1)))
     except ValueError:
         return None, f"impossible date in item title {title!r}"
-    named = [w for w in _WEEKDAYS if re.search(r"\b" + w + r"\b", title, re.I)]
+    named = [w for w in _WEEKDAYS
+             if re.search(r"\b(" + w + "|" + w[:3] + r")\b", title, re.I)]
     if named and _WEEKDAYS[d.weekday()] not in named:
         return None, (f"item title {title!r}: {named[0].title()} does not fall on "
                       f"{d.isoformat()}")
     return d, None
+
+
+def issue_time(lines):
+    """The BoM forecast issue time named in a day's text, or None."""
+    for line in lines:
+        m = _ISSUED_RE.search(line)
+        if not m:
+            continue
+        txt = re.sub(r"\s+", " ", m.group(1)).strip().rstrip(".")
+        for fmt in _ISSUED_FORMATS:
+            try:
+                return datetime.strptime(txt, fmt).replace(tzinfo=model.TZ)
+            except ValueError:
+                pass
+    return None
 
 
 def html_lines(fragment):
@@ -137,14 +163,16 @@ def html_lines(fragment):
     for br in soup.find_all("br"):
         br.replace_with("\n")
     for cell in soup.find_all(["td", "th"]):
-        cell.append(": ")
+        cell.append("\x1f")          # cell boundary; becomes ": " below
     for tag in soup.find_all(_BLOCK_TAGS):
         tag.append("\n")
     text = soup.get_text("").replace(" ", " ")
     out = []
     for line in text.splitlines():
+        # Only the cell markers are turned into ": " — a real colon inside
+        # the text ("05:30 AM") must survive untouched.
+        line = re.sub(r"\s*\x1f[\s\x1f]*", ": ", line)
         line = re.sub(r"\s+", " ", line).strip(" :")
-        line = re.sub(r"(\s*:\s*)+", ": ", line)
         if line:
             out.append(line)
     return out
@@ -271,8 +299,15 @@ def parse_feed(body, district_hint=None, fetched_at=None):
         desc = item.findtext("description") or ""
         lines = html_lines(desc)
         d, problem = title_date(title)
-        if d is None and lines:
-            d, _ = title_date(lines[0])
+        # The description repeats the date ("Today, Thu, 15 Oct 2026 is ...").
+        # It stands in only when the title has NO date; a title whose date is
+        # wrong is rejected, and the two must agree when both are present.
+        desc_d = title_date(lines[0])[0] if lines else None
+        if d is None and problem and problem.startswith("no date"):
+            d = desc_d
+        elif d is not None and desc_d is not None and desc_d != d:
+            res.problems.append(f"item {title!r}: description is dated {desc_d}; ignored")
+            continue
         if d is None:
             res.problems.append(problem)
             continue
@@ -286,7 +321,10 @@ def parse_feed(body, district_hint=None, fetched_at=None):
         seen.add(d)
         ratings, tfb, problems = parse_day_text(lines, district_hint)
         res.days.append(DayFeed(
-            valid_date=d, title=title,
-            issued=_rfc822(item.findtext("pubDate")) or res.channel_issued,
+            valid_date=d, title=title, issued=issue_time(lines),
+            feed_time=_rfc822(item.findtext("pubDate")) or res.channel_issued,
             ratings=ratings, tfb=tfb, text="\n".join(lines), problems=problems))
+    if any(d.issued for d in res.days):
+        for d in res.days:
+            d.unissued = d.issued is None
     return res

@@ -13,10 +13,13 @@ Rules
   record only if it was still being published within ``confirm_window_hours``
   before D began, or during D (``last_seen``). A 4-day-ahead forecast nobody
   re-checked (collector down) stays *preliminary* and is never written as fact.
-* **Multi Day** = more than one rating applied within a district on the day:
+* **Multi Day** = more than one rating applied within a district on the day
+  (the workbook's own note on Multi Day: "did the FDR change during the day"):
   (a) the source published more than one rating for the district, or
   (b) the rating was amended DURING the day — the value current at midnight
-      differs from one noticed after ``multi_amendment_after`` (06:00 default;
+      differs from one issued after ``multi_amendment_after`` (06:00 default;
+      times are the BoM "forecast issued at" time the feed states, else when
+      the tool first saw the revision;
       an overnight revision is the day's forecast being finalised, not a
       second rating). Both are recorded in fdr_rating_details.
   Multi Day is NO only when all nine districts are confirmed with one rating
@@ -99,25 +102,40 @@ def _fmt(epoch):
     return datetime.fromtimestamp(epoch, model.TZ).strftime("%H:%M")
 
 
+def effective_epoch(row):
+    """When a revision took effect: the BoM forecast issue time the feed
+    states, else when this tool first saw it. An issue time later than the
+    sighting would be nonsense (clock skew), so the sighting wins then."""
+    seen = row["retrieved_epoch"]
+    ts = row.get("issue_ts")
+    if isinstance(ts, str) and ts:
+        try:
+            return min(seen, datetime.fromisoformat(ts).timestamp())
+        except ValueError:
+            pass
+    return seen
+
+
 def _same_day_changes(rows, d, after):
     """Ratings in force during day D for one source, from its revision rows
     (ok rows only, ordered by revision): [(ratings, from_epoch, to_epoch)]."""
     start, end = model.day_start(d).timestamp(), model.day_end(d).timestamp()
     cutoff = datetime.combine(d, after, tzinfo=model.TZ).timestamp()
-    before = [r for r in rows if r["retrieved_epoch"] < start]
-    during = [r for r in rows if start <= r["retrieved_epoch"] < end]
-    seq = ([before[-1]] if before else []) + during
+    eff = [(effective_epoch(r), r) for r in rows]
+    before = [r for t, r in eff if t < start]
+    during = [(t, r) for t, r in eff if start <= t < end]
+    seq = ([(start, before[-1])] if before else []) + during
     if not seq:
         return []
-    # Revisions noticed before the cutoff finalise the day's forecast: they
+    # Revisions issued before the cutoff finalise the day's forecast: they
     # replace, rather than add to, what came before.
-    while len(seq) > 1 and seq[1]["retrieved_epoch"] < cutoff:
+    while len(seq) > 1 and seq[1][0] < cutoff:
         seq = seq[1:]
     out = []
-    for i, r in enumerate(seq):
+    for i, (t, r) in enumerate(seq):
         ratings = json.loads(r["ratings_json"] or "[]")
-        frm = max(r["retrieved_epoch"], start) if i else start
-        to = seq[i + 1]["retrieved_epoch"] if i + 1 < len(seq) else end
+        frm = max(t, start) if i else start
+        to = seq[i + 1][0] if i + 1 < len(seq) else end
         if out and out[-1][0] == ratings:
             out[-1] = (ratings, out[-1][1], to)
         else:

@@ -134,8 +134,8 @@ DEFAULTS = {
         # Fire Danger Ratings + Total Fire Bans (Intel Tool, app/modules/fdr).
         # CFA's statewide RSS: today + 3 days, all nine districts.
         "state_feed_url": "https://www.cfa.vic.gov.au/cfa/rssfeed/tfbfdrforecast_rss.xml",
-        # Per-district feeds as a cross-check (9 extra requests per run). Off:
-        # the pattern is confirmed for 3 districts in the data.vic catalogue.
+        # Per-district feeds as a cross-check (9 extra requests per run; all nine
+        # URLs confirmed live 2026-10-15). Off: they repeat the statewide feed.
         "district_feeds": False,
         "district_feed_url": "https://www.cfa.vic.gov.au/cfa/rssfeed/{slug}-firedistrict_rss.xml",
         "interval_minutes": 30,
