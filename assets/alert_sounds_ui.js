@@ -14,6 +14,19 @@
     var state = null;
     var volumeSeen = false;   // first volume call is the page load, not a drag
 
+    // ▶ beside each category in the Settings panel: play that sound once.
+    // Works with sounds switched off (that is when people want to learn
+    // them); the click is the gesture that lets the browser start audio.
+    document.addEventListener("click", function (e) {
+        var btn = e.target.closest ? e.target.closest(".sound-play") : null;
+        if (!btn || !window.WDSounds) { return; }
+        e.preventDefault();
+        e.stopPropagation();
+        window.WDSounds.unlock();
+        var name = btn.getAttribute("data-sound");
+        setTimeout(function () { window.WDSounds.play(name); }, 60);
+    }, true);
+
     window.dash_clientside = window.dash_clientside || {};
     window.dash_clientside.wdsound = {
         toggle: function (_n, enabled) {

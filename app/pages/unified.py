@@ -371,8 +371,9 @@ def build_layers(on, source=live_source):
 
 
 def map_figure(on, dark, source=live_source, center=None, zoom=5.4,
-               uirevision="unified-map"):
-    """The shared map figure. Live and replay differ only in `source`."""
+               uirevision="unified-map", basemap="open-street-map"):
+    """The shared map figure. Live and replay differ only in `source`.
+    `basemap` is the tile style (the walls choose light/dark: app/basemap.py)."""
     fig = go.Figure()
     traces, fills = build_layers(on, source)
     for trace in traces:
@@ -384,7 +385,7 @@ def map_figure(on, dark, source=live_source, center=None, zoom=5.4,
         # look like, and Replay hits this on every quiet moment.
         fig.add_trace(go.Scattermap(lat=[], lon=[], mode="markers",
                                        showlegend=False, hoverinfo="skip"))
-    map_cfg = dict(style="open-street-map", center=center or VIC_CENTER, zoom=zoom)
+    map_cfg = dict(style=basemap, center=center or VIC_CENTER, zoom=zoom)
     if fills:
         map_cfg["layers"] = fills
     fig.update_layout(

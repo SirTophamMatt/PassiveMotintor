@@ -167,6 +167,20 @@ def components():
     ]
 
 
+def _category_label(sound, label):
+    """A category row: its name and a ▶ that plays the sound once, at the
+    current volume, so it can be learned (and the level checked) before a
+    real alert arrives. The button is inside the checkbox label on purpose —
+    a click on a button within a <label> does not toggle the checkbox — and
+    it is handled by a delegated listener in alert_sounds_ui.js, not a Dash
+    callback, because the click must reach WDSounds as the user gesture."""
+    return html.Span([
+        html.Span(label),
+        html.Button("▶", className="sound-play", type="button",
+                    title="Play this sound", **{"data-sound": sound}),
+    ], className="sound-cat-row")
+
+
 def toggle_button():
     """The sidebar control: on/off toggle, a settings button, and the
     (collapsed) settings panel. Volume and categories use Dash's own
@@ -189,9 +203,11 @@ def toggle_button():
             dcc.Slider(id="sound-volume", min=0, max=100, step=5,
                        value=DEFAULT_VOLUME, marks=None,
                        persistence=True, persistence_type="local"),
-            html.Div("Play sounds for", className="sound-panel-label"),
+            html.Div("Play sounds for  (▶ to hear one)",
+                     className="sound-panel-label"),
             dcc.Checklist(id="sound-categories",
-                          options=[{"label": label, "value": value}
+                          options=[{"label": _category_label(value, label),
+                                    "value": value}
                                    for value, label in CATEGORIES],
                           value=[value for value, _ in CATEGORIES],
                           className="sound-cats",

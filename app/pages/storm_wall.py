@@ -29,7 +29,7 @@ import time
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
-from app import auth, shell, situation, storm_areas, storm_demo
+from app import auth, basemap, shell, situation, storm_areas, storm_demo
 from app.modules.fire import data as fire_data
 from app.pages import fire_wall, flood_wall, wall
 
@@ -232,6 +232,7 @@ def layout(test=False):
                      "that started during it are counted. Warnings, power, "
                      "gauges and storm cells are always what is current.",
                      className="display-panel-note"),
+            *wall.map_style_option("stw-map-style"),
             html.Div("Remembered by this browser only.",
                      className="display-panel-note"),
         ], className="fw-options-panel"),
@@ -534,14 +535,15 @@ def map_sources(snap, layers):
     return source
 
 
-def map_figure(snap, focus, layers, dark):
+def map_figure(snap, focus, layers, dark, style=basemap.LIGHT_STYLE):
     """The wall map, centred on the area in focus (None = the whole state)."""
     from app.pages import unified
     layers = set(layers if layers is not None else DEFAULT_LAYERS)
     center, zoom = (focus.center, focus.zoom) if focus is not None else STATE_VIEW
     fig = unified.map_figure(["fire", "flood", "roads", "storm", "power"], dark,
                              source=map_sources(snap, layers), center=center,
-                             zoom=zoom, uirevision="storm-wall-map")
+                             zoom=zoom, uirevision="storm-wall-map",
+                             basemap=style)
     areas = snap.get("areas") or []
     extra = []
     if "areas" in layers:
@@ -561,7 +563,7 @@ def map_figure(snap, focus, layers, dark):
             text=[f"{a.name} ({len(a.of_role('incident'))})"
                   if a.of_role("incident") else a.name for a in areas],
             textposition="top center",
-            textfont=dict(size=14, color="#ffffff" if dark else "#111111"),
+            textfont=dict(size=14, color=wall.label_colour(style)),
             marker=dict(size=26, color="rgba(0, 200, 255, 0.35)"),
             hoverinfo="skip", showlegend=False))
     # `wdFocus` (assets/graph_calm.js): move the map when the focus changes,
@@ -647,10 +649,11 @@ def register_callbacks(app):
         Input("stw-layers", "value"),
         Input("stw-statewide", "value"),
         *options,
+        Input("stw-map-style", "value"),
         Input("theme-store", "data"),
         State("stw-test", "data"))
     def render(tick, _refresh, flashes, pinned, layers, statewide, link_km,
-               agencies, weather, event_id, dark, test):
+               agencies, weather, event_id, map_mode, dark, test):
         snap = snapshot(link_km, agencies, weather, event_id, test)
         areas = snap.get("areas") or []
         flash, flash_area = hot_flash(flashes, areas, time.time())
@@ -659,7 +662,8 @@ def register_callbacks(app):
             pinned, flash_area.key if flash_area is not None else None)
         focus = next((a for a in areas if a.key == focus_key), None)
         try:
-            fig = map_figure(snap, focus, layers, bool(dark))
+            fig = map_figure(snap, focus, layers, bool(dark),
+                             style=basemap.style(map_mode, dark))
         except Exception:
             log.exception("Storm wall: map failed")
             fig = no_update

@@ -26,7 +26,7 @@ from datetime import datetime
 import plotly.io as pio
 from dash import Input, Output, State, ctx, dcc, html, no_update
 
-from app import shell, situation
+from app import basemap, shell, situation
 from app.pages import wall
 
 log = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ def detect_new(seen, entries):
     return list(known | set(ids))[-500:], fresh
 
 
-def story(entry, dark, label=None, figure=True):
+def story(entry, dark, label=None, figure=True, style=basemap.LIGHT_STYLE):
     """A takeover-ready story: plain JSON for the browser store."""
     label = label or takeover_label(entry) or "UPDATE!"
     hold = TAKEOVER.get(entry["severity"], ("", 10_000))[1] or 10_000
@@ -120,20 +120,22 @@ def story(entry, dark, label=None, figure=True):
     }
     if figure:
         try:
-            out["figure"] = json.loads(pio.to_json(story_map(entry, dark)))
+            out["figure"] = json.loads(pio.to_json(story_map(entry, dark,
+                                                             style=style)))
         except Exception:
             log.exception("Newsroom: story map failed for %s", entry["id"])
     return out
 
 
-def story_map(entry, dark, zoom=STORY_ZOOM):
+def story_map(entry, dark, zoom=STORY_ZOOM, style=basemap.LIGHT_STYLE):
     from app.pages import unified
     lat, lon = entry.get("latitude"), entry.get("longitude")
     located = lat is not None and lon is not None
     fig = unified.map_figure(
         unified.DEFAULT_LAYERS, dark,
         center={"lat": lat, "lon": lon} if located else None,
-        zoom=zoom if located else 5.4, uirevision=f"news-{entry['id']}")
+        zoom=zoom if located else 5.4, uirevision=f"news-{entry['id']}",
+        basemap=style)
     fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
     if located:
         import plotly.graph_objects as go
@@ -171,7 +173,9 @@ def layout():
         dcc.Store(id="nw-seen", storage_type="memory"),
         dcc.Store(id="nw-queue", storage_type="memory", data=[]),
         dcc.Store(id="nw-stage", storage_type="memory", data={}),
-        wall.header(PATH, stale_id="nw-stale", extra=[replay, live]),
+        wall.header(PATH, stale_id="nw-stale", extra=[
+            wall.options_menu(wall.map_style_option("nw-map-style")),
+            replay, live]),
         html.Div([
             html.Span("WATCHDESK", className="nw-bug-brand"),
             html.Span("STATE EMERGENCY DESK", className="nw-bug-show"),
@@ -309,11 +313,13 @@ def register_callbacks(app):
         Output("nw-queue", "data"),
         Input("nw-refresh", "n_intervals"),
         Input("nw-replay", "n_clicks"),
+        Input("nw-map-style", "value"),
         Input("theme-store", "data"),
         State("nw-seen", "data"),
         State("nw-queue", "data"))
-    def refresh(_n, _replay, dark, seen, queue):
+    def refresh(_n, _replay, map_mode, dark, seen, queue):
         dark = bool(dark)
+        map_style = basemap.style(map_mode, dark)
         entries = feed()
         sit = situation.current()
         top = top_story(entries)
@@ -322,11 +328,11 @@ def register_callbacks(app):
         seen, fresh = detect_new(seen, entries)
         queue = [s for s in (queue or []) if now - s.get("queued", 0) < QUEUE_MAX_AGE]
         for entry in fresh[:QUEUE_LIMIT]:
-            queue.append(story(entry, dark))
+            queue.append(story(entry, dark, style=map_style))
         if ctx.triggered_id == "nw-replay":
             pick = next((e for e in entries if takeover_label(e)), None) or top
             if pick is not None:
-                queue.append(story(pick, dark))
+                queue.append(story(pick, dark, style=map_style))
         queue = queue[-QUEUE_LIMIT * 2:]
 
         items = crawl_items(entries)
@@ -340,8 +346,9 @@ def register_callbacks(app):
                   else "Quiet")
         banner = wall.stale_banner(sit)
         try:
-            fig = story_map(top, dark) if top else story_map(
-                {"id": "state", "latitude": None, "longitude": None}, dark)
+            fig = story_map(top, dark, style=map_style) if top else story_map(
+                {"id": "state", "latitude": None, "longitude": None}, dark,
+                style=map_style)
         except Exception:
             log.exception("Newsroom: desk map failed")
             fig = no_update
