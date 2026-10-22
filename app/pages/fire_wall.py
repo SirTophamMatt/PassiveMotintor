@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
-from app import auth, fire_areas, fire_demo, shell, situation
+from app import auth, basemap, fire_areas, fire_demo, shell, situation
 from app.pages import wall
 
 log = logging.getLogger(__name__)
@@ -219,6 +219,7 @@ def layout(test=False):
             html.Div("Red = burnt now but not at the start of the window; blue "
                      "= no longer mapped as burnt. The latest change breathes.",
                      className="display-panel-note"),
+            *wall.map_style_option("fiw-map-style"),
             html.Div("Remembered by this browser only.",
                      className="display-panel-note"),
         ], className="fw-options-panel"),
@@ -563,7 +564,8 @@ def burn_layers(snap, layers, now):
     return out
 
 
-def map_figure(snap, focus, layers, dark, now=None):
+def map_figure(snap, focus, layers, dark, now=None,
+               style=basemap.LIGHT_STYLE):
     """The wall map: VicEmergency incidents/warnings (shared renderer, so the
     warning areas match every other map), burn areas over them, centred on the
     area in focus. `focus` is an OperationArea or None for the whole state."""
@@ -587,7 +589,8 @@ def map_figure(snap, focus, layers, dark, now=None):
 
     center, zoom = (focus.center, focus.zoom) if focus is not None else STATE_VIEW
     fig = unified.map_figure(["fire"] if kinds else [], dark, source=source,
-                             center=center, zoom=zoom, uirevision="fire-wall-map")
+                             center=center, zoom=zoom, uirevision="fire-wall-map",
+                             basemap=style)
     extra = burn_layers(snap, layers, now)
 
     areas = snap.get("areas") or []
@@ -607,7 +610,7 @@ def map_figure(snap, focus, layers, dark, now=None):
             lon=[a.center["lon"] for a in areas],
             mode="markers+text", text=[a.name for a in areas],
             textposition="top center",
-            textfont=dict(size=14, color="#ffffff" if dark else "#111111"),
+            textfont=dict(size=14, color=wall.label_colour(style)),
             marker=dict(size=26, color="rgba(0, 200, 255, 0.35)"),
             hoverinfo="skip", showlegend=False))
     # `wdFocus` tells assets/graph_calm.js to move the map when the focus
@@ -698,10 +701,11 @@ def register_callbacks(app):
         Input("fiw-statewide", "value"),
         Input("fiw-link-km", "value"),
         Input("fiw-window", "value"),
+        Input("fiw-map-style", "value"),
         Input("theme-store", "data"),
         State("fiw-test", "data"))
     def render(tick, _refresh, flashes, pinned, layers, statewide, link_km,
-               window, dark, test):
+               window, map_mode, dark, test):
         snap = snapshot(link_km, window, test)
         areas = snap.get("areas") or []
         now_ts, now = time.time(), datetime.now()
@@ -712,7 +716,8 @@ def register_callbacks(app):
             flash_area.key if flash_area is not None else None)
         focus = next((a for a in areas if a.key == focus_key), None)
         try:
-            fig = map_figure(snap, focus, layers, bool(dark), now)
+            fig = map_figure(snap, focus, layers, bool(dark), now,
+                             style=basemap.style(map_mode, dark))
         except Exception:
             log.exception("Fire wall: map failed")
             fig = no_update

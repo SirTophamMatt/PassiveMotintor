@@ -32,7 +32,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
-from app import database, shell, situation
+from app import basemap, database, shell, situation
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.roads import data as roads_data
@@ -332,6 +332,7 @@ def layout():
                                     "value": "map"}],
                           value=["map"], className="display-options",
                           persistence=True, persistence_type="local"),
+            *wall.map_style_option("fw-map-style"),
             html.Div("Remembered by this browser only.",
                      className="display-panel-note"),
         ], className="fw-options-panel"),
@@ -692,7 +693,8 @@ def banner(flashes, gauges, now):
     return text, f"fw-banner fw-banner-on fw-{CLASS_KEYS.get(worst, 'minor')}"
 
 
-def map_figure(snap, layers, dark, shown, roads=None, incidents=None):
+def map_figure(snap, layers, dark, shown, roads=None, incidents=None,
+               style=basemap.LIGHT_STYLE):
     from app.pages import fire as fire_page
     from app.pages import unified
 
@@ -744,7 +746,8 @@ def map_figure(snap, layers, dark, shown, roads=None, incidents=None):
         on.append("roads")
     if kinds:
         on.append("fire")
-    fig = unified.map_figure(on, dark, source=source, uirevision="flood-wall-map")
+    fig = unified.map_figure(on, dark, source=source, uirevision="flood-wall-map",
+                             basemap=style)
 
     # Ring the gauges currently on screen, so the map says where they are.
     by_key = {g["key"]: g for g in snap["flooding"]}
@@ -755,7 +758,7 @@ def map_figure(snap, layers, dark, shown, roads=None, incidents=None):
             lat=[g["latitude"] for g in ring], lon=[g["longitude"] for g in ring],
             mode="markers+text", text=[g["station"] for g in ring],
             textposition="top center",
-            textfont=dict(size=14, color="#ffffff" if dark else "#111111"),
+            textfont=dict(size=14, color=wall.label_colour(style)),
             marker=dict(size=30, color="rgba(0, 200, 255, 0.35)"),
             hoverinfo="skip", showlegend=False))
     fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
@@ -864,8 +867,9 @@ def register_callbacks(app):
         Input("fw-event", "value"),
         Input("fw-road-causes", "value"),
         Input("fw-agencies", "value"),
+        Input("fw-map-style", "value"),
         Input("theme-store", "data"))
-    def refresh_map(_, layers, shown, event_id, causes, agencies, dark):
+    def refresh_map(_, layers, shown, event_id, causes, agencies, map_mode, dark):
         layers = layers if layers is not None else DEFAULT_LAYERS
         roads, _tag = road_selection(event_id, causes)
         if roads is None:               # unreadable: draw no roads, not all
@@ -874,4 +878,4 @@ def register_callbacks(app):
         if incidents is None:           # unreadable: draw no incidents, not all
             incidents = pd.DataFrame(columns=["feed_type"])
         return map_figure(current(), layers, bool(dark), shown, roads=roads,
-                          incidents=incidents)
+                          incidents=incidents, style=basemap.style(map_mode, dark))

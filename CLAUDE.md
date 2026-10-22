@@ -1374,6 +1374,21 @@ what should I be watching* — and is useful **on its own, before anyone generat
   `_WEATHER_INCIDENT_RE`) and the `location` format (locality after the last comma).
 - Tests: `tests/test_storm_wall.py`.
 
+## Wall map light/dark + sound previews (built 2026-10-22)
+- **Every wall's ⚙ Options has a "Map" choice** (`app/basemap.py`, `wall.map_style_option`):
+  Light (OSM, the default — what the walls always showed) · Dark (`carto-darkmatter`, token-free) ·
+  Follow the page theme · **Melbourne sunrise / sunset** (dark from sunset to sunrise, NOAA solar
+  equations, ~1 min accuracy, no dependency; the label quotes today's times). Per browser AND per
+  wall (`wall-` / `fw-` / `fiw-` / `stw-` / `nw-map-style`, `persistence="local"`). /wall and
+  /wall/news gained an Options popover (`wall.options_menu`) just for it. The switch lands on each
+  wall's normal map refresh. `unified.map_figure(basemap=…)` carries the style; labels drawn ON the
+  map follow the tiles (`wall.label_colour`), not the page theme. Every other map is unchanged (OSM).
+- **Sound preview:** each category in the Sounds ⚙ panel has a ▶ that plays that sound once at the
+  current volume, even with sounds switched off. The button sits inside the checkbox label (a click
+  on a button in a `<label>` never toggles the box) and is handled by a delegated click listener in
+  `alert_sounds_ui.js`, so the click is the user gesture WDSounds needs.
+- Tests: `tests/test_basemap.py`.
+
 ## Warnings never count as fires (2026-10-08)
 - **One definition of a fire:** `fire.data.is_fire(row)` — an INCIDENT (`feed_type` not `warning` /
   `burn-area`) whose `category1` is Fire. Every fire count/sort/label uses it (collector heartbeat

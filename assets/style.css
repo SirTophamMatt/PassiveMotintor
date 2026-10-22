@@ -93,6 +93,21 @@ html, body { height: 100%; }
 .sound-panel-label { color: var(--muted); margin: 2px 0; }
 .sound-panel .rc-slider { margin: 4px 0 10px; }
 .sound-cats label { display: flex; gap: 6px; align-items: center; margin: 3px 0; cursor: pointer; }
+.sound-cats .dash-options-list-option-text { flex: 1; min-width: 0; }
+.sound-cat-row { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.sound-play {
+    margin-left: auto;
+    flex: none;
+    padding: 0 7px;
+    line-height: 20px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+.sound-play:hover { border-color: var(--accent); color: var(--accent); }
 .sound-btn.sound-on { border-color: var(--accent); color: var(--accent); }
 html.wd-audio-locked .sound-btn.sound-on::after {
     content: "Click anywhere to activate";

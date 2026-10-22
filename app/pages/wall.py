@@ -12,7 +12,7 @@ the same as any other open tab.
 """
 from dash import Input, Output, dcc, get_asset_url, html
 
-from app import shell, situation
+from app import basemap, shell, situation
 from app.pages import overview
 
 # Every wall, for the switcher in the header. A new scenario wall is a module
@@ -44,7 +44,8 @@ def layout():
         dcc.Interval(id="wall-rotate", interval=ROTATE_SECONDS * 1000,
                      n_intervals=0),
         dcc.Interval(id="wall-clock-tick", interval=1_000, n_intervals=0),
-        header(shell.WALL_PATH, stale_id="wall-stale"),
+        header(shell.WALL_PATH, stale_id="wall-stale",
+               extra=[options_menu(map_style_option("wall-map-style"))]),
         html.Div(id="wall-tiles", className="wall-tiles"),
         html.Div([
             html.Div(dcc.Graph(id="wall-map", config={"displayModeBar": False},
@@ -81,6 +82,34 @@ def header(path, stale_id, extra=None):
         dcc.Link("Exit", href="/", className="btn"),
         html.Div(id="wall-clock", className="wall-clock"),
     ], className="wall-head")
+
+
+def map_style_option(id_):
+    """The "Map" choice every wall's Options carries: light / dark / follow
+    the theme / Melbourne sunrise-sunset (app/basemap.py). Per browser and per
+    wall, like the rest of a wall's options."""
+    return [
+        html.Div("Map", className="display-panel-label"),
+        dcc.RadioItems(id=id_, options=basemap.options(),
+                       value=basemap.DEFAULT_MODE, className="display-options",
+                       persistence=True, persistence_type="local"),
+    ]
+
+
+def options_menu(children):
+    """An ⚙ Options popover for a wall whose only option is the map."""
+    return html.Details([
+        html.Summary("⚙ Options", className="btn"),
+        html.Div([*children,
+                  html.Div("Remembered by this browser only.",
+                           className="display-panel-note")],
+                 className="fw-options-panel"),
+    ], className="fw-options")
+
+
+def label_colour(style):
+    """Text drawn on the map reads against the tiles, not the page theme."""
+    return "#ffffff" if style == basemap.DARK_STYLE else "#111111"
 
 
 def _brand():
@@ -153,11 +182,13 @@ def register_callbacks(app):
     @app.callback(
         Output("wall-map", "figure"),
         Input("wall-interval", "n_intervals"),
+        Input("wall-map-style", "value"),
         Input("theme-store", "data"))
-    def refresh_map(_, dark):
+    def refresh_map(_, map_mode, dark):
         from app.pages import unified
         fig = unified.map_figure(unified.DEFAULT_LAYERS, bool(dark),
-                                 uirevision="wall-map")
+                                 uirevision="wall-map",
+                                 basemap=basemap.style(map_mode, dark))
         fig.update_layout(margin=dict(l=0, r=0, t=0, b=0),
                           legend=dict(y=0.01, yanchor="bottom", x=0.01,
                                       font=dict(size=14)))
