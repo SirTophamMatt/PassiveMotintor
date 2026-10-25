@@ -1,5 +1,6 @@
 # Passive Monitor — Copyright (c) 2026 SirTophamMatt. All rights reserved.
 """Weather data queries and warning classification."""
+import json
 import re
 
 import pandas as pd
@@ -119,6 +120,123 @@ def warning_version_message(warning_id, issue_time):
     if df.empty:
         return None
     return df.iloc[0]["message"]
+
+
+# --- Warning AREAS (app/modules/weather/warning_area.py) --------------------
+# Where each active warning's area came from. "traced" is BoM's drawn area;
+# "districts" is VicEmergency's copy of the warning, whose polygons are the
+# whole forecast districts named — shown only when the drawn area could not be
+# traced, and always labelled so it is never mistaken for it.
+AREA_TRACED, AREA_DISTRICTS = "traced", "districts"
+AREA_SOURCE_LABELS = {
+    AREA_TRACED: "Drawn warning area (traced from BoM's map)",
+    AREA_DISTRICTS: "Whole forecast districts (VicEmergency) — drawn area not "
+                    "available",
+}
+
+
+def _polygon_parts(raw):
+    """Polygon coordinate lists from a stored GeoJSON geometry (any type)."""
+    try:
+        geom = json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(geom, dict):
+        return []
+    kind = geom.get("type")
+    if kind == "GeometryCollection":
+        return [p for g in geom.get("geometries") or [] for p in _polygon_parts(g)]
+    coords = geom.get("coordinates") or []
+    parts = [coords] if kind == "Polygon" else coords if kind == "MultiPolygon" else []
+    # VicEmergency carries the odd degenerate ring (two points): not an area.
+    return [p for p in parts if p and len(p[0]) >= 4]
+
+
+def district_areas():
+    """{warning_id: MultiPolygon geometry} from VicEmergency's live copies of
+    BoM warnings (feature ids are '<BoM product id>/<hash>')."""
+    df = database.read_df(
+        "SELECT source_id, geometry FROM fire_incidents "
+        "WHERE resolved = 0 AND source_org = 'AU/BOM' AND geometry IS NOT NULL")
+    out = {}
+    for sid, raw in zip(df.get("source_id", []), df.get("geometry", [])):
+        wid = str(sid or "").split("/", 1)[0]
+        parts = _polygon_parts(raw)
+        if wid and parts:
+            out.setdefault(wid, []).extend(parts)
+    return {k: {"type": "MultiPolygon", "coordinates": v} for k, v in out.items()}
+
+
+def _latest_traced_sql():
+    from app.modules.weather.warning_area import METHOD
+    return ("SELECT a.warning_id, a.issue_time AS area_issue_time, a.status, "
+            "       a.geojson, a.area_km2, a.detail FROM weather_warning_areas a "
+            "JOIN (SELECT warning_id, MAX(issue_time) AS mt "
+            "      FROM weather_warning_areas WHERE method = ? "
+            "      GROUP BY warning_id) m "
+            "ON a.warning_id = m.warning_id AND a.issue_time = m.mt "
+            "WHERE a.method = ?", [METHOD, METHOD])
+
+
+def current_warning_areas():
+    """Active warnings with their area: one row per warning, columns
+    warning_id, type, title, issue_time, expiry_time, status (the newest
+    issue's tracing outcome), geojson, area_km2, detail and area_source
+    (traced | districts | None)."""
+    sub, params = _latest_traced_sql()
+    df = database.read_df(
+        "SELECT w.warning_id, w.type, w.title, w.issue_time, w.expiry_time, "
+        "       a.area_issue_time, a.status, a.geojson, a.area_km2, a.detail "
+        "FROM weather_warnings w LEFT JOIN (" + sub + ") a "
+        "ON a.warning_id = w.warning_id WHERE w.active = 1 "
+        "ORDER BY w.issue_time DESC", params)
+    if df.empty:
+        df["area_source"] = []
+        return df
+    districts = district_areas()
+    sources, geoms = [], []
+    for wid, status, raw in zip(df["warning_id"], df["status"], df["geojson"]):
+        if status == "traced" and isinstance(raw, str):
+            sources.append(AREA_TRACED); geoms.append(raw)
+        elif wid in districts:
+            sources.append(AREA_DISTRICTS); geoms.append(json.dumps(districts[wid]))
+        else:
+            sources.append(None); geoms.append(None)
+    df["area_source"], df["geojson"] = sources, geoms
+    df["area_km2"] = [a if s == AREA_TRACED else None
+                      for s, a in zip(sources, df["area_km2"])]
+    return df
+
+
+def _plain(v):
+    """JSON-safe scalar: NaN/NaT -> None, timestamps -> ISO strings."""
+    if v is None or (not isinstance(v, str) and pd.isna(v)):
+        return None
+    return v.isoformat(sep=" ") if hasattr(v, "isoformat") else v
+
+
+def warning_areas_featurecollection(df=None):
+    """Active warning areas as a GeoJSON FeatureCollection (lon/lat, EPSG:4326)
+    — loads straight into QGIS, geojson.io or EM-COP. Warnings with no area at
+    all are left out."""
+    df = current_warning_areas() if df is None else df
+    features = []
+    for _, r in df.iterrows():
+        if not isinstance(r.get("geojson"), str):
+            continue
+        source = r.get("area_source")
+        features.append({"type": "Feature", "geometry": json.loads(r["geojson"]),
+                         "properties": {
+                             "warning_id": _plain(r.get("warning_id")),
+                             "title": _plain(r.get("title")),
+                             "type": _plain(r.get("type")),
+                             "issue_time": _plain(r.get("issue_time")),
+                             "expiry_time": _plain(r.get("expiry_time")),
+                             "area_source": source,
+                             "area_note": AREA_SOURCE_LABELS.get(source),
+                             "area_km2": _plain(r.get("area_km2")),
+                         }})
+    return {"type": "FeatureCollection", "features": features}
 
 
 def latest_rainfall():

@@ -19,6 +19,7 @@ from datetime import datetime
 from app import database, history
 from app.config import load_config
 from app.modules.weather import data as weather_data
+from app.modules.weather import warning_area
 
 log = logging.getLogger(__name__)
 
@@ -104,10 +105,12 @@ def _store_detail(warning_id, now):
         database.execute("UPDATE weather_warnings SET message=? WHERE warning_id=?",
                          [message, warning_id])
     if issue:  # only version rows with a real issue time (dedup key)
-        database.insert_rows("weather_warning_updates", [{
+        added = database.insert_rows("weather_warning_updates", [{
             "warning_id": warning_id, "issue_time": issue, "phase": d.get("phase"),
             "title": d.get("title"), "message": message, "captured_at": now,
         }], ignore_duplicates=True)
+        if added:  # a new issue: trace its drawn area from the map (never raises)
+            warning_area.record(warning_id, issue, message, now)
 
 
 def fetch_warnings(now):
@@ -135,6 +138,10 @@ def fetch_warnings(now):
         database.execute(
             "UPDATE weather_warnings SET active=0, last_seen=? WHERE active=1", [now])
     _journal_warnings(now)
+    try:  # versions collected before tracing existed, or after a METHOD bump
+        warning_area.backfill(now)
+    except Exception:
+        log.exception("Weather: warning-area backfill failed (non-fatal)")
     return len(rows), new
 
 
