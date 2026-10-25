@@ -120,6 +120,7 @@ class Member:
     value: float = 0.0        # power: customers off; gauge: height
     rank: int = 9             # gauge class 1-3, cell 1-2, road 1 = closure
     geom: object = None       # metric shapely geometry
+    outage: tuple = None      # power: the EM-COP outage this location belongs to
 
 
 @dataclass
@@ -158,7 +159,9 @@ class OperationArea:
 
     @property
     def customers_off(self):
-        return int(sum(m.value or 0 for m in self.of_role("power")))
+        # Several localities of one outage carry its WHOLE count: count it once.
+        seen = {m.outage or m.id: m.value or 0 for m in self.of_role("power")}
+        return int(sum(seen.values()))
 
     @property
     def worst_gauge(self):
@@ -262,6 +265,7 @@ def members_from(frames, agencies=None, weather_only=True):
             id=f"power:{row.get('location')}", role="power", kind="Power outage",
             location=_text(row.get("location")) or "Outage",
             value=float(pd.to_numeric(row.get("customers_off"), errors="coerce") or 0),
+            outage=outage_key(row),
             geom=_geom(row, polygons=False)))
     for row in _records(frames.get("gauges")):
         pri = int(pd.to_numeric(row.get("priority"), errors="coerce") or 4)
@@ -453,6 +457,28 @@ def scope(frames, tag=None):
     return out
 
 
+def outage_key(row):
+    """Identity of the EM-COP outage a location row came from.
+
+    EM-COP lists one outage with all its localities, and the power scraper
+    stores one `power_outages` row PER LOCALITY, each carrying the outage's
+    whole customers-off figure — so summing the rows counts a 12-suburb outage
+    12 times. Rows of one outage share its count, type and start time."""
+    return (_text(row.get("customers_off")), _text(row.get("type")),
+            _text(row.get("first_seen")))
+
+
+def outage_customers(df):
+    """Customers off across a frame of per-location outage rows, each outage
+    counted once (see `outage_key`)."""
+    if df is None or df.empty:
+        return 0
+    seen = {outage_key(r): float(pd.to_numeric(r.get("customers_off"),
+                                               errors="coerce") or 0)
+            for r in _records(df)}
+    return int(sum(seen.values()))
+
+
 def _fresh_gauges(df, now):
     """map_gauges() carries no timestamp, so staleness is checked here."""
     if df is None or df.empty:
@@ -490,6 +516,8 @@ def load_frames(now=None):
         "incidents": safe(fire_data.active_incidents, "VicEmergency"),
         "roads": safe(roads_data.active_disruptions, "road disruptions"),
         "power": safe(power_data.active_outages, "power outages"),
+        # EM-COP's own statewide figure — what the Overview and /power show.
+        "power_total": safe(power_data.latest_totals, "power totals"),
         "gauges": gauges,
         "cells": safe(storm_data.active_cells, "storm cells"),
     }

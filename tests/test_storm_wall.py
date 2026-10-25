@@ -209,6 +209,39 @@ def test_context_attaches_to_the_nearest_area_and_never_links_two():
     assert "road:between" not in {m.id for a in result for m in a.members}
 
 
+def _outage(location, customers, first_seen, lat=-37.90, lon=145.425):
+    database.insert_rows("geocode_cache", [{"location": location,
+                                            "latitude": lat, "longitude": lon}])
+    database.insert_rows("power_outages", [{
+        "location": location, "customers_off": customers, "type": "Unplanned",
+        "first_seen": first_seen, "last_seen": _stamp(NOW), "restored": 0}])
+
+
+def test_one_outage_over_several_localities_counts_once():
+    # EM-COP lists one 1,000-customer outage with three suburbs; the scraper
+    # stores a row per suburb, each carrying the whole 1,000.
+    put("a1", lat=-37.90, lon=145.42)
+    start = _stamp(NOW - timedelta(hours=1))
+    for i, town in enumerate(("BELGRAVE", "TECOMA", "UPWEY")):
+        _outage(town, 1000, start, lon=145.42 + i * 0.003)
+    _outage("MONBULK", 250, _stamp(NOW - timedelta(minutes=30)), lon=145.43)
+    snap = areas(link_km=5)
+    assert sa.area_for_member(snap["areas"], "a1").customers_off == 1250
+    assert sa.outage_customers(snap["frames"]["power"]) == 1250
+    snap["frames"]["power_total"] = None            # no statewide figure yet
+    assert stw.counts(snap)["customers"] == 1250
+
+
+def test_customers_tile_uses_the_em_cop_statewide_total():
+    start = _stamp(NOW - timedelta(hours=1))
+    for town in ("BELGRAVE", "TECOMA", "UPWEY"):
+        _outage(town, 1000, start)
+    database.insert_rows("power_timeseries", [{
+        "timestamp": _stamp(NOW), "customers_off": 3120,
+        "power_dependant_off": 0, "planned": 0, "unplanned": 1}])
+    assert stw.counts(areas(link_km=5))["customers"] == 3120
+
+
 def test_gauges_and_storm_cells_attach_from_frames():
     frames = {
         "incidents": pd.DataFrame([{"source_id": "a1", "feed_type": "incident",

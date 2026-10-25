@@ -169,13 +169,23 @@ def counts(snap):
         "closures": None if roads is None else (
             0 if roads.empty else int(pd.to_numeric(roads["is_closure"],
                                                     errors="coerce").fillna(0).sum())),
-        "customers": None if power is None else (
-            0 if power.empty else int(pd.to_numeric(power["customers_off"],
-                                                    errors="coerce").fillna(0).sum())),
+        "customers": _customers(power, frames.get("power_total") if ok else None),
         "gauges": None if gauges is None else len(gauges),
         "strong": None if cells is None else (
             0 if cells.empty else int((cells["classification"] == "strong").sum())),
     }
+
+
+def _customers(power, total):
+    """EM-COP's statewide total when the collector has recorded one (the same
+    figure as the Overview); otherwise the outage rows, each outage once."""
+    value = (total or {}).get("customers_off")
+    try:
+        if value is not None and value == value:
+            return int(float(value))
+    except (TypeError, ValueError):
+        pass
+    return None if power is None else storm_areas.outage_customers(power)
 
 
 # --------------------------------------------------------------------------- #
