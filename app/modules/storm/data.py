@@ -94,6 +94,30 @@ def impact_featurecollection():
     }
 
 
+def impact_shapefile(generated=None):
+    """The current impact areas as a zipped shapefile set for EM-COP, or None
+    when there are none (same polygons as impact_featurecollection)."""
+    from app.shapefile_export import Field, Layer, zip_layers
+    p = lambda k: (lambda props: props.get(k))  # noqa: E731
+    fields = [Field("CELL_ID", "C", 20, p("cell_id")),
+              Field("RADAR", "C", 10, p("radar_id")),
+              Field("CLASS", "C", 10, p("classification")),
+              Field("SCORE", "N", 8, p("intensity_score"), decimals=1),
+              Field("AREA_KM2", "N", 12, p("area_km2"), decimals=1),
+              Field("SPEED_KMH", "N", 8, p("speed_kmh"), decimals=1),
+              Field("BEARING", "N", 5, p("bearing_deg")),
+              Field("VALID_FROM", "C", 19, p("valid_from")),
+              Field("PROJ_MIN", "N", 5, p("projection_minutes"))]
+    fc = impact_featurecollection()
+    layer = Layer("storm_impact_areas", fc["features"], fields,
+                  title="Storm cell impact areas (radar-tracked, next "
+                        "projection window)", fill="#d62728", stroke="#a61e1e",
+                  fill_opacity=0.2,
+                  notes=["Moderate/strong cells only: the cell swept along its "
+                         "motion vector. Derived from radar, not a BoM warning."])
+    return zip_layers([layer], generated or fc["generated"][:16])
+
+
 def heartbeat_summary():
     """(cycle_count, last_timestamp) for the storm collector heartbeat."""
     df = database.read_df(

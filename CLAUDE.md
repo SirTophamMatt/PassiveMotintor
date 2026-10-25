@@ -314,6 +314,19 @@ warning-level lines, colour-matched to the map kinds.
   area of the issue current AT the moment (traced only; a later untraced issue is not covered by an
   earlier area). `/weather` "Warning areas": map, per-warning source line, GeoJSON download, and a
   live URL **`/weather/warning-areas.geojson`** (public, `application/geo+json`) QGIS can load.
+- **Shapefile export for EM-COP (2026-10-25).** EM-COP's "load a shape file as a data layer" form
+  takes .shp / .shx / .dbf / .prj (+ optional .sld), one file per box, and shows imported
+  shapefiles UNSTYLED. `app/shapefile_export.py` (pyshp, pure Python) writes zipped layers:
+  WGS84 `.prj`, rings wound per the shapefile spec (outer clockwise, holes anticlockwise, via
+  shapely `orient`), ASCII-only attributes, an `.sld`, and a README.txt naming each box.
+  `/weather`: "Shapefile for EM-COP (.zip)" = TWO layers, `bom_warning_areas` (traced) and
+  `bom_warning_districts` (fallback) — unstyled in EM-COP they would look identical in one layer;
+  each warning line also links its OWN zip, one layer named `<id>_drawn` / `<id>_districts`.
+  Routes `/weather/warning-areas.zip` and `/weather/warning-areas/<id>.zip` (id must match
+  `[A-Za-z0-9]{1,20}`, 404 otherwise). `/storm` gains the same for impact areas
+  (`storm_data.impact_shapefile`). Verified by reading back with GDAL (pyogrio, test skipped when
+  it is not installed): Polygon, EPSG:4326, all fields. Not yet tried in EM-COP itself.
+  Tests: `tests/test_shapefile_export.py`.
 - Not done: a second fill colour if BoM adds one (e.g. "very dangerous" areas), the area on the
   warning detail page / storm wall / briefing PDF. Tests: `tests/test_warning_area.py`.
 

@@ -18,6 +18,10 @@ from app.modules.weather import data as weather_data
 WARNING_PATH = "/weather/warning/"
 # Live GeoJSON of active warning areas — a stable URL QGIS can load and refresh.
 AREAS_GEOJSON_ROUTE = "/weather/warning-areas.geojson"
+# The same areas as a zipped shapefile set — what EM-COP's layer upload takes.
+AREAS_SHAPEFILE_ROUTE = "/weather/warning-areas.zip"
+# One warning's area on its own: /weather/warning-areas/<warning id>.zip
+AREA_SHAPEFILE_PREFIX = "/weather/warning-areas/"
 MELB_CENTER = {"lat": -37.0, "lon": 145.0}
 RAIN_COLUMNS = [
     ("name", "Location"), ("catchment", "Catchment"),
@@ -81,11 +85,17 @@ def layout():
             "~1 km). Where that is not possible the whole forecast districts "
             "are shown instead, faint and dashed, and labelled as such. ",
             html.A("Live GeoJSON", href=AREAS_GEOJSON_ROUTE, target="_blank"),
-            " (a URL QGIS can load directly).",
-        ], className="muted", style={"fontSize": "12px", "marginBottom": "6px"}),
+            " (a URL QGIS can load directly). The shapefile .zip holds the "
+            ".shp / .shx / .dbf / .prj (+ optional .sld) EM-COP's layer upload "
+            "asks for — drawn areas and whole-district fallbacks as separate "
+            "layers, because EM-COP shows imported shapefiles unstyled.",
+        ], className="muted weather-areas-note", style={"fontSize": "12px", "marginBottom": "6px"}),
         html.Div([
             html.Button("⤓ Warning areas (GeoJSON)", id="weather-areas-btn",
                         className="btn btn-primary"),
+            html.Button("⤓ Shapefile for EM-COP (.zip)", id="weather-shp-btn",
+                        className="btn btn-primary", style={"marginLeft": "8px"}),
+            dcc.Download(id="weather-shp-download"),
             html.Span(id="weather-areas-status", className="muted",
                       style={"marginLeft": "10px"}),
             dcc.Download(id="weather-areas-download"),
@@ -343,7 +353,19 @@ def _area_line(r):
     if source != weather_data.AREA_TRACED and isinstance(status, str):
         detail = r.get("detail")
         what += " (%s)" % (detail if isinstance(detail, str) and detail else status)
-    return html.Div("%s — %s" % (title, what))
+    parts = ["%s — %s" % (title, what)]
+    if source in (weather_data.AREA_TRACED, weather_data.AREA_DISTRICTS):
+        # A plain link: the browser downloads it (Content-Disposition), so it
+        # needs no callback per warning.
+        parts += [" · ", html.A("⤓ shapefile", href="%s%s.zip" % (
+            AREA_SHAPEFILE_PREFIX, r.get("warning_id")))]
+    return html.Div(parts)
+
+
+def _shp_filename(warning_id=None):
+    from datetime import datetime as _dt
+    what = warning_id or "bom_warning_areas"
+    return f"{what}_{_dt.now():%Y%m%d_%H%M}_shapefile.zip"
 
 
 def register_callbacks(app):
@@ -356,6 +378,42 @@ def register_callbacks(app):
             _json.dumps(weather_data.warning_areas_featurecollection()),
             mimetype="application/geo+json",
             headers={"Cache-Control": "no-cache"})
+
+    @app.server.route(AREAS_SHAPEFILE_ROUTE)
+    def warning_areas_shapefile():
+        import flask
+        data = weather_data.warning_areas_shapefile()
+        if data is None:
+            return flask.Response("No active BoM warning has an area right now.\n",
+                                  status=404, mimetype="text/plain")
+        return flask.Response(data, mimetype="application/zip", headers={
+            "Content-Disposition": "attachment; filename=%s" % _shp_filename(),
+            "Cache-Control": "no-cache"})
+
+    @app.server.route(AREA_SHAPEFILE_PREFIX + "<warning_id>.zip")
+    def warning_area_shapefile(warning_id):
+        import flask
+        data = weather_data.warning_areas_shapefile(warning_id=warning_id)
+        if data is None:
+            return flask.Response("No current area for that warning.\n",
+                                  status=404, mimetype="text/plain")
+        return flask.Response(data, mimetype="application/zip", headers={
+            "Content-Disposition": "attachment; filename=%s" % _shp_filename(
+                warning_id),
+            "Cache-Control": "no-cache"})
+
+    @app.callback(
+        Output("weather-shp-download", "data"),
+        Output("weather-areas-status", "children", allow_duplicate=True),
+        Input("weather-shp-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def download_shapefile(_):
+        data = weather_data.warning_areas_shapefile()
+        if data is None:
+            return None, "No active BoM warning has an area right now."
+        return (dcc.send_bytes(data, _shp_filename()),
+                "✅ Shapefile exported — unzip, then pick each layer's .shp / "
+                ".shx / .dbf / .prj in EM-COP (README.txt inside says which).")
 
     @app.callback(
         Output("weather-areas-map", "figure"),
