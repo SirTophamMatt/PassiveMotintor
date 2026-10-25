@@ -299,9 +299,9 @@ warning-level lines, colour-matched to the map kinds.
   frame (`REF_*`, 707 px wide) scaled by width. Used only with ≥ `MIN_TOWNS` (8) matched at RMS ≤
   `MAX_RMS_PX` (2) — a re-framed/restyled map is REFUSED (`uncalibrated`), never traced against the
   wrong frame. Reference image: 41/42 towns at 0.58 px (1 px ≈ 1.3 km). The fill is one exact
-  yellow (`FILL_RGB`), morph-closed over labels/lines; the legend swatch is dropped as the one
+  yellow (`FILL_RGB` 255,220,0 — a screenshot shifts it, so the tolerance is wide), morph-closed over labels/lines; the legend swatch is dropped as the one
   component filling its bounding box (`contourArea` runs through pixel centres — compare with
-  `(w-1)(h-1)`, or a small swatch slips through). ~45 ms per image.
+  `(w-1)(h-1)`, or a small swatch slips through). ~45 ms per image. `bom-map-v2` (2026-10-25): v1 took the fill colour from a screenshot and found "no area" on every real map.
 - **Storage `weather_warning_areas`**, one row per (warning_id, issue_time, `METHOD`) whatever the
   outcome — `status` traced / no_map / uncalibrated / no_area / error, plus towns matched + RMS.
   The collector traces each NEW issue in `_store_detail`; `backfill` (50/cycle) covers issues stored
