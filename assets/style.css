@@ -1418,3 +1418,7 @@ label { font-size: 13px; color: var(--text); display: block; margin-top: 8px; }
   background: #b00020; color: #fff; font-size: 11px; }
 .fdr-grid .fdr-multi { font-weight: 700; }
 .fdr-season td.fdr-cell { min-width: 52px; font-size: 12px; }
+
+/* /weather Warning areas: the live-GeoJSON and per-warning shapefile links
+   (browser-default link blue is unreadable on the dark schemes). */
+.weather-areas-note a, #weather-areas-list a { color: var(--accent); }

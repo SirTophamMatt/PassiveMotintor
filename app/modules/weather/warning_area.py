@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 
 # Bump when the tracing changes: results are stored per method, so a better
 # tracer re-traces old issues instead of mixing two methods' shapes.
-METHOD = "bom-map-v1"
+METHOD = "bom-map-v2"  # v2: BoM's real fill colour (v1 matched a screenshot's)
 
 # Statuses stored with every result, so "no area" always says why.
 TRACED = "traced"              # geometry present
@@ -54,8 +54,10 @@ UNCALIBRATED = "uncalibrated"  # image(s), but not a map we can georeference
 NO_AREA = "no_area"            # calibrated map with no warning fill on it
 ERROR = "error"
 
-FILL_RGB = (250, 221, 41)      # the "Warning Area" yellow
-FILL_TOL = 40                  # summed |R|+|G|+|B| difference
+FILL_RGB = (255, 220, 0)       # the "Warning Area" yellow, as BoM stores it
+# Summed |R|+|G|+|B| difference. Wide enough for a screenshot's shifted
+# colour (the fixture reads 250,221,41 = 47 off); land (255,242,211) is 233 off.
+FILL_TOL = 60
 DOT_RGB = (48, 0, 252)         # town dots
 DOT_TOL = 60
 

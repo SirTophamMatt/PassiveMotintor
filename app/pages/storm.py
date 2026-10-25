@@ -100,6 +100,10 @@ def layout():
             html.Button("⤓ Impact areas (GeoJSON)", id="storm-geojson-btn",
                         className="btn btn-primary",
                         style={"float": "right", "marginTop": "6px"}),
+            html.Button("⤓ Impact areas (shapefile for EM-COP)",
+                        id="storm-shp-btn", className="btn btn-primary",
+                        style={"float": "right", "marginTop": "6px",
+                               "marginRight": "8px"}),
             html.Button("⤓ Storm Briefing PDF", id="storm-pdf-btn",
                         className="btn btn-primary",
                         style={"float": "right", "marginTop": "6px",
@@ -108,6 +112,7 @@ def layout():
                      style={"clear": "both"}),
             html.Div(id="storm-pdf-status", className="muted"),
             dcc.Download(id="storm-geojson-download"),
+            dcc.Download(id="storm-shp-download"),
             dcc.Download(id="storm-pdf-download"),
         ]),
         html.Div([
@@ -300,6 +305,21 @@ def register_callbacks(app):
         filename = f"storm_impact_areas_{_dt.now():%Y%m%d_%H%M}.geojson"
         return (dcc.send_string(_json.dumps(fc, indent=2), filename),
                 f"✅ Exported {n} impact area(s).")
+
+    @app.callback(
+        Output("storm-shp-download", "data"),
+        Output("storm-geojson-status", "children", allow_duplicate=True),
+        Input("storm-shp-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def download_shapefile(_):
+        from datetime import datetime as _dt
+        data = storm_data.impact_shapefile()
+        if data is None:
+            return None, "No moderate/strong cells with impact areas right now."
+        filename = f"storm_impact_areas_{_dt.now():%Y%m%d_%H%M}_shapefile.zip"
+        return (dcc.send_bytes(data, filename),
+                "✅ Shapefile exported — unzip, then pick the .shp / .shx / .dbf "
+                "/ .prj in EM-COP (README.txt inside says which).")
 
     @app.callback(
         Output("storm-pdf-download", "data"),

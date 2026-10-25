@@ -106,6 +106,15 @@ def test_far_smaller_than_the_districts_it_names():
     assert wa.trace_message(MESSAGE).area_km2 < 20_000
 
 
+def test_traces_bom_s_own_fill_colour():
+    # The fixture is a screenshot (fill shifted to 250,221,41); BoM's stored
+    # PNGs use 255,220,0 exactly. v1 matched only the screenshot's colour.
+    img = _img()
+    img[wa._colour_mask(img, (250, 221, 41), 10).astype(bool)] = (0, 220, 255)
+    res = wa.trace_message(_html(_png(img)))
+    assert res.status == wa.TRACED and 15_500 < res.area_km2 < 17_000
+
+
 def test_no_image_no_map():
     assert wa.trace_message("<p>Sheep graziers warning</p>").status == wa.NO_MAP
     assert wa.trace_message(None).status == wa.NO_MAP

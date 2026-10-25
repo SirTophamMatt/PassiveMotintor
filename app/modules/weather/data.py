@@ -239,6 +239,74 @@ def warning_areas_featurecollection(df=None):
     return {"type": "FeatureCollection", "features": features}
 
 
+def _warning_fields():
+    from app.shapefile_export import Field
+    p = lambda k: (lambda props: props.get(k))  # noqa: E731
+    return [Field("WARN_ID", "C", 20, p("warning_id")),
+            Field("TITLE", "C", 254, p("title")),
+            Field("TYPE", "C", 40, p("type")),
+            Field("ISSUED", "C", 16, lambda d: (d.get("issue_time") or "")[:16]),
+            Field("EXPIRES", "C", 16, lambda d: (d.get("expiry_time") or "")[:16]),
+            Field("AREA_SRC", "C", 10, p("area_source")),
+            Field("AREA_KM2", "N", 12, p("area_km2"), decimals=1),
+            Field("NOTE", "C", 254, p("area_note"))]
+
+
+_WARNING_ID = re.compile(r"^[A-Za-z0-9]{1,20}$")
+
+
+def _area_layer(source, name, features, fields):
+    """One shapefile layer of warning areas, styled and described by source."""
+    from app.shapefile_export import Layer
+    if source == AREA_TRACED:
+        return Layer(name, features, fields,
+                     title="BoM warning area (drawn, traced from BoM's warning map)",
+                     notes=["The area BoM drew on its warning map, traced to "
+                            "about 1 km."])
+    return Layer(name, features, fields,
+                 title="BoM warning - whole forecast districts (drawn area not "
+                       "available)", fill_opacity=0.08, stroke="#9a7d0a",
+                 dashed=True,
+                 notes=["Whole districts the warning names (VicEmergency). The drawn",
+                        "area is smaller - do not read these as the warning area."])
+
+
+def warning_areas_shapefile(df=None, generated=None, warning_id=None):
+    """Active warning areas as a zipped shapefile set for EM-COP, or None when
+    there is no area to write.
+
+    All warnings: TWO layers — the traced drawn areas, and the whole districts
+    shown for warnings that could not be traced (EM-COP imports shapefiles
+    unstyled, so in one layer the two would look identical). One warning
+    (`warning_id`): a single layer named `<id>_drawn` or `<id>_districts`, so
+    the file name itself says which kind of area it is."""
+    from datetime import datetime
+
+    from app.shapefile_export import zip_layers
+    fc = warning_areas_featurecollection(df)
+    fields = _warning_fields()
+    stamp = generated or datetime.now().isoformat(sep=" ", timespec="minutes")
+    if warning_id is not None:
+        if not _WARNING_ID.match(str(warning_id)):
+            return None
+        mine = [f for f in fc["features"]
+                if f["properties"].get("warning_id") == warning_id]
+        if not mine:
+            return None
+        source = mine[0]["properties"].get("area_source")
+        suffix = "drawn" if source == AREA_TRACED else "districts"
+        return zip_layers([_area_layer(source, f"{warning_id}_{suffix}", mine,
+                                       fields)], stamp)
+    by_source = {AREA_TRACED: [], AREA_DISTRICTS: []}
+    for f in fc["features"]:
+        by_source.get(f["properties"].get("area_source"), []).append(f)
+    return zip_layers([
+        _area_layer(AREA_TRACED, "bom_warning_areas", by_source[AREA_TRACED], fields),
+        _area_layer(AREA_DISTRICTS, "bom_warning_districts",
+                    by_source[AREA_DISTRICTS], fields),
+    ], stamp)
+
+
 def latest_rainfall():
     """Most recent rainfall reading per monitored location, with its catchment."""
     df = database.read_df(
