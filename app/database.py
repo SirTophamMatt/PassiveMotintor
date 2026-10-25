@@ -153,6 +153,27 @@ CREATE TABLE IF NOT EXISTS weather_warning_updates (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_weather_warn_updates
     ON weather_warning_updates (warning_id, issue_time);
 
+-- The DRAWN area of each issued version, traced from the map image in its
+-- message (app/modules/weather/warning_area.py) — BoM publishes it nowhere as
+-- coordinates. One row per (version, tracing method), whatever the outcome:
+-- status says why a version has no area (no_map / uncalibrated / no_area).
+CREATE TABLE IF NOT EXISTS weather_warning_areas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    warning_id TEXT NOT NULL,
+    issue_time TEXT NOT NULL,
+    method TEXT NOT NULL,        -- tracer version, e.g. bom-map-v1
+    status TEXT NOT NULL,        -- traced | no_map | uncalibrated | no_area | error
+    geojson TEXT,                -- GeoJSON geometry, lon/lat (traced only)
+    area_km2 REAL,
+    towns_matched INTEGER,       -- town dots the calibration matched
+    rms_px REAL,                 -- calibration residual, pixels
+    images INTEGER,
+    detail TEXT,
+    traced_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_weather_warn_areas
+    ON weather_warning_areas (warning_id, issue_time, method);
+
 -- Monitored rainfall locations, resolved to a BoM geohash (derived from flood
 -- gauge towns/catchments, cached here so we only geocode once).
 CREATE TABLE IF NOT EXISTS weather_locations (

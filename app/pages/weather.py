@@ -16,6 +16,8 @@ from app.collector import manager
 from app.modules.weather import data as weather_data
 
 WARNING_PATH = "/weather/warning/"
+# Live GeoJSON of active warning areas — a stable URL QGIS can load and refresh.
+AREAS_GEOJSON_ROUTE = "/weather/warning-areas.geojson"
 MELB_CENTER = {"lat": -37.0, "lon": 145.0}
 RAIN_COLUMNS = [
     ("name", "Location"), ("catchment", "Catchment"),
@@ -71,6 +73,27 @@ def layout():
             sort_action="native",
             style_cell={"whiteSpace": "normal", "height": "auto"},
         ),
+        html.H3("Warning areas", style={"marginTop": "18px"}),
+        html.Div([
+            "BoM draws each thunderstorm / severe weather warning's area on its "
+            "map but publishes no shape for it, so the area is traced from the "
+            "map in the warning itself (calibrated against BoM's town dots, "
+            "~1 km). Where that is not possible the whole forecast districts "
+            "are shown instead, faint and dashed, and labelled as such. ",
+            html.A("Live GeoJSON", href=AREAS_GEOJSON_ROUTE, target="_blank"),
+            " (a URL QGIS can load directly).",
+        ], className="muted", style={"fontSize": "12px", "marginBottom": "6px"}),
+        html.Div([
+            html.Button("⤓ Warning areas (GeoJSON)", id="weather-areas-btn",
+                        className="btn btn-primary"),
+            html.Span(id="weather-areas-status", className="muted",
+                      style={"marginLeft": "10px"}),
+            dcc.Download(id="weather-areas-download"),
+        ], style={"marginBottom": "8px"}),
+        html.Div(id="weather-areas-list", className="muted",
+                 style={"fontSize": "13px", "marginBottom": "6px"}),
+        html.Div(dcc.Graph(id="weather-areas-map", style={"height": "520px"},
+                           config=ui.MAP_CONFIG), className="graph-card"),
         html.H3("Rainfall", style={"marginTop": "18px"}),
         html.Div("Rain since 9am and today's forecast for towns near the flood "
                  "gauges — an upstream leading indicator.", className="muted"),
@@ -305,7 +328,67 @@ def _rain_map(df, dark):
     return ui.apply_theme(fig, dark)
 
 
+def _area_line(r):
+    """One line per active warning: where its area came from, or why none."""
+    title = r.get("title") or r.get("warning_id")
+    source = r.get("area_source")
+    if source == weather_data.AREA_TRACED:
+        what = "drawn area traced (~{:,.0f} km²)".format(r["area_km2"]) \
+            if pd.notna(r.get("area_km2")) else "drawn area traced"
+    elif source == weather_data.AREA_DISTRICTS:
+        what = "whole districts shown — drawn area not traced"
+    else:
+        what = "no area"
+    status = r.get("status")
+    if source != weather_data.AREA_TRACED and isinstance(status, str):
+        detail = r.get("detail")
+        what += " (%s)" % (detail if isinstance(detail, str) and detail else status)
+    return html.Div("%s — %s" % (title, what))
+
+
 def register_callbacks(app):
+    @app.server.route(AREAS_GEOJSON_ROUTE)
+    def warning_areas_geojson():
+        import json as _json
+
+        import flask
+        return flask.Response(
+            _json.dumps(weather_data.warning_areas_featurecollection()),
+            mimetype="application/geo+json",
+            headers={"Cache-Control": "no-cache"})
+
+    @app.callback(
+        Output("weather-areas-map", "figure"),
+        Output("weather-areas-list", "children"),
+        Input("weather-interval", "n_intervals"),
+        Input("theme-store", "data"))
+    def refresh_areas(_, dark):
+        from app.pages import unified
+        df = weather_data.current_warning_areas()
+        lines = ([_area_line(r) for _, r in df.iterrows()] if not df.empty
+                 else "No active BoM warnings.")
+        frame = lambda key: df if key == "bomwarn" else None  # noqa: E731
+        return (unified.map_figure(["bomwarn"], bool(dark), source=frame,
+                                   uirevision="weather-areas"), lines)
+
+    @app.callback(
+        Output("weather-areas-download", "data"),
+        Output("weather-areas-status", "children"),
+        Input("weather-areas-btn", "n_clicks"),
+        prevent_initial_call=True)
+    def download_areas(_):
+        import json as _json
+        from datetime import datetime as _dt
+        fc = weather_data.warning_areas_featurecollection()
+        n = len(fc["features"])
+        if not n:
+            return None, "No active BoM warning has an area right now."
+        traced = sum(1 for f in fc["features"]
+                     if f["properties"]["area_source"] == weather_data.AREA_TRACED)
+        filename = f"bom_warning_areas_{_dt.now():%Y%m%d_%H%M}.geojson"
+        return (dcc.send_string(_json.dumps(fc, indent=2), filename),
+                f"✅ Exported {n} warning area(s), {traced} traced.")
+
     @app.callback(
         Output("weather-collector-status", "children"),
         Output("weather-type-filter", "options"),

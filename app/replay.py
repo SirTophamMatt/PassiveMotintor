@@ -28,6 +28,7 @@ import pandas as pd
 
 from app import database, history, intel_feed, tags
 from app.modules.flood import data as flood_data
+from app.modules.weather import data as weather_data
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +147,29 @@ def weather_warnings_at(when):
     return history.state_at(history.WEATHER_WARNING, when)
 
 
+def bomwarn_at(when):
+    """BoM warning areas as they stood: each warning active at `when`, with the
+    area traced from the issue that was current THEN (the journal's issue_time)
+    — so a replay shows the area as drawn at the time, not today's. Only traced
+    areas: the district fallback comes from live VicEmergency data."""
+    df = weather_warnings_at(when)
+    if df.empty or "issue_time" not in df.columns:
+        return pd.DataFrame()
+    from app.modules.weather.warning_area import METHOD
+    areas = database.read_df(
+        "SELECT warning_id, issue_time, status, geojson, area_km2 "
+        "FROM weather_warning_areas WHERE method = ? AND status = 'traced' "
+        "AND issue_time <= ?", [METHOD, _stamp(when)])
+    if areas.empty:
+        return pd.DataFrame()
+    df = df.rename(columns={"entity_key": "warning_id"})
+    keep = [c for c in ("warning_id", "title", "type", "issue_time",
+                        "expiry_time") if c in df.columns]
+    out = df[keep].merge(areas, on=["warning_id", "issue_time"], how="inner")
+    out["area_source"] = weather_data.AREA_TRACED
+    return out
+
+
 def flood_at(when):
     """Gauges as they read at `when`, in the same shape `map_gauges()` returns
     so the shared flood renderer draws them unchanged.
@@ -216,6 +240,7 @@ def aws_at(when):
 # same renderers draw both maps.
 LAYER_PROVIDERS = {
     "fire": fire_at,
+    "bomwarn": bomwarn_at,
     "flood": flood_at,
     "roads": roads_at,
     "storm": storm_at,

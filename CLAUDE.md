@@ -286,6 +286,37 @@ warning-level lines, colour-matched to the map kinds.
 - See **Visitor geolocation** for what is stored about where visitors are, and why the page copy
   had to change when it landed.
 
+## BoM warning areas — traced from the warning map (built 2026-10-25)
+- **BoM publishes the DRAWN area of a thunderstorm / severe weather warning only as a picture.**
+  Probed live on the server 2026-10-25 (`seed/bom_polygon_probe.py`, re-runnable): the API detail,
+  `fwo/IDV21033.xml`, the FTP `.amoc.xml` and `.cap.xml` carry 0 coordinates — the CAP `<area>` is
+  two `AMOC-AreaCode` geocodes (VIC_PW004/PW005). VicEmergency republishes the warning (`AU/BOM`,
+  category1 `Met`, id `IDV21033/<hash>`) with the WHOLE forecast districts' polygons — ~44,700 km²
+  where BoM drew ~16,300.
+- **`app/modules/weather/warning_area.py`** traces the one PNG embedded (base64) in each issue's
+  `message`. BoM's map is true Mercator, so calibration is 3 numbers (px/deg + x/y offset) fitted
+  per image to the town dots (exact blue `DOT_RGB`, `TOWNS` list), starting from the reference
+  frame (`REF_*`, 707 px wide) scaled by width. Used only with ≥ `MIN_TOWNS` (8) matched at RMS ≤
+  `MAX_RMS_PX` (2) — a re-framed/restyled map is REFUSED (`uncalibrated`), never traced against the
+  wrong frame. Reference image: 41/42 towns at 0.58 px (1 px ≈ 1.3 km). The fill is one exact
+  yellow (`FILL_RGB`), morph-closed over labels/lines; the legend swatch is dropped as the one
+  component filling its bounding box (`contourArea` runs through pixel centres — compare with
+  `(w-1)(h-1)`, or a small swatch slips through). ~45 ms per image.
+- **Storage `weather_warning_areas`**, one row per (warning_id, issue_time, `METHOD`) whatever the
+  outcome — `status` traced / no_map / uncalibrated / no_area / error, plus towns matched + RMS.
+  The collector traces each NEW issue in `_store_detail`; `backfill` (50/cycle) covers issues stored
+  earlier and a `METHOD` bump. Never fatal to the cycle.
+- **Shown:** `weather.data.current_warning_areas()` = the newest traced issue per active warning;
+  when it couldn't be traced, VicEmergency's districts as a FALLBACK (`area_source` = districts,
+  faint + dashed, labelled "drawn area not available"). Unified map layer **`bomwarn`** ("BoM
+  warning areas", default on — so also /wall, the newsroom and console Overview); `render_fire` no
+  longer fills Met district polygons (the Met marker stays). Replay (`replay.bomwarn_at`) draws the
+  area of the issue current AT the moment (traced only; a later untraced issue is not covered by an
+  earlier area). `/weather` "Warning areas": map, per-warning source line, GeoJSON download, and a
+  live URL **`/weather/warning-areas.geojson`** (public, `application/geo+json`) QGIS can load.
+- Not done: a second fill colour if BoM adds one (e.g. "very dangerous" areas), the area on the
+  warning detail page / storm wall / briefing PDF. Tests: `tests/test_warning_area.py`.
+
 ## Weather module — rainfall (Phase 2b, built 2026-07-12)
 - **Locations derived from flood gauges.** `ensure_locations()` (one-time seed) extracts a town
   from each gauge name via `weather_data.gauge_town` (handles "... at X", "Downstream of X",

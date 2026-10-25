@@ -16,6 +16,7 @@ import logging
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
+from shapely.geometry import shape
 
 from app import ui
 from app.modules.fire import data as fire_data
@@ -33,6 +34,7 @@ VIC_CENTER = {"lat": -37.0, "lon": 145.0}
 
 LAYER_OPTIONS = [
     {"label": " Fire & warnings", "value": "fire"},
+    {"label": " BoM warning areas", "value": "bomwarn"},
     {"label": " Flood gauges", "value": "flood"},
     {"label": " Road disruptions", "value": "roads"},
     {"label": " Storm cells", "value": "storm"},
@@ -43,7 +45,7 @@ LAYER_OPTIONS = [
 # Rainfall and weather observations are off by default — drawing all ~104 AWS
 # stations at once buries the hazard layers this map exists to show. Both are
 # one click away when wind or rain is the thing being briefed.
-DEFAULT_LAYERS = ["fire", "flood", "roads", "storm", "power"]
+DEFAULT_LAYERS = ["fire", "bomwarn", "flood", "roads", "storm", "power"]
 # Only stations gusting at least this hard are drawn, so switching the layer on
 # during a wind event highlights where it's actually blowing rather than
 # stippling the whole state with calm sites.
@@ -105,7 +107,11 @@ def render_fire(df):
                     hoverinfo="skip"))
     if "geometry" in df.columns:
         for kind, colour in fire_page.KIND_COLOURS.items():
-            if kind in fire_page.WARNING_KINDS:
+            # Met items are VicEmergency's copies of BoM warnings: their
+            # polygons are whole forecast districts. The BoM warning-area
+            # layer draws the drawn area instead (districts only as a labelled
+            # fallback), so they are not filled here as well.
+            if kind in fire_page.WARNING_KINDS or kind == fire_page.MET_KIND:
                 continue
             geoms = df.loc[df["Kind"] == kind, "geometry"].dropna().tolist()
             layer = fire_page._fill_layer(geoms, colour, 0.2)
@@ -120,6 +126,66 @@ def _fire_hover(r):
     bits = [b for b in (_val(r, "category1"), _val(r, "status"), _val(r, "size")) if b]
     if bits:
         txt += "<br>" + " · ".join(bits)
+    return txt
+
+
+BOM_AREA_STYLE = {
+    # area_source: (legend name, fill colour, fill opacity, line colour, dash)
+    weather_data.AREA_TRACED: ("BoM warning area", "#fadd29", 0.35,
+                               "#b8860b", None),
+    weather_data.AREA_DISTRICTS: ("BoM warning (whole districts)", "#fadd29",
+                                  0.08, "#9a7d0a", [2, 2]),
+}
+
+
+def render_bomwarn(df):
+    """BoM warning areas: the drawn area traced from BoM's map, or — only when
+    that could not be traced — the whole districts, faint and dashed so the two
+    are never confused. A hidden marker in each area carries the hover."""
+    if df is None or df.empty or "geojson" not in df.columns:
+        return [], []
+    traces, fills = [], []
+    for source, (name, colour, opacity, line, dash) in BOM_AREA_STYLE.items():
+        sub = df[(df["area_source"] == source) & df["geojson"].notna()]
+        geoms, lats, lons, texts = [], [], [], []
+        for _, r in sub.iterrows():
+            try:
+                geom = json.loads(r["geojson"])
+                pt = shape(geom).representative_point()
+            except (ValueError, TypeError, AttributeError):
+                continue
+            geoms.append({"type": "Feature", "geometry": geom, "properties": {}})
+            lats.append(pt.y); lons.append(pt.x)
+            texts.append(_bomwarn_hover(r))
+        if not geoms:
+            continue
+        fc = {"type": "FeatureCollection", "features": geoms}
+        fills.append({"sourcetype": "geojson", "type": "fill", "below": "traces",
+                      "color": colour, "opacity": opacity, "source": fc})
+        outline = {"sourcetype": "geojson", "type": "line", "below": "traces",
+                   "color": line, "line": {"width": 2}, "source": fc}
+        if dash:
+            outline["line"]["dash"] = dash
+        fills.append(outline)
+        traces.append(go.Scattermap(
+            mode="markers", lat=lats, lon=lons, name=name, legendgroup="bomwarn",
+            marker=dict(size=18, color=colour, opacity=0), showlegend=False,
+            hoverinfo="text", text=texts))
+        traces.append(go.Scattermap(  # legend-only swatch (see render_fire)
+            mode="markers", lat=[None], lon=[None], name=name,
+            legendgroup="bomwarn", marker=dict(size=11, color=colour),
+            hoverinfo="skip"))
+    return traces, fills
+
+
+def _bomwarn_hover(r):
+    txt = "<b>%s</b>" % (_val(r, "title") or _val(r, "warning_id") or "BoM warning")
+    issued = _val(r, "issue_time")
+    if issued:
+        txt += "<br>Issued %s" % issued[:16]
+    txt += "<br>%s" % weather_data.AREA_SOURCE_LABELS.get(r.get("area_source"), "")
+    if r.get("area_source") == weather_data.AREA_TRACED and pd.notna(r.get("area_km2")):
+        txt += "<br>~{:,.0f} km²".format(r["area_km2"])
     return txt
 
 
@@ -316,6 +382,7 @@ def render_wind(df):
 # Draw order (back to front) and the renderer for each layer.
 RENDERERS = {
     "fire": render_fire,
+    "bomwarn": render_bomwarn,
     "flood": render_flood,
     "roads": render_roads,
     "storm": render_storm,
@@ -323,12 +390,13 @@ RENDERERS = {
     "rain": render_rain,
     "wind": render_wind,
 }
-LAYER_ORDER = ("fire", "flood", "roads", "storm", "power", "rain", "wind")
+LAYER_ORDER = ("bomwarn", "fire", "flood", "roads", "storm", "power", "rain", "wind")
 
 # Where the LIVE map gets each layer's data. Replay passes its own provider
 # returning historical frames for the same keys.
 LIVE_SOURCES = {
     "fire": fire_data.active_incidents,
+    "bomwarn": weather_data.current_warning_areas,
     "flood": flood_data.map_gauges,
     "roads": roads_data.active_disruptions,
     "storm": storm_data.active_cells,
