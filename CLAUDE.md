@@ -177,9 +177,8 @@ If a session drops, the scraper re-logs-in on the next cycle.
   (Emergency / Watch & Act / Advice / Fire / Other incidents) plus historical burn areas on the
   map; the table always lists the full category-filtered set. Default = all but burn areas.
 - **AWS-styled legend.** `_aws_legend()` renders a licence-clean key using AWS colours + the
-  warning-triangle motif (Plotly's own legend is hidden). NOTE: true VicEmergency sprite icons
-  on the map markers need a **Mapbox access token** (open-street-map tiles only support circle
-  markers) — deferred; the AWS colour/shape key is the token-free stand-in.
+  warning-triangle motif (Plotly's own legend is hidden). The markers themselves are now real
+  icons with no Mapbox token — see **Map iconography** (2026-10-28).
 
 ## Warning areas on every map (updated 2026-09-30)
 - **One style, every map.** `fire.warning_area_layers()` builds the warning-area layers for both map
@@ -1417,6 +1416,47 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - Not confirmed against a live storm: the exact SES `category1/2` wording (tune
   `_WEATHER_INCIDENT_RE`) and the `location` format (locality after the last comma).
 - Tests: `tests/test_storm_wall.py`.
+
+## Map iconography (built 2026-10-28)
+- **One icon set for every marker on every map** (`app/map_icons.py`, 53 icons, original SVG —
+  not VicEmergency/BoM artwork). Grammar: SHAPE = kind of thing (triangle warning · circle
+  incident · square gauge / power · hexagon radar storm cell · red no-entry disc / amber diamond
+  road signs · drop rain / arrow gust), COLOUR = the level/class colour the maps already used
+  (unchanged), GLYPH = hazard or incident type. Glyph ink is chosen by luminance (dark on Advice
+  yellow / Watch-and-Act orange, white on red). Each icon has a dark halo + white edge so it reads
+  on light tiles, dark tiles and over warning fills.
+- **How it draws with no Mapbox token.** A Scattermap trace with `marker.symbol="wd-…"` becomes a
+  MapLibre symbol layer asking for that image by name; `factory` inlines the SVGs as
+  `window.WD_MAP_ICONS` (before `{%config%}`, `</` escaped) and `assets/map_icons.js` rasterises
+  them (64 px, pixelRatio 2) and `addImage`s them onto every map — a sweep every 400 ms plus
+  `styleimagemissing`. An image added after the layer first asked still draws (verified in
+  Chromium), and the sweep re-adds after a basemap switch drops the style's images.
+- **Plotly constraints:** icon size = `marker.size / 10` × the image, so `map_icons.marker(sym,
+  px=…)` takes CSS px; ONE size per trace (an array becomes NaN) — power buckets by customers
+  (`POWER_ICON_STEPS`), rain/gust by band, storm by class; `allowoverlap=True` always (MapLibre
+  otherwise hides colliding icons). `marker.symbol` may be a per-point list (one trace per map
+  Kind, each point its own type icon); `marker.color` is only the LEGEND swatch (Plotly's legend
+  can only draw a dot), so it stays the Kind colour. Gust arrows rotate with `marker.angle` =
+  `downwind_degrees` (a northerly points south); a station with no/calm direction gets a round
+  gust marker instead of an arrow pointing north.
+- **Classifiers:** `incident_icon(row, kind)` (category2 first, then category1; "alarm" is never a
+  fire, "Non Structure Fire" is fire-other not structure), `warning_icon(level, row)` via
+  `warning_hazard` (event/category2 first, headline only when no hazard — same rule as
+  `fire_areas.is_fire_warning`), `gauge_icon`, `rain_icon`/`gust_band`.
+- **Where:** every `unified.render_*` (so /map, Replay, every wall, the console Overview), the
+  `/fire` page map + its HTML legend, `/roads` (point-only disruptions, and a sign at the middle
+  vertex of every highlighted road so a short closure is findable at state zoom), /map layer
+  checklist and the wall layer chips. **`/map/key`** (`app/pages/map_key.py`, public, routed in
+  factory, linked from /map and the /fire legend) is rendered from the catalogue, so it cannot
+  drift from the maps.
+- **PDFs:** kaleido never runs the browser script and an unregistered icon draws NOTHING, so
+  `reporting._fig_png` calls `map_icons.static_figure(fig)` first — icons back to dots, each point
+  keeping its own icon colour.
+- **Not converted (deliberately):** the /power page map (size = customers, colour = duration — an
+  analytic bubble map), the /weather AWS metric map (continuous colour scale per metric), the
+  /analytics visitor map, and the standalone replay export player (`replay_player.html` builds its
+  own figures in the browser; it would need the catalogue inlined + the registrar copied in).
+- Tests: `tests/test_map_icons.py` (53).
 
 ## Wall map light/dark + sound previews (built 2026-10-22)
 - **Every wall's ⚙ Options has a "Map" choice** (`app/basemap.py`, `wall.map_style_option`):

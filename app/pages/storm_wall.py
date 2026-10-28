@@ -54,15 +54,15 @@ LEVEL_KEYS = fire_wall.LEVEL_KEYS
 
 # Map layer chips: (value, label, swatch colour, swatch shape).
 LAYERS = [
-    ("emergency", "Emergency Warning", "#d62728", "▲"),
-    ("watch_act", "Watch and Act", "#ff7f0e", "▲"),
-    ("advice", "Advice", "#e6c700", "▲"),
-    ("incidents", "Incidents", "#5b8def", "●"),
+    ("emergency", "Emergency Warning", "#d62728", "wd-warn-emergency-storm"),
+    ("watch_act", "Watch and Act", "#ff7f0e", "wd-warn-watchact-storm"),
+    ("advice", "Advice", "#e6c700", "wd-warn-advice-storm"),
+    ("incidents", "Incidents", "#5b8def", "wd-inc-tree"),
     ("closures", "Road closures", "#d62728", "━"),
     ("road_other", "Other road disruptions", "#ff9f1c", "━"),
-    ("power", "Power outages", "#7048e8", "●"),
-    ("gauges", "Gauges ≥ Minor", "#e6c700", "●"),
-    ("cells", "Storm cells", "#d62728", "◉"),
+    ("power", "Power outages", "#7048e8", "wd-power-outage"),
+    ("gauges", "Gauges ≥ Minor", "#e6c700", "wd-gauge-minor"),
+    ("cells", "Storm cells", "#d62728", "wd-storm-strong"),
     ("areas", "Areas of operation", AREA_OUTLINE, "┅"),
 ]
 DEFAULT_LAYERS = [key for key, *_ in LAYERS if key != "road_other"]

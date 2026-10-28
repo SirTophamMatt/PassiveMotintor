@@ -14,7 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, dash_table, dcc, html
 
-from app import ui
+from app import map_icons, ui
 from app.collector import manager
 from app.modules.fire import data as fire_data
 
@@ -79,6 +79,19 @@ def _kind(row):
     return "Other incident"
 
 
+# Icon size (CSS px) per map Kind: warnings largest (they ask the public to
+# act), then fires, then other incidents (the default).
+ICON_PX = {"Emergency Warning": 26, "Watch and Act": 24, "Advice": 22, "Fire": 22}
+
+
+def marker_icon(row, kind):
+    """Map icon for a row of map Kind `kind` (app/map_icons.py): a warning
+    triangle carrying its hazard, or an incident disc carrying its type."""
+    if kind in WARNING_KINDS:
+        return map_icons.warning_icon(kind, row)
+    return map_icons.incident_icon(row, kind)
+
+
 def _warnings_list(wdf):
     """Render active community warnings as iconed rows (AWS triangle in the
     level colour), grouped apart from the incidents table."""
@@ -110,23 +123,28 @@ def _aws_legend():
     """AWS-styled map key: warning triangles (red/orange/yellow) grouped apart
     from incident markers. (Full VicEmergency sprite icons need a Mapbox token;
     these use the AWS colours + the warning-triangle motif, licence-clean.)"""
-    def item(symbol, colour, label):
-        return html.Span([
-            html.Span(symbol, style={"color": colour, "fontSize": "15px",
-                                     "marginRight": "4px"}),
-            html.Span(label),
-        ], style={"marginRight": "16px", "whiteSpace": "nowrap"})
+    def item(icon, label):
+        return html.Span([map_icons.icon_img(icon, 18), html.Span(label)],
+                         style={"marginRight": "14px", "whiteSpace": "nowrap",
+                                "display": "inline-flex", "alignItems": "center",
+                                "gap": "4px"})
 
     return html.Div([
         html.Strong("Warnings (AWS): ", style={"marginRight": "6px"}),
-        item("▲", KIND_COLOURS["Emergency Warning"], "Emergency Warning"),
-        item("▲", KIND_COLOURS["Watch and Act"], "Watch and Act"),
-        item("▲", KIND_COLOURS["Advice"], "Advice"),
+        item("wd-warn-emergency-other", "Emergency Warning"),
+        item("wd-warn-watchact-other", "Watch and Act"),
+        item("wd-warn-advice-other", "Advice"),
         html.Strong("Incidents: ", style={"margin": "0 6px 0 12px"}),
-        item("●", KIND_COLOURS["Fire"], "Fire"),
-        item("●", KIND_COLOURS["Other incident"], "Other"),
-        item("●", KIND_COLOURS[MET_KIND], "Met / weather"),
-        item("■", BURN_COLOUR, "Burn area (historical)"),
+        item("wd-inc-fire", "Fire"),
+        item("wd-inc-structure-fire", "Structure fire"),
+        item("wd-inc-burn-off", "Planned burn"),
+        item("wd-inc-other", "Other"),
+        item("wd-inc-met", "Met / weather"),
+        html.Span([html.Span("■", style={"color": BURN_COLOUR, "fontSize": "15px",
+                                         "marginRight": "4px"}),
+                   html.Span("Burn area (historical)")],
+                  style={"marginRight": "14px", "whiteSpace": "nowrap"}),
+        html.A("Full map key", href="/map/key", style={"marginLeft": "4px"}),
     ], className="muted", style={"margin": "8px 0", "fontSize": "12px",
                                  "display": "flex", "flexWrap": "wrap",
                                  "alignItems": "center"})
@@ -306,17 +324,22 @@ def _map_figure(df, dark, burn_df=None):
             lat="latitude", lon="longitude", zoom=5.2, center=MELB_CENTER,
             map_style="open-street-map", title="Active Incidents & Warnings")
     else:
-        plot = located
-        fig = px.scatter_map(
-            plot, lat="latitude", lon="longitude", color="Kind",
-            color_discrete_map=KIND_COLOURS,
-            category_orders={"Kind": WARNING_KINDS + INCIDENT_KINDS},
-            hover_name="location",
-            hover_data={"category1": True, "status": True, "size": True,
-                        "latitude": False, "longitude": False, "Kind": False},
-            zoom=5.2, center=MELB_CENTER, map_style="open-street-map",
-            title="Active Incidents & Warnings")
-        fig.update_traces(marker=dict(size=12))
+        fig = go.Figure()
+        # One trace per kind (warnings first, so incidents draw on top), each
+        # point its own icon: hazard glyph on a warning, type on an incident.
+        for kind in WARNING_KINDS + INCIDENT_KINDS:
+            sub = located[located["Kind"] == kind]
+            if sub.empty:
+                continue
+            fig.add_trace(go.Scattermap(
+                mode="markers", lat=sub["latitude"], lon=sub["longitude"],
+                name=kind, marker=map_icons.marker(
+                    [marker_icon(r, kind) for _, r in sub.iterrows()],
+                    px=ICON_PX.get(kind, 20), colour=KIND_COLOURS[kind]),
+                hoverinfo="text", text=[_marker_hover(r) for _, r in sub.iterrows()]))
+        fig.update_layout(title="Active Incidents & Warnings",
+                          map=dict(style="open-street-map", center=MELB_CENTER,
+                                   zoom=5.2))
     if hidden is not None and not hidden.empty:
         # Area warnings: no dot, but still hoverable at their centre.
         fig.add_trace(go.Scattermap(
@@ -352,6 +375,19 @@ def _map_figure(df, dark, burn_df=None):
     if layers:
         fig.update_layout(map_layers=layers)  # magic-underscore: keeps style/zoom
     return ui.apply_theme(fig, dark)
+
+
+def _marker_hover(r):
+    def val(c):
+        v = r.get(c)
+        return None if v is None or v != v or str(v).strip() == "" else str(v)
+    txt = "<b>%s</b>" % (val("location") or val("headline") or r["Kind"])
+    bits = [b for b in (r["Kind"] if r["Kind"] in WARNING_KINDS else None,
+                        val("category2") or val("category1"), val("status"),
+                        val("size")) if b]
+    if bits:
+        txt += "<br>" + " · ".join(bits)
+    return txt
 
 
 def _trend_figure(df, dark):

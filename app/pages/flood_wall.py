@@ -32,7 +32,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
-from app import basemap, database, shell, situation
+from app import basemap, database, map_icons, shell, situation
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.roads import data as roads_data
@@ -64,16 +64,16 @@ NEAR_MINOR_SHOWN = 6
 CLASS_KEYS = {1: "major", 2: "moderate", 3: "minor"}
 CLASS_NAMES = {1: "Major", 2: "Moderate", 3: "Minor"}
 
-# Map layer chips: (value, label, swatch colour, swatch shape).
+# Map layer chips: (value, label, swatch colour, map icon or swatch character).
 LAYERS = [
-    ("gauges", "Flood gauges ≥ Minor", "#ff7f0e", "●"),
-    ("gauges_below", "Gauges below Minor", "#5b8def", "●"),
+    ("gauges", "Flood gauges ≥ Minor", "#ff7f0e", "wd-gauge-moderate"),
+    ("gauges_below", "Gauges below Minor", "#5b8def", "wd-gauge-below"),
     ("road_closures", "Road closures", "#d62728", "━"),
     ("road_other", "Other road disruptions", "#ff7f0e", "━"),
-    ("emergency", "Emergency Warning", "#d62728", "▲"),
-    ("watch_act", "Watch and Act", "#ff7f0e", "▲"),
-    ("advice", "Advice", "#e6c700", "▲"),
-    ("incidents", "Incidents", "#ff5722", "●"),
+    ("emergency", "Emergency Warning", "#d62728", "wd-warn-emergency-flood"),
+    ("watch_act", "Watch and Act", "#ff7f0e", "wd-warn-watchact-flood"),
+    ("advice", "Advice", "#e6c700", "wd-warn-advice-flood"),
+    ("incidents", "Incidents", "#ff5722", "wd-inc-flood"),
 ]
 # Below-Minor gauges are ~360 small dots, and lane/partial road disruptions
 # are mostly routine: context on demand, not by default.
@@ -283,9 +283,12 @@ def choose_page(keys, per_page, tick, flashes, now):
 # Components
 # --------------------------------------------------------------------------- #
 def _layer_option(key, label, colour, shape):
-    return {"label": html.Span([
-        html.Span(shape, className="fw-swatch", style={"color": colour}),
-        label]), "value": key}
+    """A layer chip; `shape` is a map icon name (the marker the layer draws)
+    or a character for layers drawn as lines / fills."""
+    swatch = (map_icons.icon_img(shape, 16, marginRight="6px")
+              if shape.startswith(map_icons.PREFIX) else
+              html.Span(shape, className="fw-swatch", style={"color": colour}))
+    return {"label": html.Span([swatch, label]), "value": key}
 
 
 def layout():

@@ -13,13 +13,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, dash_table, dcc, html
 
-from app import ui
+from app import map_icons, ui
 from app.collector import manager
 from app.modules.roads import data as roads_data
 
 VIC_CENTER = {"lat": -37.0, "lon": 145.0}
 
 KIND_COLOURS = {"Closure": "#d62728", "Other disruption": "#ff7f0e"}
+# Road-sign icons per kind (app/map_icons.py) — the same on /roads and /map.
+ROAD_ICONS = {"Closure": "wd-road-closure", "Other disruption": "wd-road-other"}
 
 TABLE_COLUMNS = [
     ("road_name", "Road"), ("location", "Location"),
@@ -89,6 +91,20 @@ def _line_segments(geom):
             yield part
 
 
+def line_midpoint(segments):
+    """(lon, lat) halfway along a road by vertex count — where its sign goes.
+    Taken from the longest part so a stray stub never carries the sign."""
+    parts = [p for p in segments if p]
+    if not parts:
+        return None
+    longest = max(parts, key=len)
+    pt = longest[len(longest) // 2]
+    try:
+        return float(pt[0]), float(pt[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
 def _hover(row):
     """Hover label so a highlighted road is still identifiable without a marker."""
     txt = "<b>%s</b>" % (row.get("road_name") or "Road")
@@ -118,6 +134,7 @@ def _map_figure(df, dark):
 
             # --- impacted road segments (LineString geometry) -> highlight ----
             lats, lons, texts = [], [], []
+            signs = ([], [], [])
             for _, r in sub.iterrows():
                 raw = r.get("geometry")
                 if not raw:
@@ -127,10 +144,15 @@ def _map_figure(df, dark):
                 except (ValueError, TypeError):
                     continue
                 label = _hover(r)
-                for seg in _line_segments(geom):
+                segments = list(_line_segments(geom))
+                for seg in segments:
                     for lon, lat in seg:
                         lons.append(lon); lats.append(lat); texts.append(label)
                     lons.append(None); lats.append(None); texts.append(None)
+                mid = line_midpoint(segments)
+                if mid:
+                    signs[0].append(mid[1]); signs[1].append(mid[0])
+                    signs[2].append(label)
             has_lines = bool(lats)
             if has_lines:
                 fig.add_trace(go.Scattermap(
@@ -138,15 +160,22 @@ def _map_figure(df, dark):
                     legendgroup=kind, line=dict(color=colour,
                     width=5 if kind == "Closure" else 3),
                     hoverinfo="text", text=texts))
+            if signs[0]:
+                fig.add_trace(go.Scattermap(
+                    mode="markers", lat=signs[0], lon=signs[1], name=kind,
+                    legendgroup=kind, showlegend=False,
+                    marker=map_icons.marker(ROAD_ICONS[kind], px=20),
+                    hoverinfo="text", text=signs[2]))
 
-            # --- point-only disruptions (no road segment) -> marker dot -------
+            # --- point-only disruptions (no road segment) -> road sign --------
             pts = sub[sub["geometry"].isna() | (sub["geometry"] == "")]
             pts = pts.dropna(subset=["latitude", "longitude"])
             if not pts.empty:
                 fig.add_trace(go.Scattermap(
                     mode="markers", lat=pts["latitude"], lon=pts["longitude"],
                     name=kind, legendgroup=kind, showlegend=not has_lines,
-                    marker=dict(size=10, color=colour), hoverinfo="text",
+                    marker=map_icons.marker(ROAD_ICONS[kind], px=20),
+                    hoverinfo="text",
                     text=[_hover(r) for _, r in pts.iterrows()]))
 
     fig.update_layout(
