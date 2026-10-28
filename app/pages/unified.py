@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
 from shapely.geometry import shape
 
-from app import ui
+from app import map_icons, ui
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.power import data as power_data
@@ -32,15 +32,23 @@ log = logging.getLogger(__name__)
 
 VIC_CENTER = {"lat": -37.0, "lon": 145.0}
 
+
+def _layer_label(icon, text):
+    return html.Span([" ", map_icons.icon_img(icon, 16, margin="0 5px 0 2px"), text])
+
+
 LAYER_OPTIONS = [
-    {"label": " Fire & warnings", "value": "fire"},
-    {"label": " BoM warning areas", "value": "bomwarn"},
-    {"label": " Flood gauges", "value": "flood"},
-    {"label": " Road disruptions", "value": "roads"},
-    {"label": " Storm cells", "value": "storm"},
-    {"label": " Power outages", "value": "power"},
-    {"label": " Rainfall (AWS)", "value": "rain"},
-    {"label": " Weather observations (gusts)", "value": "wind"},
+    {"label": _layer_label("wd-warn-watchact-other", "Fire & warnings"),
+     "value": "fire"},
+    {"label": _layer_label("wd-warn-advice-storm", "BoM warning areas"),
+     "value": "bomwarn"},
+    {"label": _layer_label("wd-gauge-moderate", "Flood gauges"), "value": "flood"},
+    {"label": _layer_label("wd-road-closure", "Road disruptions"), "value": "roads"},
+    {"label": _layer_label("wd-storm-strong", "Storm cells"), "value": "storm"},
+    {"label": _layer_label("wd-power-outage", "Power outages"), "value": "power"},
+    {"label": _layer_label("wd-rain-2", "Rainfall (AWS)"), "value": "rain"},
+    {"label": _layer_label("wd-gust-2", "Weather observations (gusts)"),
+     "value": "wind"},
 ]
 # Rainfall and weather observations are off by default — drawing all ~104 AWS
 # stations at once buries the hazard layers this map exists to show. Both are
@@ -90,7 +98,10 @@ def render_fire(df):
         if not dots.empty:
             traces.append(go.Scattermap(
                 mode="markers", lat=dots["latitude"], lon=dots["longitude"],
-                name=kind, legendgroup="fire", marker=dict(size=11, color=colour),
+                name=kind, legendgroup="fire",
+                marker=map_icons.marker(
+                    [fire_page.marker_icon(r, kind) for _, r in dots.iterrows()],
+                    px=fire_page.ICON_PX.get(kind, 20), colour=colour),
                 hoverinfo="text", text=[_fire_hover(r) for _, r in dots.iterrows()]))
         if not areas.empty:
             traces.append(go.Scattermap(
@@ -193,19 +204,19 @@ def render_flood(df):
     if df is None or df.empty:
         return [], []
     traces = []
-    # Most severe first; below-flood gauges shown small/grey for network context.
-    tiers = [("Major flooding", "#d62728", 13, "Gauge: Major"),
-             ("Moderate flooding", "#ff7f0e", 12, "Gauge: Moderate"),
-             ("Minor flooding", "#e6c700", 11, "Gauge: Minor"),
-             ("Below flood level", "#5b8def", 6, "Gauge: below level")]
-    for label, colour, size, legend in tiers:
+    # Most severe first; below-flood gauges shown small for network context.
+    tiers = [("Major flooding", 24, "Gauge: Major"),
+             ("Moderate flooding", 22, "Gauge: Moderate"),
+             ("Minor flooding", 21, "Gauge: Minor"),
+             ("Below flood level", 11, "Gauge: below level")]
+    for label, px, legend in tiers:
         sub = df[df["label"] == label]
         if sub.empty:
             continue
         traces.append(go.Scattermap(
             mode="markers", lat=sub["latitude"], lon=sub["longitude"],
             name=legend, legendgroup="flood",
-            marker=dict(size=size, color=colour),
+            marker=map_icons.marker(map_icons.gauge_icon(label), px=px),
             hoverinfo="text", text=[_flood_hover(r) for _, r in sub.iterrows()]))
     return traces, []
 
@@ -230,6 +241,7 @@ def render_roads(df):
         if sub.empty:
             continue
         lats, lons, texts = [], [], []
+        signs = ([], [], [])   # a sign on each highlighted road (lat, lon, text)
         for _, r in sub.iterrows():
             raw = r.get("geometry")
             if not raw:
@@ -239,27 +251,45 @@ def render_roads(df):
             except (ValueError, TypeError):
                 continue
             label = roads_page._hover(r)
-            for seg in roads_page._line_segments(geom):
+            segments = list(roads_page._line_segments(geom))
+            for seg in segments:
                 for lon, lat in seg:
                     lons.append(lon); lats.append(lat); texts.append(label)
                 lons.append(None); lats.append(None); texts.append(None)
+            mid = roads_page.line_midpoint(segments)
+            if mid:
+                signs[0].append(mid[1]); signs[1].append(mid[0])
+                signs[2].append(label)
         has_lines = bool(lats)
+        icon = roads_page.ROAD_ICONS[kind]
         if has_lines:
             traces.append(go.Scattermap(
                 mode="lines", lat=lats, lon=lons, name="Road: %s" % kind,
                 legendgroup="roads", line=dict(color=colour,
                 width=5 if kind == "Closure" else 3),
                 hoverinfo="text", text=texts))
+        if signs[0]:
+            # The sign makes a short closure findable at state zoom, where
+            # its line is a few pixels long.
+            traces.append(go.Scattermap(
+                mode="markers", lat=signs[0], lon=signs[1],
+                name="Road: %s" % kind, legendgroup="roads", showlegend=False,
+                marker=map_icons.marker(icon, px=ROAD_ICON_PX[kind]),
+                hoverinfo="text", text=signs[2]))
         pts = sub[sub["geometry"].isna() | (sub["geometry"] == "")]
         pts = pts.dropna(subset=["latitude", "longitude"])
         if not pts.empty:
             traces.append(go.Scattermap(
                 mode="markers", lat=pts["latitude"], lon=pts["longitude"],
                 name="Road: %s" % kind, legendgroup="roads",
-                showlegend=not has_lines, marker=dict(size=8, color=colour),
+                showlegend=not has_lines,
+                marker=map_icons.marker(icon, px=ROAD_ICON_PX[kind]),
                 hoverinfo="text",
                 text=[roads_page._hover(r) for _, r in pts.iterrows()]))
     return traces, []
+
+
+ROAD_ICON_PX = {"Closure": 20, "Other disruption": 18}
 
 
 def render_storm(df):
@@ -272,12 +302,13 @@ def render_storm(df):
         sub = df[df["classification"] == cls]
         if sub.empty:
             continue
-        sizes = [max(10, min(30, (a ** 0.5) + 8)) if pd.notna(a) else 12
-                 for a in sub["area_km2"]]
+        # One icon size per class (a symbol trace takes one size); the
+        # cell's extent is its impact polygon and the area is in the hover.
         traces.append(go.Scattermap(
             mode="markers", lat=sub["latitude"], lon=sub["longitude"],
             name="Storm: %s" % cls, legendgroup="storm",
-            marker=dict(size=sizes, color=colour),
+            marker=map_icons.marker("wd-storm-" + cls, px=STORM_ICON_PX.get(cls, 18),
+                                    colour=colour),
             hoverinfo="text", text=[_storm_hover(r) for _, r in sub.iterrows()]))
     # Impact polygons come from the frame's own column rather than a fresh
     # impact_featurecollection() call, so a replayed frame draws the polygons
@@ -295,6 +326,9 @@ def render_storm(df):
                       "source": {"type": "FeatureCollection",
                                  "features": features}})
     return traces, fills
+
+
+STORM_ICON_PX = {"strong": 26, "moderate": 22, "weak": 17}
 
 
 def _storm_hover(r):
@@ -317,18 +351,38 @@ def render_power(df):
     df = df.dropna(subset=["latitude", "longitude"])
     if df.empty:
         return [], []
-    sizes = [max(7, min(30, (float(c) ** 0.5))) if pd.notna(c) and c else 7
-             for c in df["customers_off"]]
     text = ["<b>%s</b><br>%s off supply%s" % (
                 _val(r, "location") or "Outage",
                 "{:,}".format(int(r["customers_off"])) if pd.notna(r.get("customers_off")) else "?",
                 (" · " + _val(r, "type")) if _val(r, "type") else "")
             for _, r in df.iterrows()]
-    return [go.Scattermap(
-        mode="markers", lat=df["latitude"], lon=df["longitude"],
-        name="Power outage", legendgroup="power",
-        marker=dict(size=sizes, color="#7048e8"), hoverinfo="text",
-        text=text)], []
+    df = df.assign(_text=text, _px=[power_icon_px(c) for c in df["customers_off"]])
+    traces = []
+    # Bigger icon for a bigger outage, bucketed (one size per symbol trace).
+    for px in sorted(df["_px"].unique(), reverse=True):
+        sub = df[df["_px"] == px]
+        traces.append(go.Scattermap(
+            mode="markers", lat=sub["latitude"], lon=sub["longitude"],
+            name="Power outage", legendgroup="power", showlegend=not traces,
+            marker=map_icons.marker("wd-power-outage", px=int(px)),
+            hoverinfo="text", text=list(sub["_text"])))
+    return traces, []
+
+
+# (customers off at least, icon px)
+POWER_ICON_STEPS = [(1000, 28), (100, 22), (0, 17)]
+
+
+def power_icon_px(customers):
+    try:
+        n = float(customers)
+    except (TypeError, ValueError):
+        n = 0
+    n = 0 if n != n else n
+    for floor, px in POWER_ICON_STEPS:
+        if n >= floor:
+            return px
+    return POWER_ICON_STEPS[-1][1]
 
 
 def render_rain(df):
@@ -338,16 +392,20 @@ def render_rain(df):
     df = df[df["rain_since_9am_mm"].fillna(0) > 0]
     if df.empty:
         return [], []
-    cmax = max(10, float(df["rain_since_9am_mm"].max()))
-    text = ["<b>%s</b><br>%.1f mm since 9am" % (_val(r, "name") or "AWS",
-                                                r["rain_since_9am_mm"])
-            for _, r in df.iterrows()]
-    return [go.Scattermap(
-        mode="markers", lat=df["latitude"], lon=df["longitude"],
-        name="Rain since 9am", legendgroup="rain",
-        marker=dict(size=9, color=df["rain_since_9am_mm"], colorscale="Blues",
-                    cmin=0, cmax=cmax, showscale=False),
-        hoverinfo="text", text=text)], []
+    df = df.assign(_band=[map_icons.rain_band(v) for v in df["rain_since_9am_mm"]])
+    traces = []
+    for band in sorted(df["_band"].unique()):
+        sub = df[df["_band"] == band]
+        name = "wd-rain-%d" % band
+        traces.append(go.Scattermap(
+            mode="markers", lat=sub["latitude"], lon=sub["longitude"],
+            name=map_icons.ICONS[name]["label"] + " since 9am", legendgroup="rain",
+            marker=map_icons.marker(name, px=16 + 2 * int(band)),
+            hoverinfo="text",
+            text=["<b>%s</b><br>%.1f mm since 9am" % (_val(r, "name") or "AWS",
+                                                      r["rain_since_9am_mm"])
+                  for _, r in sub.iterrows()]))
+    return traces, []
 
 
 def render_wind(df):
@@ -360,7 +418,6 @@ def render_wind(df):
     df = df[df["wind_gust_kmh"] >= WIND_LAYER_MIN_GUST_KMH]
     if df.empty:
         return [], []
-    cmax = max(80.0, float(df["wind_gust_kmh"].max()))
     text = ["<b>%s</b><br>Gust %.0f km/h%s<br>Observed %s" % (
                 _val(r, "name") or "AWS", r["wind_gust_kmh"],
                 (" · wind %s %.0f km/h" % (r["wind_direction"], r["wind_speed_kmh"]))
@@ -368,15 +425,34 @@ def render_wind(df):
                 else "",
                 _val(r, "obs_time") or "—")
             for _, r in df.iterrows()]
-    sizes = [max(8, min(26, 8 + (float(g) - WIND_LAYER_MIN_GUST_KMH) * 0.35))
-             for g in df["wind_gust_kmh"]]
-    return [go.Scattermap(
-        mode="markers", lat=df["latitude"], lon=df["longitude"],
-        name="Wind gust ≥ %d km/h" % WIND_LAYER_MIN_GUST_KMH,
-        legendgroup="wind",
-        marker=dict(size=sizes, color=df["wind_gust_kmh"], colorscale="YlOrRd",
-                    cmin=WIND_LAYER_MIN_GUST_KMH, cmax=cmax, showscale=False),
-        hoverinfo="text", text=text)], []
+    direction = (df["wind_direction"] if "wind_direction" in df.columns
+                 else pd.Series([None] * len(df), index=df.index))
+    df = df.assign(_text=text,
+                   _band=[map_icons.gust_band(g) for g in df["wind_gust_kmh"]],
+                   _angle=[map_icons.downwind_degrees(d) for d in direction])
+    traces = []
+    # An arrow pointing the way the wind blows; a station that reports no
+    # direction gets a round gust marker instead of an arrow pointing north.
+    for band in sorted(df["_band"].unique()):
+        sub = df[df["_band"] == band]
+        name = "wd-gust-%d" % band
+        px = 18 + 3 * int(band)
+        label = map_icons.ICONS[name]["label"]
+        arrows, calm = sub[sub["_angle"].notna()], sub[sub["_angle"].isna()]
+        if not arrows.empty:
+            traces.append(go.Scattermap(
+                mode="markers", lat=arrows["latitude"], lon=arrows["longitude"],
+                name=label, legendgroup="wind",
+                marker=map_icons.marker(name, px=px,
+                                        angle=[float(a) for a in arrows["_angle"]]),
+                hoverinfo="text", text=list(arrows["_text"])))
+        if not calm.empty:
+            traces.append(go.Scattermap(
+                mode="markers", lat=calm["latitude"], lon=calm["longitude"],
+                name=label, legendgroup="wind", showlegend=arrows.empty,
+                marker=map_icons.marker(name + "-calm", px=px - 2),
+                hoverinfo="text", text=list(calm["_text"])))
+    return traces, []
 
 
 # Draw order (back to front) and the renderer for each layer.
@@ -478,6 +554,8 @@ def layout():
                          "coordinates (~77% of gauges; the rest are being "
                          "filled in).", className="muted",
                          style={"marginTop": "8px", "fontSize": "12px"}),
+                dcc.Link("Map key — what every symbol means", href="/map/key",
+                         className="map-key-link"),
             ], className="panel"),
         ], className="panel-row"),
         dcc.Interval(id="unified-interval", interval=60_000, n_intervals=0),

@@ -17,7 +17,7 @@ from app.pages import (admin, analytics as analytics_page,
                        briefing as briefing_page, feed, fire, flood,
                        fire_wall, flood_wall, news_wall, storm_wall,
                        fdr as fdr_page, importer_page, intel, opsum as opsum_page,
-                       overview,
+                       map_key, overview,
                        pager as pager_page,
                        power,
                        replay as replay_page, roads as roads_page,
@@ -301,6 +301,13 @@ def create_app(autostart=False):
         "{%favicon%}",
         '{%favicon%}\n        <link rel="icon" type="image/svg+xml" '
         f'href="{get_asset_url("watchdesk-favicon.svg")}">')
+    # The map icon set, inlined ahead of the asset scripts so
+    # assets/map_icons.js can register it on every map (app/map_icons.py).
+    from app import map_icons
+    app.index_string = app.index_string.replace(
+        "{%config%}",
+        "<script>window.WD_MAP_ICONS=%s;</script>\n            {%%config%%}"
+        % map_icons.catalogue_json().replace("</", "<\\/"))
 
     app.layout = _shell_layout()
 
@@ -365,6 +372,9 @@ def create_app(autostart=False):
         if pathname == shell.STORM_WALL_TEST_PATH:
             return (storm_wall.layout(test=True) if auth.is_admin()
                     else storm_wall.test_locked())
+        # The map key (every icon/line/area the maps draw); linked from the maps.
+        if pathname == map_key.PATH:
+            return map_key.layout()
         # Warning detail/history pages: /weather/warning/<id>
         if pathname and pathname.startswith(weather.WARNING_PATH):
             return weather.warning_detail_layout(weather.warning_id_from_path(pathname))

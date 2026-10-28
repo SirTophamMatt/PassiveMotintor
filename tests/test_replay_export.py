@@ -274,9 +274,9 @@ def test_incidents_carry_agency_and_type(event):
     _incident("fl", "Flooding", org="VIC/SES")
     _incident("pb", "Planned Burn", org="VIC/DEECA")
     states = {e["k"]: e["s"][0] for e in _package(event)["fire"]}
-    assert states["bo"][7:] == ["cfa", "Fire – Burn Off"]
-    assert states["fl"][7:] == ["ses", "Flooding"]
-    assert states["pb"][7:] == ["ffm", "Planned Burn"]
+    assert states["bo"][7:9] == ["cfa", "Fire – Burn Off"]
+    assert states["fl"][7:9] == ["ses", "Flooding"]
+    assert states["pb"][7:9] == ["ffm", "Planned Burn"]
 
 
 def test_warnings_have_no_incident_type(event):
@@ -359,3 +359,38 @@ def test_timeline_spans_the_whole_event_not_just_its_last_hours(db):
     assert days == {0, 1, 2, 3}
     assert len(times) <= 4 * (replay_export.TIMELINE_MAJOR_PER_DAY
                               + replay_export.TIMELINE_NOTABLE_PER_DAY) + 4
+
+
+# --------------------------------------------------------------------------- #
+# Map icons (app/map_icons.py) in the player
+# --------------------------------------------------------------------------- #
+def test_incidents_and_warnings_carry_their_map_icon(event):
+    _incident("tree", "Tree Down", "Tree Down", org="VIC/SES")
+    _incident("house", "Fire", "Building Fire")
+    history.record_state(history.FIRE, "w", {"feed_type": "warning",
+                                             "warning_level": "Watch and Act",
+                                             "event": "Flood"},
+                         effective_ts=at(5), latitude=-37.0, longitude=145.0)
+    icons = {e["k"]: e["s"][0][9] for e in _package(event)["fire"]}
+    assert icons == {"tree": "wd-inc-tree", "house": "wd-inc-structure-fire",
+                     "w": "wd-warn-watchact-flood"}
+
+
+def test_export_carries_the_icon_set(event):
+    from app import map_icons
+    pkg = _package(event)
+    assert set(pkg["icons"]) == set(map_icons.ICONS)
+    # Escaped like the rest of the data, so no SVG can close the <script>.
+    _name, page = replay_export.export(event)
+    data = page[page.index('id="replay-data">'):]
+    assert "</svg>" not in data[:data.index("</script>")]
+
+
+def test_player_registers_the_icons_on_its_map():
+    page = replay_export.TEMPLATE.read_text(encoding="utf-8")
+    assert "D.icons" in page and "addImage" in page
+    assert "styleimagemissing" in page and "pixelRatio: 2" in page
+    # Every icon the player names itself exists in the catalogue.
+    from app import map_icons
+    for name in set(re.findall(r'"(wd-[a-z0-9-]+)"', page)):
+        assert name in map_icons.ICONS, name

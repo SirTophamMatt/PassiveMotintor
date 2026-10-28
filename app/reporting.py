@@ -176,6 +176,10 @@ def _simple_table(header, rows, widths):
 
 
 def _fig_png(fig, width=_FIG_W, height=_FIG_H):
+    # Map icons are registered by a browser script kaleido never runs, and an
+    # unregistered icon draws nothing — so a PDF map gets plain dots.
+    from app import map_icons
+    map_icons.static_figure(fig)
     try:
         return fig.to_image(format="png", width=width, height=height, scale=2)
     except Exception as e:  # kaleido missing or render failure

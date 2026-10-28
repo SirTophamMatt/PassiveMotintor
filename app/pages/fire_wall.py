@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
-from app import auth, basemap, fire_areas, fire_demo, shell, situation
+from app import auth, basemap, fire_areas, fire_demo, map_icons, shell, situation
 from app.pages import wall
 
 log = logging.getLogger(__name__)
@@ -63,11 +63,11 @@ LEVEL_KEYS = {"Emergency Warning": "emergency", "Watch and Act": "watch",
 
 # Map layer chips: (value, label, swatch colour, swatch shape).
 LAYERS = [
-    ("emergency", "Emergency Warning", "#d62728", "▲"),
-    ("watch_act", "Watch and Act", "#ff7f0e", "▲"),
-    ("advice", "Advice", "#e6c700", "▲"),
-    ("fires", "Fire incidents", "#ff5722", "●"),
-    ("other", "Other incidents", "#5b8def", "●"),
+    ("emergency", "Emergency Warning", "#d62728", "wd-warn-emergency-fire"),
+    ("watch_act", "Watch and Act", "#ff7f0e", "wd-warn-watchact-fire"),
+    ("advice", "Advice", "#e6c700", "wd-warn-advice-fire"),
+    ("fires", "Fire incidents", "#ff5722", "wd-inc-fire"),
+    ("other", "Other incidents", "#5b8def", "wd-inc-other"),
     ("burnt", "Burnt area", BURNT_COLOUR, "■"),
     ("change", "Growth / reduction", GROWTH_COLOUR, "■"),
     ("areas", "Areas of operation", AREA_OUTLINE, "┅"),
@@ -164,9 +164,12 @@ def fire_count(snap):
 # Components
 # --------------------------------------------------------------------------- #
 def _layer_option(key, label, colour, shape):
-    return {"label": html.Span([
-        html.Span(shape, className="fw-swatch", style={"color": colour}),
-        label]), "value": key}
+    """A layer chip; `shape` is a map icon name (the marker the layer draws)
+    or a character for layers drawn as lines / fills."""
+    swatch = (map_icons.icon_img(shape, 16, marginRight="6px")
+              if shape.startswith(map_icons.PREFIX) else
+              html.Span(shape, className="fw-swatch", style={"color": colour}))
+    return {"label": html.Span([swatch, label]), "value": key}
 
 
 def _radio(id_, choices, value, fmt):
