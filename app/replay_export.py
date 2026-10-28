@@ -41,7 +41,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app import database, history, intel_feed, replay
+from app import database, history, intel_feed, map_icons, replay
 from app.modules.fire import data as fire_data
 from app.modules.flood import data as flood_data
 from app.modules.roads import data as roads_data
@@ -184,7 +184,8 @@ def incident_type(r):
 def fire_entities(start, end, geoms):
     """VicEmergency warnings + incidents as change lists.
 
-    State row: [t, active, kind, lat, lon, geom index, hover, agency, type]."""
+    State row: [t, active, kind, lat, lon, geom index, hover, agency, type,
+    map icon (app/map_icons.py)]."""
     df = _journal(history.FIRE, start, end)
     if df.empty:
         return []
@@ -202,7 +203,8 @@ def fire_entities(start, end, geoms):
                 1 if r.get("active") == 1 else 0, kind,
                 _num(r.get("latitude")), _num(r.get("longitude")),
                 geoms.add(r.get("geometry")), _fire_hover(r, kind),
-                fire_data.agency_of(r.get("source_org")), incident_type(r)])
+                fire_data.agency_of(r.get("source_org")), incident_type(r),
+                fire_page.marker_icon(r, kind)])
         if states:
             out.append({"k": str(key), "s": _collapse(states)})
     return out
@@ -484,6 +486,9 @@ def build_package(tag_id):
             "power_stale_minutes": POWER_STALE_MINUTES,
         },
         "colours": dict(fire_page.KIND_COLOURS),
+        # The map icon set (name -> SVG), registered on the player's map the
+        # same way assets/map_icons.js does it in the app.
+        "icons": {name: map_icons.svg(name) for name in map_icons.ICONS},
         "agencies": [[k, v] for k, v in fire_data.AGENCY_LABELS.items()],
         "fire": _section("fire", lambda: fire_entities(start, end, geoms), []),
         "roads": _section("roads", lambda: road_entities(start, end, geoms), []),

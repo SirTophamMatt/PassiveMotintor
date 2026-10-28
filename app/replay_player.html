@@ -64,6 +64,7 @@ button.primary { background: var(--accent); color: var(--on-accent);
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .sw.tri { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .sw.bar { border-radius: 2px; height: 4px; width: 14px; }
+img.sw { width: 15px; height: 15px; border-radius: 0; vertical-align: -3px; }
 #timeline { max-height: 44vh; overflow-y: auto; }
 .options { position: absolute; right: 16px; top: 100%; z-index: 30; width: min(760px, calc(100vw - 32px));
   max-height: calc(100vh - 140px); overflow-y: auto; background: var(--panel); border: 1px solid var(--border);
@@ -276,28 +277,86 @@ $("footer-gen").textContent = M.generated;
 $("coverage").textContent = M.coverage;
 $("causes").textContent = M.road_causes.join(", ").toLowerCase();
 
+// ---- map icons ---------------------------------------------------------------
+// The app's icon set (app/map_icons.py), carried in the export as SVG. A
+// marker whose symbol is "wd-…" becomes a MapLibre symbol layer asking for an
+// image by that name; nothing on the basemap provides one, so each SVG is
+// rasterised once and added to the map (an image added after a layer asked
+// for it still draws). Icons are 64 px at pixelRatio 2 = 32 CSS px at
+// marker.size 10, and a symbol trace takes ONE size.
+var ICONS = D.icons || {}, ICON_DATA = {}, ICON_NAMES = Object.keys(ICONS);
+ICON_NAMES.forEach(function (name) {
+  var img = new Image(64, 64);
+  img.onload = function () {
+    try {
+      var c = document.createElement("canvas"); c.width = 64; c.height = 64;
+      var ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, 64, 64);
+      ICON_DATA[name] = ctx.getImageData(0, 0, 64, 64);
+      syncIcons();
+    } catch (e) { /* that marker is simply not drawn */ }
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(ICONS[name]);
+});
+function iconUri(name) {
+  return ICONS[name] ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(ICONS[name]) : null;
+}
+function swatch(l) {
+  var uri = iconUri(l[4]);
+  return uri ? '<img class="sw" alt="" src="' + uri + '">'
+             : '<span class="sw ' + l[1] + '" style="background:' + l[2] + '"></span>';
+}
+function iconMarker(symbol, px, colour) {
+  return {symbol: symbol, size: px * 10 / 32, allowoverlap: true, color: colour};
+}
+var iconMap = null;
+function syncIcons() {
+  var map = mlMap();
+  if (!map) return;
+  if (iconMap !== map) {
+    iconMap = map;
+    map.on("styleimagemissing", function (e) {
+      if (e && ICON_DATA[e.id] && !map.hasImage(e.id)) map.addImage(e.id, ICON_DATA[e.id], {pixelRatio: 2});
+    });
+    map.on("styledata", function () { setTimeout(syncIcons, 0); });  // a basemap switch drops images
+  }
+  ICON_NAMES.forEach(function (name) {
+    try {
+      if (ICON_DATA[name] && !map.hasImage(name)) map.addImage(name, ICON_DATA[name], {pixelRatio: 2});
+    } catch (e) { /* style mid-switch: styledata retries */ }
+  });
+}
+var WARN_ICON = {"Emergency Warning": "wd-warn-emergency-other", "Watch and Act": "wd-warn-watchact-other",
+                 "Advice": "wd-warn-advice-other"};
+var KIND_ICON = {"Fire": "wd-inc-fire", "Other incident": "wd-inc-other", "Met (weather)": "wd-inc-met"};
+var ICON_PX = {"Emergency Warning": 26, "Watch and Act": 24, "Advice": 22, "Fire": 22};
+var GAUGE_ICON = {3: ["wd-gauge-major", 24], 2: ["wd-gauge-moderate", 22], 1: ["wd-gauge-minor", 21],
+                  0: ["wd-gauge-below", 11]};
+// Bigger icon for a bigger outage, as on the app's map (customers off at least, px).
+var POWER_STEPS = [[1000, 28], [100, 22], [0, 17]];
+
 // ---- flood classes -----------------------------------------------------------
 var CLS = {3: ["Major", "#d62728"], 2: ["Moderate", "#ff7f0e"], 1: ["Minor", "#e6c700"],
            0: ["Below Minor", "#5b8def"], "-1": ["No data", "#777"]};
 var C = D.colours;
+// [name, swatch class, colour, on by default, map icon shown in the list]
 var LAYERS = [
-  ["Emergency Warning", "tri", C["Emergency Warning"], true],
-  ["Watch and Act", "tri", C["Watch and Act"], true],
-  ["Advice", "tri", C["Advice"], true],
-  ["Fire", "", C["Fire"], true],
-  ["Other incident", "", C["Other incident"], true],
-  ["Met (weather)", "", C["Met (weather)"], true],
-  ["Road closures", "bar", "#d62728", true],
-  ["Other road disruptions", "bar", "#ff9f1c", true],
-  ["Gauges ≥ Minor", "", "#e6c700", true],
-  ["Gauges below Minor", "", "#5b8def", false],
-  ["Power outages", "", "#8e44ad", true]
+  ["Emergency Warning", "tri", C["Emergency Warning"], true, "wd-warn-emergency-other"],
+  ["Watch and Act", "tri", C["Watch and Act"], true, "wd-warn-watchact-other"],
+  ["Advice", "tri", C["Advice"], true, "wd-warn-advice-other"],
+  ["Fire", "", C["Fire"], true, "wd-inc-fire"],
+  ["Other incident", "", C["Other incident"], true, "wd-inc-other"],
+  ["Met (weather)", "", C["Met (weather)"], true, "wd-inc-met"],
+  ["Road closures", "bar", "#d62728", true, "wd-road-closure"],
+  ["Other road disruptions", "bar", "#ff9f1c", true, "wd-road-other"],
+  ["Gauges ≥ Minor", "", "#e6c700", true, "wd-gauge-moderate"],
+  ["Gauges below Minor", "", "#5b8def", false, "wd-gauge-below"],
+  ["Power outages", "", "#7048e8", true, "wd-power-outage"]
 ];
 var on = {};
 $("layers").innerHTML = LAYERS.map(function (l, i) {
   on[l[0]] = l[3];
   return '<label><input type="checkbox" data-layer="' + i + '"' + (l[3] ? " checked" : "") +
-    '><span class="sw ' + l[1] + '" style="background:' + l[2] + '"></span>' + esc(l[0]) + "</label>";
+    '>' + swatch(l) + esc(l[0]) + "</label>";
 }).join("");
 $("layers").addEventListener("change", function (e) {
   var i = e.target.getAttribute("data-layer");
@@ -481,11 +540,18 @@ function drawMap(force) {
     // and a legend drawn from them would be a faded ghost.
     traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind,
       lat: [null], lon: [null], hoverinfo: "skip", marker: {size: 11, color: C[kind]}});
-    traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind, showlegend: false,
-      lat: pts.map(function (r) { return r[3]; }), lon: pts.map(function (r) { return r[4]; }),
-      text: pts.map(function (r) { return r[6]; }), hoverinfo: "text",
-      marker: {size: pts.map(function (r) { return withArea.indexOf(r) >= 0 ? 16 : 11; }), color: C[kind],
-        opacity: pts.map(function (r) { return withArea.indexOf(r) >= 0 ? 0 : 1; })}});
+    // A warning drawn as an area has no visible marker (it read as another
+    // incident), only an invisible one to hover; one with no area gets its icon.
+    var hidden = pts.filter(function (r) { return withArea.indexOf(r) >= 0; });
+    var shown = pts.filter(function (r) { return withArea.indexOf(r) < 0; });
+    if (hidden.length) traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind,
+      showlegend: false, lat: hidden.map(function (r) { return r[3]; }), lon: hidden.map(function (r) { return r[4]; }),
+      text: hidden.map(function (r) { return r[6]; }), hoverinfo: "text",
+      marker: {size: 16, color: C[kind], opacity: 0}});
+    if (shown.length) traces.push({type: "scattermap", mode: "markers", name: kind, legendgroup: kind,
+      showlegend: false, lat: shown.map(function (r) { return r[3]; }), lon: shown.map(function (r) { return r[4]; }),
+      text: shown.map(function (r) { return r[6]; }), hoverinfo: "text",
+      marker: iconMarker(shown.map(function (r) { return r[9] || WARN_ICON[kind]; }), ICON_PX[kind], C[kind])});
   });
   // Incidents.
   ["Fire", "Other incident", "Met (weather)"].forEach(function (kind) {
@@ -496,38 +562,54 @@ function drawMap(force) {
     var pts = rows.filter(function (r) { return r[3] != null; });
     if (pts.length) traces.push({type: "scattermap", mode: "markers", name: kind,
       lat: pts.map(function (r) { return r[3]; }), lon: pts.map(function (r) { return r[4]; }),
-      text: pts.map(function (r) { return r[6]; }), hoverinfo: "text", marker: {size: 10, color: C[kind]}});
+      text: pts.map(function (r) { return r[6]; }), hoverinfo: "text",
+      marker: iconMarker(pts.map(function (r) { return r[9] || KIND_ICON[kind]; }), ICON_PX[kind] || 20, C[kind])});
   });
   // Roads: the impacted segment as a line; a point only when there is no line.
-  [[1, "Road closures", "#d62728", 5], [0, "Other road disruptions", "#ff9f1c", 3]].forEach(function (cfg) {
+  // A sign sits on every highlighted road (its longest part's middle vertex),
+  // so a short closure is findable at state zoom.
+  [[1, "Road closures", "#d62728", 5, "wd-road-closure", 20],
+   [0, "Other road disruptions", "#ff9f1c", 3, "wd-road-other", 18]].forEach(function (cfg) {
     if (!on[cfg[1]]) return;
     var rows = s.roads.filter(function (r) { return r[2] === cfg[0]; });
     var la = [], lo = [], tx = [], pla = [], plo = [], ptx = [];
     rows.forEach(function (r) {
       var segs = r[5] != null ? lines(D.geoms[r[5]]) : [];
-      if (segs.length) segs.forEach(function (seg) {
-        seg.forEach(function (c) { lo.push(c[0]); la.push(c[1]); tx.push(r[6]); });
-        lo.push(null); la.push(null); tx.push(null);
-      });
+      if (segs.length) {
+        segs.forEach(function (seg) {
+          seg.forEach(function (c) { lo.push(c[0]); la.push(c[1]); tx.push(r[6]); });
+          lo.push(null); la.push(null); tx.push(null);
+        });
+        var longest = segs.reduce(function (a, b) { return b.length > a.length ? b : a; });
+        var mid = longest[Math.floor(longest.length / 2)];
+        if (mid) { pla.push(mid[1]); plo.push(mid[0]); ptx.push(r[6]); }
+      }
       else if (r[3] != null) { pla.push(r[3]); plo.push(r[4]); ptx.push(r[6]); }
     });
-    if (la.length) traces.push({type: "scattermap", mode: "lines", name: cfg[1], lat: la, lon: lo, text: tx,
-      hoverinfo: "text", line: {width: cfg[3], color: cfg[2]}});
-    if (pla.length) traces.push({type: "scattermap", mode: "markers", name: cfg[1], showlegend: !la.length,
-      lat: pla, lon: plo, text: ptx, hoverinfo: "text", marker: {size: 9, color: cfg[2]}});
+    if (la.length) traces.push({type: "scattermap", mode: "lines", name: cfg[1], legendgroup: cfg[1],
+      lat: la, lon: lo, text: tx, hoverinfo: "text", line: {width: cfg[3], color: cfg[2]}});
+    if (pla.length) traces.push({type: "scattermap", mode: "markers", name: cfg[1], legendgroup: cfg[1],
+      showlegend: !la.length, lat: pla, lon: plo, text: ptx, hoverinfo: "text",
+      marker: iconMarker(cfg[4], cfg[5], cfg[2])});
   });
   // Power outages, sized by customers off.
   if (on["Power outages"] && s.power.length) {
     var pw = s.power.filter(function (p) { return p[1] != null; });
-    if (pw.length) traces.push({type: "scattermap", mode: "markers", name: "Power outages",
-      lat: pw.map(function (p) { return p[1]; }), lon: pw.map(function (p) { return p[2]; }),
-      text: pw.map(function (p) { return "<b>" + esc(p[3]) + "</b><br>" + p[0].toLocaleString() + " customers off"; }),
-      hoverinfo: "text", marker: {size: pw.map(function (p) { return Math.max(7, Math.min(30, 4 + Math.sqrt(p[0]) / 2)); }),
-        color: "#8e44ad", opacity: 0.75}});
+    var shownPower = false;
+    POWER_STEPS.forEach(function (step, i) {
+      var hi = i ? POWER_STEPS[i - 1][0] : Infinity;
+      var b = pw.filter(function (p) { return p[0] >= step[0] && p[0] < hi; });
+      if (!b.length) return;
+      traces.push({type: "scattermap", mode: "markers", name: "Power outages", legendgroup: "power",
+        showlegend: !shownPower,
+        lat: b.map(function (p) { return p[1]; }), lon: b.map(function (p) { return p[2]; }),
+        text: b.map(function (p) { return "<b>" + esc(p[3]) + "</b><br>" + p[0].toLocaleString() + " customers off"; }),
+        hoverinfo: "text", marker: iconMarker("wd-power-outage", step[1], "#7048e8")});
+      shownPower = true;
+    });
   }
   // Flood gauges, below-Minor first so the flooding ones sit on top.
-  [[0, 6], [1, 11], [2, 12], [3, 13]].forEach(function (cfg) {
-    var cls = cfg[0];
+  [0, 1, 2, 3].forEach(function (cls) {
     if (cls === 0 ? !on["Gauges below Minor"] : !on["Gauges ≥ Minor"]) return;
     var idx = [];
     D.gauges.forEach(function (g, i) { if (g.lat != null && s.gauges[i] === cls) idx.push(i); });
@@ -538,7 +620,7 @@ function drawMap(force) {
       text: idx.map(function (i) { var g = D.gauges[i], h = heightAt(g, current.t);
         return "<b>" + esc(g.name) + "</b><br>" + CLS[cls][0] + (h != null ? " · " + h.toFixed(2) + " m" : "") +
           (g.r ? "<br><i>click for graph</i>" : ""); }),
-      marker: {size: cfg[1], color: CLS[cls][1]}});
+      marker: iconMarker(GAUGE_ICON[cls][0], GAUGE_ICON[cls][1], CLS[cls][1])});
   });
   if (focus && focus.lat != null) traces.push({type: "scattermap", mode: "markers", name: "Selected entry",
     lat: [focus.lat], lon: [focus.lon], hoverinfo: "skip", showlegend: false,
@@ -618,6 +700,7 @@ function commitMap(traces, layout) {
   var done = function () {
     mapBusy = false;
     if (first) bindMap();
+    syncIcons();
     syncFills();
     if (mapQueued) { mapQueued = false; drawMap(true); }
   };

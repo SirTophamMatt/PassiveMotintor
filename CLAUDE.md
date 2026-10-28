@@ -1452,10 +1452,17 @@ what should I be watching* — and is useful **on its own, before anyone generat
 - **PDFs:** kaleido never runs the browser script and an unregistered icon draws NOTHING, so
   `reporting._fig_png` calls `map_icons.static_figure(fig)` first — icons back to dots, each point
   keeping its own icon colour.
+- **Replay export player (2026-10-28):** each fire-journal state row gains its icon name at index
+  9 (`fire_page.marker_icon`, computed at export so the player needs no classifier) and the
+  package carries `icons` (name -> SVG, through `_safe_json`). `replay_player.html` rasterises
+  them and registers them on its own map (`syncIcons`, after every draw + on `styledata` /
+  `styleimagemissing`) — same technique as `assets/map_icons.js`, verified opened from `file://`.
+  Area warnings keep an invisible hover marker (a symbol layer cannot take per-point opacity),
+  roads get a sign at the longest part's middle vertex, power buckets into three icon sizes,
+  and the Options layer list shows each layer's icon.
 - **Not converted (deliberately):** the /power page map (size = customers, colour = duration — an
-  analytic bubble map), the /weather AWS metric map (continuous colour scale per metric), the
-  /analytics visitor map, and the standalone replay export player (`replay_player.html` builds its
-  own figures in the browser; it would need the catalogue inlined + the registrar copied in).
+  analytic bubble map), the /weather AWS metric map (continuous colour scale per metric) and the
+  /analytics visitor map.
 - Tests: `tests/test_map_icons.py` (53).
 
 ## Wall map light/dark + sound previews (built 2026-10-22)
