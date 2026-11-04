@@ -40,6 +40,8 @@ Chrome installed for the power scraper / EM-COP launch (chromedriver auto-manage
 - `app/modules/fdr/` + `app/pages/fdr.py` — Fire Danger Ratings / TFB Intel tool (see `FDR.md`)
 - `app/storm_areas.py` — storm wall model: weather-related incidents linked into areas of
   operation; `app/storm_demo.py` — the simulated storm behind `/wall/storm/test`
+- `app/modules/power/outages.py` — outage IDs: one per EM-COP outage, matched cycle to cycle,
+  its localities linked; `app/localities.py` — suburb/locality boundaries + name matching
 - `app/opsum.py` (model) + `app/opsum_pptx.py` (renderer) + `app/pages/opsum.py` — the Intel
   Tool's State Operational Summary builder; template `seed/opsum_template.pptx`
 - `app/pages/` — one file per page (overview, flood, power, importer_page, settings)
@@ -1750,6 +1752,95 @@ Builds the SCC **State Operational Summary** PowerPoint from a form at `/intel/s
 - Collector `fdr` (30 min, autostart), watchdog, `/health` `fdr_running/fdr_last_success/
   fdr_last_error`. Tests: `tests/test_fdr.py`.
 - Not done: a live TFB-day fixture; severity-increase alerts; Op Summary TFB/FDR auto-fill.
+
+## Power outage IDs + suburb boundaries (built 2026-11-04)
+- **One EM-COP table row = one outage.** The scraper used to split each row into one
+  `power_outages` row per locality and keep nothing linking them, so a 12-suburb outage read as
+  12 outages each carrying the whole customer count. `scraper.parse_row` now keeps the row
+  (locality list from the cell-0 span `title`, customers col 2, type col 4, first seen col 5, ALL
+  cells + the `thead` header + row attributes into `cells_json`, because columns 1 and 3 are
+  still unknown) and `app/modules/power/outages.py` stores it.
+- **IDs:** `power_outage_events` (one row per outage: `outage_ref` `PWR-yymmdd-XXXX` — first-seen
+  date + 4 chars, no I/O/0/1, the feedback-ref convention — type, first/last seen, customers +
+  peak, `locations_json` now, `all_locations_json` ever, restored/restored_at/duration).
+  `power_outages` gains `outage_ref` (`_ensure_column` + `idx_outages_ref`, created after the
+  column): every locality row names its outage; a suburb on two outages is two rows.
+- **EM-COP publishes no outage id** (none seen), so identity is MATCHED each cycle
+  (`outages.match`): same type AND (same first-seen minute + ≥1 shared locality, or ≥
+  `SAME_LIST_MIN` (50%) of localities shared — covers a first-seen re-read differently). Pairs are
+  taken best-first, one-to-one; equal customers break ties, so two planned jobs in the same
+  suburb at the same minute keep separate IDs. Row attributes are NOT used for identity: an
+  unseen `id` could be positional (`row-3`) and would cross-wire outages. Unmatched known →
+  restored; one listed again within `power.reopen_minutes` (30) keeps its ID (and a locality
+  dropped then re-listed within the window gets its own row back). Pre-ID active rows are
+  ADOPTED on the first cycle (grouped by `legacy_key` = customers + type + first seen, matched
+  like any outage, `outage_ref` set — never duplicated).
+- **Counting rule everywhere: `outages.customers_total` / `outage_count` / `group_key`** (ref,
+  else the legacy key) — never `len()` or a plain sum of locality rows. Applied to the storm wall
+  (`storm_areas.outage_key` delegates; member ids are `power:<ref>:<location>`), the feed's
+  "N power outages nearby" context, the Op Summary lines (one per outage with its localities).
+- **Journal unchanged in shape, NOT a new source.** `history.POWER` stays keyed by locality —
+  adding a source would move `replay.coverage`'s `max(history_starts())` to today and mark every
+  older event "partial". A locality on two outages is ONE entity (customers summed) and its state
+  gains `outages: [[ref, customers, type, first_seen], …]` (a one-off write per active locality
+  at upgrade). `outages.explode_journal` turns a replay frame back into (outage, locality) rows;
+  pre-ID journal rows pass through and group by `legacy_key`.
+- **Intelligence Feed** power entries are per OUTAGE (entity = ref, "New outage: Belgrave, Tecoma
+  +3", detail carries `Outage PWR-…` and the localities), positioned at the mean of its
+  localities' geocodes (so they get context; the outage context line is skipped on a power entry
+  — it would describe itself). `_reported_by_location` stops an outage that started just before
+  the upgrade being announced a second time under its new key.
+- **Boundaries `app/localities.py`** → `locality_boundaries` (name, display_name, `name_key`,
+  qualifier, lga, simplified GeoJSON at `simplify_m` 50 m + 4 dp, inside point, bbox, km²).
+  Reference data: replaced whole in ONE transaction; a load < 50% of what is there is refused
+  unless forced (a cut-short download looks exactly like that). **Not committed and not
+  verified live — the sandbox reaches no government host.** The server fetches it: on boot while
+  the table is empty (`collector.autostart` → `localities.autofetch`, background thread), Admin →
+  Power collection → *Download locality boundaries*, or `python -m app.localities fetch|import
+  <file>|status|match <names>`. Sources (config `localities`): `arcgis` (default ABS ASGS 2021
+  SAL `geo.abs.gov.au/arcgis/rest/services/ASGS2021/SAL/MapServer/0`, `state_code_2021 = '2'`;
+  ids first, then `objectIds` batches, GeoJSON asked for with an Esri-JSON fallback converted by
+  ring winding), `geojson` (any URL, WFS `numberMatched`/`startIndex` paging — e.g. a Vicmap
+  locality WFS), or a file on the Import page (GeoJSON / Esri JSON / .shp / zipped shapefile via
+  pyshp). Name/id/LGA/state fields come from candidate lists (`NAME_FIELDS` includes the
+  .dbf-truncated `locality_n`; override `localities.name_field`); a state field with unknown
+  codes falls back to the Victoria bbox. Projected coordinates (VicGrid/MGA, or a PROJCS .prj)
+  are REFUSED with a message, never stored. Unparseable responses → `localities_debug_<name>.txt`.
+- **Matching a name** (`localities.resolve`): `normalise` on both sides (case, punctuation,
+  postcode, bracketed qualifier, Mt→Mount, St→Saint, Nth/Sth/Pt/Upr/Lwr). A name several
+  localities share (ABS qualifies them: "Golden Point (Ballarat - Vic.)"; Vicmap gets the LGA)
+  goes to the candidate nearest the outage's OTHER unambiguous localities, else the geocoder's
+  point, else it stays `ambiguous` and is not drawn. `attach(df, groups)` adds `locality_id/name/
+  status/lat/lon/geometry` to per-locality rows; index + geometry cached, invalidated by the
+  table's (count, max id, loaded_at) stamp. `power.data.map_outages()` = active rows + boundaries.
+- **Maps.** `unified.render_power` (so /map, Replay, every wall, console Overview): the suburbs
+  filled purple (`POWER_COLOUR`; planned fainter + dashed edge), ONE marker per outage (mean of
+  its localities, icon bucketed by its customers, `customdata` = ref), invisible hover points on
+  each highlighted suburb naming its outage(s), a small dot for a listed locality with no
+  boundary so it is never lost. With no boundaries loaded it degrades to markers. Live source
+  and `replay.power_at` both attach boundaries (a suburb's shape did not change during the
+  event — same reasoning as the geocode fill). The storm wall loads `map_outages` too.
+- **/power page:** suburbs filled in their outage's DURATION colour + one bubble per outage; KPIs
+  Outages + Localities affected; durations chart per outage (`label · last 4 of ref` keeps
+  same-suburb outages apart); an **Outages table** (ID, localities, customers, peak, type, first
+  seen, duration, outlined n/m); clicking a row OR a bubble selects it (`power-selected` store) →
+  its suburbs outlined black, map framed on them via `meta.wdFocus` (graph_calm keeps the
+  viewer's zoom otherwise), detail panel listing every locality with its match status, any
+  locality also on another active outage as a link to it, earlier-listed localities, and the
+  cells "As published by EM-COP". The Clear button lives in the static layout (hidden) — a
+  callback whose Input is missing at first render never fires. Boundary status line names
+  unmatched / ambiguous localities so EM-COP's spelling can be checked.
+- **Export:** "Power Outages" is now one row per outage (localities as text); the per-locality
+  rows (with `outage_ref`) moved to "Power Outage Localities". `/api` power features carry
+  `outageRef`.
+- Browser check (Chromium, synthetic shapes): selection frames + outlines, links between two
+  outages sharing Belgrave, Clear. Sandbox gotcha: a malformed stub tile PNG ("source image could
+  not be decoded") stalls MapLibre and every later figure update is queued — the map looks
+  frozen. Stub tiles with a real 256×256 PNG.
+- Not done: suburbs in the downloadable replay player (it still draws per-location markers from
+  the journal), an outage's suburbs in the briefing/Overview PDF tables, the meaning of EM-COP
+  columns 1 and 3 (look in `power_table_sample.html`, saved once per run next to the DB), a
+  real EM-COP table fixture. Tests: `tests/test_power_outages.py`, `tests/test_localities.py`.
 
 ## Backlog (not started)
 Full flood+power PDF *sitrep* (beyond the Overview snapshot) · dedicated flood map PAGE (gauge

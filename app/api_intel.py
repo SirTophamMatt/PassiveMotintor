@@ -449,7 +449,7 @@ def _power(include_resolved=False):
     place name only, so an outage with no cached geocode has nowhere to draw."""
     where = "" if include_resolved else "WHERE po.restored = 0"
     df = database.read_df(
-        "SELECT po.location, po.customers_off, po.type, po.first_seen,"
+        "SELECT po.outage_ref, po.location, po.customers_off, po.type, po.first_seen,"
         " po.last_seen, po.restored, po.duration_mins, gc.latitude, gc.longitude"
         " FROM power_outages po JOIN geocode_cache gc ON gc.location = po.location"
         f" {where}")
@@ -482,6 +482,9 @@ def _power(include_resolved=False):
             "status": "Restored" if restored else f"{customers:,} customers off",
             "detail": _detail([_clean(row.get("type")), duration]),
             "customersOff": customers,
+            # The outage this locality is listed under: every locality of one
+            # outage shares it (and its customers-off figure).
+            "outageRef": _clean(row.get("outage_ref")) or None,
             "resolved": restored,
             "ts": _clean(row.get("last_seen")) or _clean(row.get("first_seen")),
             "source": "Passive Monitor · power",

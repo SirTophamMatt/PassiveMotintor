@@ -192,6 +192,37 @@ DEFAULTS = {
         # are set: start_power() checks credentials_set() and simply logs and
         # skips if they are missing, so nothing crashes on a fresh deploy.
         "autostart": True,
+        # Outage identity (app/modules/power/outages.py): an outage that drops
+        # out of EM-COP's table and comes back within this many minutes keeps
+        # its ID instead of being restored and re-issued as a new outage.
+        "reopen_minutes": 30,
+    },
+    # Suburb / locality boundaries (app/localities.py) — the shapes the power
+    # map highlights for each outage. Reference data, loaded once on the
+    # server (Admin → Power → Download locality boundaries, or automatically on
+    # boot while the table is empty) and kept until replaced.
+    "localities": {
+        # Download on boot when no boundaries are loaded yet. One request
+        # sequence per boot; a failure is logged and shown on Admin.
+        "autofetch": True,
+        # "arcgis" = an ArcGIS REST layer (default: ABS ASGS 2021 Suburbs and
+        # Localities). "geojson" = any URL returning a GeoJSON FeatureCollection
+        # (e.g. a Vicmap Admin locality-polygon WFS GetFeature with
+        # outputFormat=application/json).
+        "source": "arcgis",
+        "arcgis_url": ("https://geo.abs.gov.au/arcgis/rest/services/"
+                       "ASGS2021/SAL/MapServer/0"),
+        "arcgis_where": "state_code_2021 = '2'",
+        "geojson_url": "",
+        # Property holding the locality name. Blank = detect it (see
+        # localities.NAME_FIELDS).
+        "name_field": "",
+        "batch_size": 100,
+        "timeout_seconds": 60,
+        # Shapes are simplified to about this many metres before storing —
+        # invisible at suburb zoom, and it keeps a map of several hundred
+        # affected suburbs light enough to refresh every minute.
+        "simplify_m": 50,
     },
     "opsum": {
         # Operational Summary (Intel Tool) auto-fill — app/opsum_auto.py.

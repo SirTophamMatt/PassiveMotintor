@@ -12,7 +12,7 @@ gating does not rely on the UI merely hiding a button.
 from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from app import auth, feedback, github_issues, mailer, notify
+from app import auth, feedback, github_issues, localities, mailer, notify
 from app import tags as tag_store
 from app import ui
 from app.collector import manager
@@ -206,6 +206,17 @@ def _panel():
                          style={"fontSize": "12px", "marginTop": "6px"}),
                 html.Div(id="admin-power-status", className="muted",
                          style={"marginTop": "8px"}),
+                html.H5("Suburb boundaries", style={"margin": "14px 0 4px"}),
+                html.Div("The locality shapes the power map highlights for each "
+                         "outage. Downloaded once from the source in config "
+                         "(localities — default ABS Suburbs and Localities), or "
+                         "loaded from a file on the Import page.",
+                         className="muted", style={"fontSize": "12px"}),
+                html.Button("Download locality boundaries",
+                            id="admin-localities-fetch", className="btn",
+                            style={"marginTop": "6px"}),
+                html.Div(id="admin-localities-status", className="muted",
+                         style={"marginTop": "6px", "fontSize": "13px"}),
             ], className="panel"),
         ], className="panel-row"),
 
@@ -758,6 +769,18 @@ def register_callbacks(app):
         return msg
 
     @app.callback(
+        Output("admin-localities-status", "children"),
+        Input("admin-localities-fetch", "n_clicks"),
+        Input("admin-status-interval", "n_intervals"))
+    def localities_control(_fetch, _tick):
+        if not auth.is_admin():
+            return None
+        started = None
+        if ctx.triggered_id == "admin-localities-fetch":
+            _, started = localities.start_fetch()
+        return _localities_status(started)
+
+    @app.callback(
         Output("admin-collector-status", "children"),
         Input("admin-status-interval", "n_intervals"))
     def collector_status(_):
@@ -1090,3 +1113,25 @@ def register_callbacks(app):
         auth.set_admin_password(new_password)
         return ("✅ Admin password saved to config.json. Note: UM_ADMIN_PASSWORD "
                 "in the environment, if set, overrides it.")
+
+
+def _localities_status(started=None):
+    """What is loaded, and the last load's outcome."""
+    st = localities.status()
+    lines = []
+    if started:
+        lines.append(html.Div(started))
+    if st["running"]:
+        lines.append(html.Div("Downloading… (this can take a minute or two)"))
+    if st["count"]:
+        lines.append(html.Div(f"{st['count']:,} localities loaded from "
+                              f"{st.get('source') or 'unknown source'} at "
+                              f"{str(st.get('loaded_at') or '')[:16]}."))
+    else:
+        lines.append(html.Div("None loaded — outages are drawn as points only."))
+    if st.get("last_error"):
+        lines.append(html.Div(f"Last attempt failed: {st['last_error']}",
+                              className="error-text"))
+    elif st.get("last_message") and not st["running"]:
+        lines.append(html.Div(f"Last load: {st['last_message']}"))
+    return lines

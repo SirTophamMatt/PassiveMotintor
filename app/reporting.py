@@ -296,7 +296,7 @@ def build_overview_pdf():
         add_fig(power_page._trend_figure(trend_df, "Power — Past 24 Hours", dark=False),
                 "Power Outage Trend")
 
-    outages = power_data.active_outages(include_planned=True)
+    outages = power_data.map_outages(include_planned=True)
     add_fig(power_page._map_figure(outages, dark=False), "Active Outages Map",
             optional=True)
 
