@@ -345,28 +345,127 @@ def _storm_hover(r):
     return txt
 
 
+POWER_COLOUR = "#7048e8"
+# Unplanned outages are the ones being responded to; planned works are drawn
+# fainter with a dashed edge so the two never read as the same thing.
+POWER_FILL_OPACITY = {"unplanned": 0.24, "planned": 0.10}
+POWER_HOVER_LOCALITIES = 8
+
+
 def render_power(df):
+    """Power outages: the SUBURBS each outage affects, filled (when locality
+    boundaries are loaded — power/data.map_outages), and ONE marker per
+    outage, not per suburb, sized by its customers off.
+
+    Hovering a highlighted suburb names its outage(s) and the suburbs listed
+    with it; a listed locality with no boundary (unmatched, ambiguous, or none
+    loaded) keeps a small marker at its geocoded point so it is never lost.
+    Rows without an outage ID (replay of data recorded before IDs) are grouped
+    the old way and drawn the same."""
     if df is None or df.empty:
         return [], []
-    df = df.dropna(subset=["latitude", "longitude"])
-    if df.empty:
-        return [], []
-    text = ["<b>%s</b><br>%s off supply%s" % (
-                _val(r, "location") or "Outage",
-                "{:,}".format(int(r["customers_off"])) if pd.notna(r.get("customers_off")) else "?",
-                (" · " + _val(r, "type")) if _val(r, "type") else "")
-            for _, r in df.iterrows()]
-    df = df.assign(_text=text, _px=[power_icon_px(c) for c in df["customers_off"]])
+    from app.modules.power import outages
+    items = outages.summaries(df)
+    fills, by_kind = [], {"unplanned": {}, "planned": {}}
+    points = {}     # locality -> [lat, lon, has_shape, [outage lines]]
+    marks = []      # one per outage
+    for o in items:
+        kind = "planned" if outages.is_planned(o["type"]) else "unplanned"
+        head = _power_outage_line(o)
+        for m in o["members"]:
+            if m["geometry"]:
+                by_kind[kind].setdefault(m["locality_id"], m["geometry"])
+            if m["latitude"] is None or len(o["members"]) == 1:
+                continue
+            slot = points.setdefault(m["display"], [m["latitude"], m["longitude"],
+                                                   bool(m["geometry"]), []])
+            slot[2] = slot[2] or bool(m["geometry"])
+            slot[3].append(head)
+        if o["latitude"] is not None:
+            marks.append((o, _power_hover(o)))
+    for kind, shapes in by_kind.items():
+        if not shapes:
+            continue
+        fc = {"type": "FeatureCollection",
+              "features": [{"type": "Feature", "geometry": g, "properties": {}}
+                           for g in shapes.values()]}
+        fills.append({"sourcetype": "geojson", "type": "fill", "below": "traces",
+                      "color": POWER_COLOUR, "opacity": POWER_FILL_OPACITY[kind],
+                      "source": fc})
+        line = {"sourcetype": "geojson", "type": "line", "below": "traces",
+                "color": POWER_COLOUR, "line": {"width": 1.5}, "source": fc}
+        if kind == "planned":
+            line["line"]["dash"] = [2, 2]
+        fills.append(line)
+
     traces = []
-    # Bigger icon for a bigger outage, bucketed (one size per symbol trace).
-    for px in sorted(df["_px"].unique(), reverse=True):
-        sub = df[df["_px"] == px]
+    shaped = {k: v for k, v in points.items() if v[2]}
+    loose = {k: v for k, v in points.items() if not v[2]}
+    if shaped:
+        # Invisible: the fill is what is seen; this carries the hover.
         traces.append(go.Scattermap(
-            mode="markers", lat=sub["latitude"], lon=sub["longitude"],
-            name="Power outage", legendgroup="power", showlegend=not traces,
+            mode="markers", lat=[v[0] for v in shaped.values()],
+            lon=[v[1] for v in shaped.values()], name="Suburb on an outage",
+            legendgroup="power", showlegend=False,
+            marker=dict(size=16, color=POWER_COLOUR, opacity=0), hoverinfo="text",
+            text=[_power_locality_hover(k, v[3]) for k, v in shaped.items()]))
+    if loose:
+        traces.append(go.Scattermap(
+            mode="markers", lat=[v[0] for v in loose.values()],
+            lon=[v[1] for v in loose.values()], name="Suburb on an outage",
+            legendgroup="power", showlegend=False,
+            marker=dict(size=7, color=POWER_COLOUR, opacity=0.8), hoverinfo="text",
+            text=[_power_locality_hover(k, v[3]) for k, v in loose.items()]))
+    # Bigger icon for a bigger outage, bucketed (one size per symbol trace).
+    by_px = {}
+    for o, text in marks:
+        by_px.setdefault(power_icon_px(o["customers_off"]), []).append((o, text))
+    for px in sorted(by_px, reverse=True):
+        sub = by_px[px]
+        traces.append(go.Scattermap(
+            mode="markers", lat=[o["latitude"] for o, _ in sub],
+            lon=[o["longitude"] for o, _ in sub],
+            name="Power outage", legendgroup="power",
+            showlegend=not any(t.name == "Power outage" for t in traces),
             marker=map_icons.marker("wd-power-outage", px=int(px)),
-            hoverinfo="text", text=list(sub["_text"])))
-    return traces, []
+            hoverinfo="text", text=[t for _, t in sub],
+            customdata=[o["ref"] or "" for o, _ in sub]))
+    return traces, fills
+
+
+def _power_since(o):
+    first = pd.to_datetime(o.get("first_seen"), errors="coerce")
+    return "" if pd.isna(first) else f"{first:%H:%M} {first.day} {first:%b}"
+
+
+def _power_outage_line(o):
+    return "%s · %s customers off" % (
+        ("Outage %s" % o["ref"]) if o["ref"] else "Outage",
+        "{:,}".format(o["customers_off"]))
+
+
+def _power_hover(o):
+    names = [m["display"] for m in o["members"]]
+    shown = names[:POWER_HOVER_LOCALITIES]
+    more = len(names) - len(shown)
+    lines = ["<b>Power outage%s</b>" % ((" " + o["ref"]) if o["ref"] else ""),
+             "%s customers off%s" % ("{:,}".format(o["customers_off"]),
+                                     (" · " + o["type"]) if o["type"] else "")]
+    since = _power_since(o)
+    if since:
+        lines.append("Since " + since)
+    lines.append("%d %s: %s%s" % (len(names), "locality" if len(names) == 1
+                                  else "localities", ", ".join(shown),
+                                  " +%d more" % more if more else ""))
+    missing = len(names) - o["mapped"]
+    if o["mapped"] and missing:
+        lines.append("%d not outlined (no boundary match)" % missing)
+    return "<br>".join(lines)
+
+
+def _power_locality_hover(name, outage_lines):
+    lines = ["<b>%s</b>" % name] + list(dict.fromkeys(outage_lines))
+    return "<br>".join(lines)
 
 
 # (customers off at least, icon px)
@@ -476,7 +575,7 @@ LIVE_SOURCES = {
     "flood": flood_data.map_gauges,
     "roads": roads_data.active_disruptions,
     "storm": storm_data.active_cells,
-    "power": power_data.active_outages,
+    "power": power_data.map_outages,
     "rain": weather_data.latest_aws_rainfall,
     "wind": weather_data.latest_aws_observations,
 }

@@ -351,7 +351,8 @@ CREATE TABLE IF NOT EXISTS power_outages (
     first_seen TEXT,
     last_seen TEXT,
     restored INTEGER NOT NULL DEFAULT 0,
-    duration_mins REAL
+    duration_mins REAL,
+    outage_ref TEXT              -- power_outage_events.outage_ref (NULL = pre-2026-11 row)
 );
 CREATE INDEX IF NOT EXISTS idx_outages_loc ON power_outages (location, restored);
 
@@ -360,6 +361,50 @@ CREATE TABLE IF NOT EXISTS geocode_cache (
     latitude REAL,
     longitude REAL
 );
+
+-- One row per EM-COP OUTAGE (one row of its outage table), with the ID this
+-- app gives it. power_outages keeps one row per locality, linked here by
+-- outage_ref, so every suburb listed under one outage can be found from any of
+-- them. app/modules/power/outages.py owns the matching that keeps an outage's
+-- ID stable from one cycle to the next.
+CREATE TABLE IF NOT EXISTS power_outage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outage_ref TEXT NOT NULL UNIQUE,   -- PWR-261104-4XKQ
+    type TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    restored INTEGER NOT NULL DEFAULT 0,
+    restored_at TEXT,
+    duration_mins REAL,
+    customers_off INTEGER,
+    peak_customers INTEGER,
+    locations_json TEXT,               -- localities listed NOW, in EM-COP's order
+    all_locations_json TEXT,           -- every locality ever listed under it
+    cells_json TEXT                    -- {"header", "cells", "attrs"} as published
+);
+CREATE INDEX IF NOT EXISTS idx_power_events_active
+    ON power_outage_events (restored, last_seen);
+
+-- Suburb / locality boundaries (app/localities.py): reference data, replaced
+-- as a whole on each load. `name_key` is the normalised name EM-COP locations
+-- are matched on; geometry is simplified GeoJSON (lon/lat, 4 dp).
+CREATE TABLE IF NOT EXISTS locality_boundaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,                -- as published
+    display_name TEXT,                 -- for screens ("Golden Point (Ballarat)")
+    name_key TEXT NOT NULL,
+    qualifier TEXT,                    -- disambiguator of a duplicated name
+    lga TEXT,
+    source TEXT,
+    source_id TEXT,
+    geometry TEXT NOT NULL,
+    latitude REAL,                     -- a point guaranteed inside the shape
+    longitude REAL,
+    min_lat REAL, min_lon REAL, max_lat REAL, max_lon REAL,
+    area_km2 REAL,
+    loaded_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_locality_key ON locality_boundaries (name_key);
 
 -- VicEmergency incidents + community warnings, upserted each cycle on the
 -- feed's stable feature id. An incident that drops out of the feed (or goes
@@ -939,6 +984,13 @@ def init_db(backup=True):
         _ensure_column(conn, "storm_cells", "impact_geojson", "TEXT")
         _ensure_column(conn, "road_disruptions", "ses_region", "TEXT")
         _ensure_column(conn, "road_disruptions", "transport_region", "TEXT")
+        # Power outage IDs (2026-11-04): each per-locality row names the
+        # outage it was listed under. Pre-existing rows keep NULL (the
+        # scraper adopts the still-active ones on its next cycle). The index
+        # needs the column, so it is created here rather than in SCHEMA.
+        _ensure_column(conn, "power_outages", "outage_ref", "TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_outages_ref "
+                     "ON power_outages (outage_ref, restored)")
         # Pager parser v2 (2026-09-24): appliances + a version so stored rows
         # are re-parsed when the parser improves (scraper.reparse_stale).
         _ensure_column(conn, "pager_messages", "units_json", "TEXT")

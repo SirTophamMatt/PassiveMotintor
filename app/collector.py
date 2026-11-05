@@ -511,6 +511,13 @@ class CollectorManager:
                 log.info("Autostart fdr: %s", msg)
             except Exception:
                 log.exception("Autostart fdr failed")
+        # Suburb boundaries for the power map: downloaded once, in the
+        # background, while none are loaded (app/localities.py).
+        try:
+            from app import localities
+            localities.autofetch()
+        except Exception:
+            log.exception("Autostart locality boundaries failed")
         if cfg["power"].get("autostart", False):
             try:
                 ok, msg = self.start_power()

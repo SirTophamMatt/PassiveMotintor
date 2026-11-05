@@ -88,6 +88,22 @@ docker compose up -d --build</code></pre>
     <li>On <strong>Admin</strong>, tick <em>Auto-start on server boot</em> for power (and <em>Start</em> it
       once to verify). Leave headless <strong>off</strong> &mdash; EM-COP drops headless sessions.</li>
   </ul>
+  <h3>Suburb boundaries (outage highlighting)</h3>
+  <p>The power map outlines the suburbs each outage affects. The boundaries are
+  downloaded <strong>by the server</strong> the first time it boots with none loaded (from the
+  ABS Suburbs and Localities layer at <code>geo.abs.gov.au</code>, a few minutes, once). If that
+  host is blocked, or the download fails, outages still show as points &mdash; retry from
+  <strong>Admin &rarr; Power collection &rarr; Download locality boundaries</strong>, or download a
+  Victorian locality file yourself (Vicmap Admin <em>Locality Polygon</em>, or ABS SAL, in
+  GDA2020 / GDA94 / WGS84 &mdash; <strong>not</strong> VicGrid / MGA), copy it into the data volume
+  and load it from the <strong>Import</strong> page. From a shell:</p>
+<pre><code>docker compose exec app python -m app.localities status
+docker compose exec app python -m app.localities fetch
+docker compose exec app python -m app.localities import /data/localities.zip
+docker compose exec app python -m app.localities match BELGRAVE "GOLDEN POINT"</code></pre>
+  <p>The power scraper also saves one copy of EM-COP's outage table per run to
+  <code>/data/power_table_sample.html</code> &mdash; send it along if the outage columns ever
+  need checking.</p>
   <div class="callout">
     <strong>Note on manual interaction:</strong> power occasionally needs a human to log
     into EM-COP and acknowledge system messages. Because the container's Chrome runs

@@ -357,7 +357,7 @@ def register_callbacks(app):
             ]
 
         # Power: outage map
-        outages = power_data.active_outages(include_planned=True)
+        outages = power_data.map_outages(include_planned=True)
         map_fig = power_page._map_figure(outages, dark)
 
         # Fire: active incidents & warnings map

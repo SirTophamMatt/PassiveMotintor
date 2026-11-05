@@ -115,32 +115,41 @@ def roads_at(when):
 
 
 def power_at(when):
-    """Per-location outages as they stood, with coordinates.
+    """Outages as they stood: one row per (outage, locality), with coordinates
+    and locality boundaries.
+
+    The journal is per locality; since outage IDs (2026-11) each locality's
+    state also lists the outages it was on, so the suburbs of one outage are
+    put back together here (`outages.explode_journal`). Older rows have no
+    list and are grouped the old way when drawn.
 
     The journal already carries the coordinates it had at record time. A
     location geocoded only AFTER its outage was journalled would have been
     recorded without them, so the current cache fills those gaps — that is the
     one case where using today's data is right, because a town's coordinates
-    are not a thing that changed during the event.
+    are not a thing that changed during the event. Locality boundaries are
+    attached for the same reason.
     """
+    from app.modules.power import data as power_data
+    from app.modules.power import outages
     df = history.state_at(history.POWER, when)
     if df.empty or "latitude" not in df.columns:
         return df
+    if "location" not in df.columns:
+        df = df.assign(location=df["entity_key"])
     missing = df["latitude"].isna()
-    if not missing.any():
-        return df
-    cache = database.read_df(
-        "SELECT location, latitude AS _lat, longitude AS _lon FROM geocode_cache")
-    if cache.empty:
-        return df
-    lookup = cache.set_index("location")
-    df = df.copy()
-    for idx in df.index[missing]:
-        key = df.at[idx, "entity_key"]
-        if key in lookup.index:
-            df.at[idx, "latitude"] = lookup.at[key, "_lat"]
-            df.at[idx, "longitude"] = lookup.at[key, "_lon"]
-    return df
+    if missing.any():
+        cache = database.read_df(
+            "SELECT location, latitude AS _lat, longitude AS _lon FROM geocode_cache")
+        if not cache.empty:
+            lookup = cache.set_index("location")
+            df = df.copy()
+            for idx in df.index[missing]:
+                key = df.at[idx, "entity_key"]
+                if key in lookup.index:
+                    df.at[idx, "latitude"] = lookup.at[key, "_lat"]
+                    df.at[idx, "longitude"] = lookup.at[key, "_lon"]
+    return power_data.with_localities(outages.explode_journal(df))
 
 
 def weather_warnings_at(when):

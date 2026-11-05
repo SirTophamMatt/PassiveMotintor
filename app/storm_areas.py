@@ -221,6 +221,16 @@ def _geom(row, polygons=True):
     return _point(lat, lon) if lat is not None else None
 
 
+def _power_point(row):
+    """A locality's geocoded point, or — when the geocoder never placed it —
+    the point inside its boundary (localities.attach)."""
+    geom = _geom(row, polygons=False)
+    if geom is None and row.get("locality_lat") is not None:
+        geom = _geom({"latitude": row.get("locality_lat"),
+                      "longitude": row.get("locality_lon")}, polygons=False)
+    return geom
+
+
 def _incident_kind(row):
     for col in ("category2", "category1", "event"):
         text = _text(row.get(col)).strip()
@@ -262,11 +272,12 @@ def members_from(frames, agencies=None, weather_only=True):
             detail=_text(row.get("disruption_type")) or None, geom=_geom(row)))
     for row in _records(frames.get("power")):
         out.append(Member(
-            id=f"power:{row.get('location')}", role="power", kind="Power outage",
+            id=f"power:{_text(row.get('outage_ref')) or '-'}:{row.get('location')}",
+            role="power", kind="Power outage",
             location=_text(row.get("location")) or "Outage",
             value=float(pd.to_numeric(row.get("customers_off"), errors="coerce") or 0),
             outage=outage_key(row),
-            geom=_geom(row, polygons=False)))
+            geom=_power_point(row)))
     for row in _records(frames.get("gauges")):
         pri = int(pd.to_numeric(row.get("priority"), errors="coerce") or 4)
         if pri > 3:
@@ -458,25 +469,20 @@ def scope(frames, tag=None):
 
 
 def outage_key(row):
-    """Identity of the EM-COP outage a location row came from.
-
-    EM-COP lists one outage with all its localities, and the power scraper
-    stores one `power_outages` row PER LOCALITY, each carrying the outage's
-    whole customers-off figure — so summing the rows counts a 12-suburb outage
-    12 times. Rows of one outage share its count, type and start time."""
-    return (_text(row.get("customers_off")), _text(row.get("type")),
-            _text(row.get("first_seen")))
+    """Identity of the EM-COP outage a locality row came from: its outage ID
+    (power/outages.py), or for a row stored before IDs existed the old rule —
+    rows of one outage share its count, type and start time. Several
+    localities of one outage each carry its WHOLE customers-off figure, so
+    summing rows would count a 12-suburb outage 12 times."""
+    from app.modules.power import outages
+    return outages.group_key(row)
 
 
 def outage_customers(df):
     """Customers off across a frame of per-location outage rows, each outage
     counted once (see `outage_key`)."""
-    if df is None or df.empty:
-        return 0
-    seen = {outage_key(r): float(pd.to_numeric(r.get("customers_off"),
-                                               errors="coerce") or 0)
-            for r in _records(df)}
-    return int(sum(seen.values()))
+    from app.modules.power import outages
+    return outages.customers_total(df)
 
 
 def _fresh_gauges(df, now):
@@ -515,7 +521,9 @@ def load_frames(now=None):
     return {
         "incidents": safe(fire_data.active_incidents, "VicEmergency"),
         "roads": safe(roads_data.active_disruptions, "road disruptions"),
-        "power": safe(power_data.active_outages, "power outages"),
+        # Boundaries attached, so the wall's map highlights each outage's
+        # suburbs like /map does.
+        "power": safe(power_data.map_outages, "power outages"),
         # EM-COP's own statewide figure — what the Overview and /power show.
         "power_total": safe(power_data.latest_totals, "power totals"),
         "gauges": gauges,

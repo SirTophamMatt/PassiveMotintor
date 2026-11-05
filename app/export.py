@@ -23,6 +23,21 @@ def _safe_name(text):
     return keep.strip().replace(" ", "_") or "export"
 
 
+OUTAGE_SHEET_COLUMNS = ["outage_ref", "type", "customers_off", "peak_customers",
+                        "first_seen", "last_seen", "restored", "duration_mins",
+                        "locality_count", "localities", "all_localities"]
+
+
+def _outage_sheet(df):
+    """One row per outage, its localities as text (EM-COP order)."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df = df.copy()
+    df["localities"] = [", ".join(v) for v in df["locations"]]
+    df["all_localities"] = [", ".join(v) for v in df["all_locations"]]
+    return df[OUTAGE_SHEET_COLUMNS]
+
+
 def build_export(start_ts, end_ts, label="range",
                  include_flood=True, include_power=True, include_rainfall=True):
     """Return (filename, bytes) for an XLSX export of everything in
@@ -33,6 +48,8 @@ def build_export(start_ts, end_ts, label="range",
                 if include_power else pd.DataFrame())
     power_out = (power_data.outages_in_range(start_ts, end_ts)
                  if include_power else pd.DataFrame())
+    power_events = (_outage_sheet(power_data.outage_events_in_range(start_ts, end_ts))
+                    if include_power else pd.DataFrame())
     rain_raw = (weather_data.load_aws_range(start_ts, end_ts)
                 if include_rainfall else pd.DataFrame())
     rain_totals = (weather_data.aws_event_total(start_ts, end_ts)
@@ -45,7 +62,8 @@ def build_export(start_ts, end_ts, label="range",
         {"Field": "Generated", "Value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
         {"Field": "Flood observations", "Value": len(flood_df)},
         {"Field": "Power readings", "Value": len(power_ts)},
-        {"Field": "Power outages", "Value": len(power_out)},
+        {"Field": "Power outages", "Value": len(power_events)},
+        {"Field": "Power outage localities", "Value": len(power_out)},
         {"Field": "AWS rainfall readings", "Value": len(rain_raw)},
     ])
 
@@ -60,9 +78,14 @@ def build_export(start_ts, end_ts, label="range",
             (power_ts if not power_ts.empty else pd.DataFrame(
                 columns=["timestamp", "customers_off"])
              ).to_excel(writer, sheet_name="Power Timeseries", index=False)
-            (power_out if not power_out.empty else pd.DataFrame(
-                columns=["location", "customers_off", "first_seen"])
+            (power_events if not power_events.empty else pd.DataFrame(
+                columns=OUTAGE_SHEET_COLUMNS)
              ).to_excel(writer, sheet_name="Power Outages", index=False)
+            # One row per locality listed under an outage, linked to it by
+            # outage_ref (a suburb on two outages appears twice).
+            (power_out if not power_out.empty else pd.DataFrame(
+                columns=["outage_ref", "location", "customers_off", "first_seen"])
+             ).to_excel(writer, sheet_name="Power Outage Localities", index=False)
         if include_rainfall:
             # Event totals are 9am-reset-proof (sum of positive increments).
             (rain_totals if not rain_totals.empty else pd.DataFrame(

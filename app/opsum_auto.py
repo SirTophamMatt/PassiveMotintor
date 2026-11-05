@@ -250,15 +250,16 @@ def p_power(ctx):
     if df.empty:
         value = f"Nil significant ({total:,} customers off supply statewide)."
     else:
-        df = df.sort_values("customers_off", ascending=False)
+        # One line per OUTAGE with its localities — each locality of an
+        # outage carries the whole count, so listing localities repeated it.
+        from app.modules.power import outages
         lines = [f"{total:,} customers off supply statewide."]
-        for _, r in df.head(5).iterrows():
-            lines.append(f"  {_s(r.get('location'))} — "
-                         f"{int(float(r.get('customers_off') or 0)):,} customers")
+        for o in outages.summaries(df)[:5]:
+            lines.append(f"  {o['label']} — {o['customers_off']:,} customers")
         value = "\n".join(lines)
     return [Suggestion("power_disruptions", value, "EM-COP power outages",
                        label(datetime.strptime(ts, _TS)) if ts else "",
-                       f"Significant = {threshold:,}+ customers at one location.")]
+                       f"Significant = {threshold:,}+ customers on one outage.")]
 
 
 # --------------------------------------------------------------------------- #

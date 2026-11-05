@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
-from app import chrome, database, history
+from app import chrome, database
+from app.modules.power import outages
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,12 @@ TOTALS_SELECTORS = {
     "planned": "#planned",
     "unplanned": "#unplanned",
 }
+
+
+# Attributes of an outage-table row worth keeping (EM-COP's markup has not
+# been seen yet — if a row carries an id of its own, it lands in cells_json).
+ROW_ATTRS = ("id", "data-id", "data-outage-id", "data-incident", "class")
+TABLE_SAMPLE = "power_table_sample.html"
 
 
 class DashboardNotFoundError(RuntimeError):
@@ -61,6 +68,27 @@ def parse_first_seen(text):
         return now
 
 
+def parse_row(cells, title=None, attrs=None):
+    """One outage from one table row's cell texts. Column 0 lists the
+    localities (the full list is in its span's title — the cell text is
+    truncated), 2 = customers off, 4 = type, 5 = first seen. None for a row
+    that is not an outage row."""
+    cells = [str(c or "").strip() for c in cells or []]
+    if len(cells) < 6:
+        return None
+    locations = outages.split_locations(title or cells[0])
+    if not locations:
+        return None
+    return {
+        "locations": locations,
+        "customers_off": _safe_int(cells[2]) or 0,
+        "type": cells[4],
+        "first_seen": parse_first_seen(cells[5]).isoformat(sep=" ", timespec="seconds"),
+        "cells": cells,
+        "attrs": attrs or {},
+    }
+
+
 class PowerScraper:
     """Owns the browser session. All methods run on the collector thread."""
 
@@ -79,6 +107,7 @@ class PowerScraper:
         self._dashboard_handle = None
         # Throwaway Chrome profile for the current session (see _init_driver).
         self._profile_dir = None
+        self._sample_saved = False
 
     # --- session management -------------------------------------------------
     def _init_driver(self):
@@ -280,6 +309,11 @@ class PowerScraper:
         return data
 
     def _scrape_outage_table(self):
+        """One dict per table ROW — i.e. per outage, its localities kept
+        together (see outages.py). Every cell is kept as published, with the
+        header, because only three columns are understood so far."""
+        header = [h.text.strip() for h in self.driver.find_elements(
+            By.CSS_SELECTOR, "#outagedashboard thead th")]
         records = []
         rows = self.driver.find_elements(By.CSS_SELECTOR, "#outagedashboard tbody tr")
         for row in rows:
@@ -287,95 +321,47 @@ class PowerScraper:
             if len(cols) < 6:
                 continue
             spans = cols[0].find_elements(By.TAG_NAME, "span")
-            if spans and spans[0].get_attribute("title"):
-                raw_locations = spans[0].get_attribute("title")
-            else:
-                raw_locations = cols[0].text
-            customers_off = _safe_int(cols[2].text) or 0
-            outage_type = cols[4].text.strip()
-            first_seen = parse_first_seen(cols[5].text)
-            for loc in raw_locations.split(","):
-                loc = loc.strip().replace("\xa0", " ")
-                if loc:
-                    records.append({
-                        "location": loc,
-                        "customers_off": customers_off,
-                        "type": outage_type,
-                        "first_seen": first_seen.isoformat(sep=" ", timespec="seconds"),
-                    })
-        return records
+            title = spans[0].get_attribute("title") if spans else None
+            attrs = {a: row.get_attribute(a) for a in ROW_ATTRS}
+            record = parse_row([c.text for c in cols], title,
+                               {k: v for k, v in attrs.items() if v})
+            if record:
+                records.append(record)
+        self._save_table_sample(len(records))
+        return header, records
+
+    def _save_table_sample(self, n_rows):
+        """Keep ONE copy of the outage table per process run, next to the
+        database (gitignored), so its real columns can be checked and turned
+        into a test fixture. Never fatal."""
+        if self._sample_saved or not n_rows:
+            return
+        self._sample_saved = True
+        try:
+            from app.config import BASE_DIR
+            html_ = self.driver.find_element(
+                By.CSS_SELECTOR, "#outagedashboard").get_attribute("outerHTML")
+            with open(os.path.join(BASE_DIR, TABLE_SAMPLE), "w",
+                      encoding="utf-8") as f:
+                f.write(html_)
+        except Exception:
+            log.debug("Could not save the outage table sample", exc_info=True)
 
     # --- persistence --------------------------------------------------------
-    @staticmethod
-    def _update_tracker(current):
-        """Sync the power_outages table with the currently visible outages."""
-        now = datetime.now().isoformat(sep=" ", timespec="seconds")
-        conn = database.get_connection()
-        try:
-            active = {
-                row[1]: row[0]
-                for row in conn.execute(
-                    "SELECT id, location FROM power_outages WHERE restored = 0")
-            }
-            current_locations = set()
-            for rec in current:
-                current_locations.add(rec["location"])
-                if rec["location"] in active:
-                    conn.execute(
-                        "UPDATE power_outages SET last_seen = ?, customers_off = ? WHERE id = ?",
-                        [now, rec["customers_off"], active[rec["location"]]])
-                else:
-                    conn.execute(
-                        "INSERT INTO power_outages "
-                        "(location, customers_off, type, first_seen, last_seen, restored) "
-                        "VALUES (?, ?, ?, ?, ?, 0)",
-                        [rec["location"], rec["customers_off"], rec["type"],
-                         rec["first_seen"], now])
-            # anything previously active but no longer listed has been restored
-            for location, row_id in active.items():
-                if location not in current_locations:
-                    conn.execute(
-                        "UPDATE power_outages SET restored = 1, last_seen = ?, "
-                        "duration_mins = ROUND((julianday(?) - julianday(first_seen)) * 1440) "
-                        "WHERE id = ?",
-                        [now, now, row_id])
-            conn.commit()
-        finally:
-            conn.close()
-        PowerScraper._journal(now)
-
-    @staticmethod
-    def _journal(now):
-        """Record per-location outage state changes for Event Replay.
-
-        Reads back what the cycle touched (`last_seen = now`) so locations the
-        restore-sweep just closed get their tombstone in the same pass.
-        Coordinates come from the existing geocode cache — no new geocoding.
-
-        EM-COP publishes no per-outage source time, so the collection time IS
-        the effective time here; that is the honest stamp rather than inventing
-        a precision the source doesn't provide.
-        """
-        try:
-            df = database.read_df(
-                "SELECT o.location, o.customers_off, o.type, o.first_seen, "
-                "       o.restored, g.latitude, g.longitude "
-                "FROM power_outages o "
-                "LEFT JOIN geocode_cache g ON g.location = o.location "
-                "WHERE o.last_seen = ?", [now])
-            history.record_dataframe(
-                history.POWER, df, key_col="location",
-                state_cols=["location", "customers_off", "type", "first_seen"],
-                active_col="restored", active_value=0, effective_ts=now)
-        except Exception:
-            log.exception("Power: state journal write failed "
-                          "(collection unaffected)")
+    def _update_tracker(self, header, current):
+        """Store this cycle's outages: IDs, linked per-locality rows, journal
+        (app/modules/power/outages.py)."""
+        return outages.sync(
+            current, header=header,
+            reopen_minutes=int(self.cfg["power"].get(
+                "reopen_minutes", outages.REOPEN_MINUTES)))
 
     def _geocode_new_locations(self, records):
         limit = self.cfg["power"].get("max_new_geocodes_per_cycle", 10)
         cached = set(
             database.read_df("SELECT location FROM geocode_cache")["location"].tolist())
-        new_locations = [r["location"] for r in records if r["location"] not in cached]
+        new_locations = [loc for r in records for loc in r["locations"]
+                         if loc not in cached]
         if not new_locations:
             return
         if self._geolocator is None:
@@ -417,7 +403,7 @@ class PowerScraper:
                         "will re-login on the next cycle.")
                 self._switch_to_dashboard()
                 totals = self._scrape_totals()
-                outages = self._scrape_outage_table()
+                header, rows = self._scrape_outage_table()
                 self._park_dashboard()
             except DashboardNotFoundError:
                 # session is fine, the URL is wrong — keep it for next cycle
@@ -430,7 +416,10 @@ class PowerScraper:
             raise RuntimeError("Dashboard found but no totals could be read — "
                                "not storing an empty reading.")
         database.insert_rows("power_timeseries", [totals])
-        self._update_tracker(outages)
-        self._geocode_new_locations(outages)
-        log.info("Power cycle complete: %s customers off, %d outage locations",
-                 totals.get("customers_off"), len(outages))
+        counts = self._update_tracker(header, rows)
+        self._geocode_new_locations(rows)
+        log.info("Power cycle complete: %s customers off, %d outages over %d "
+                 "localities (%d new, %d restored)",
+                 totals.get("customers_off"), len(rows),
+                 sum(len(r["locations"]) for r in rows),
+                 counts.get("new", 0), counts.get("restored", 0))

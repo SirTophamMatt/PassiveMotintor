@@ -2,7 +2,14 @@
 """Import page: pull legacy data files into the unified database (admin only)."""
 from dash import Input, Output, State, dcc, html
 
-from app import auth, importer
+from app import auth, importer, localities
+
+
+def _import_localities(path):
+    """Locality boundaries from a file on the server (Admin can also download
+    them directly)."""
+    ok, msg = localities.run(localities.import_path, path)
+    return msg
 
 IMPORTS = [
     {
@@ -39,6 +46,17 @@ IMPORTS = [
         "hint": "Saves re-geocoding locations you already looked up.",
         "default": importer.DEFAULT_PATHS["geo_cache"],
         "func": importer.import_geo_cache,
+    },
+    {
+        "id": "localities",
+        "title": "Suburb / locality boundaries (.geojson, .shp or zipped shapefile)",
+        "hint": ("The shapes the power map highlights for each outage. Only needed "
+                 "when the server cannot download them itself (Admin → Power "
+                 "collection). Use a latitude/longitude file — e.g. Vicmap Admin "
+                 "Locality Polygon or the ABS Suburbs and Localities, in GDA2020 / "
+                 "GDA94 / WGS84. Replaces the boundaries already loaded."),
+        "default": "",
+        "func": _import_localities,
     },
 ]
 

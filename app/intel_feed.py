@@ -600,8 +600,8 @@ def _gauge_coords():
 
 
 def _detect_power(cfg, cutoff):
-    """Statewide outage trend (from power_timeseries) plus per-location
-    escalation (via intel_metrics, since power_outages is an upsert)."""
+    """Statewide outage trend (from power_timeseries) plus per-OUTAGE new /
+    growth / recovery (via intel_metrics, since outages are upserts)."""
     settings = cfg["intel"]
     window = int(settings["power_window_minutes"])
     df = database.read_df(
@@ -641,33 +641,45 @@ def _detect_power(cfg, cutoff):
                          if pct is not None else None),
                    url="/power")
 
-    # --- per-location outages -------------------------------------------------
-    outages = database.read_df(
-        "SELECT location, customers_off, type, first_seen, last_seen "
-        "FROM power_outages WHERE restored = 0")
-    if outages.empty:
+    # --- per-outage changes ------------------------------------------------------
+    # One entry per OUTAGE (power/outages.py), not per suburb: EM-COP lists
+    # an outage once with all its localities, and a 12-suburb outage used to
+    # produce 12 "outage grew" entries for one change.
+    from app.modules.power import data as power_data
+    from app.modules.power import outages as power_outages
+    events = power_data.outage_events()
+    if events.empty:
         return
-    for _, row in outages.iterrows():
-        location = str(row.get("location") or "").strip()
-        if not location:
-            continue
+    threshold = float(settings["power_location_min_delta"])
+    points = _outage_points(events)
+    for _, row in events.iterrows():
+        ref = str(row.get("outage_ref") or "").strip()
         customers = _num(row.get("customers_off"))
-        if customers is None:
+        if not ref or customers is None:
             continue
+        locations = row.get("locations") or []
+        name = power_outages.label(locations)
+        lat, lon = points.get(ref, (None, None))
+        detail = [f"{row.get('type') or 'Unplanned'} outage · "
+                  f"{_plural(len(locations), 'locality', 'localities')}",
+                  f"Outage {ref}"]
+        if len(locations) > 3:
+            detail.append(", ".join(power_outages.display_name(n)
+                                    for n in locations[:12])
+                          + (f" +{len(locations) - 12} more"
+                             if len(locations) > 12 else ""))
         ts = _parse_ts(row.get("last_seen")) or _now()
-        prev = _metric_prev("power", location, "customers_off")
-        _metric_record("power", location, "customers_off", customers, None, ts)
-        threshold = float(settings["power_location_min_delta"])
+        prev = _metric_prev("power", ref, "customers_off")
+        _metric_record("power", ref, "customers_off", customers, None, ts)
         if prev is None:
             first_seen = _parse_ts(row.get("first_seen"))
-            if (first_seen and first_seen >= cutoff and customers >= threshold):
-                record("power", "new", NOTABLE,
-                       f"New outage at {location}", first_seen,
-                       entity_key=location, entity_name=location,
+            if (first_seen and first_seen >= cutoff and customers >= threshold
+                    and not _reported_by_location(locations, first_seen)):
+                record("power", "new", NOTABLE, f"New outage: {name}", first_seen,
+                       entity_key=ref, entity_name=f"{name} outage",
                        metric="customers_off", new_value=customers,
-                       unit="customers",
-                       detail=[f"{row.get('type') or 'Unplanned'} outage"],
-                       url="/power")
+                       unit="customers", detail=detail,
+                       latitude=lat, longitude=lon, url="/power")
             continue
         prev_customers, _, prev_ts = prev
         if prev_customers is None or ts < cutoff:
@@ -680,15 +692,43 @@ def _detect_power(cfg, cutoff):
                    if prev_ts else None)
         record("power", "growth" if delta > 0 else "recovery",
                MAJOR if customers >= 5000 else NOTABLE,
-               (f"{location} outage {'grew' if delta > 0 else 'shrank'} by "
+               (f"{name} outage {'grew' if delta > 0 else 'shrank'} by "
                 f"{_fmt(abs(delta))} customers"),
-               ts, entity_key=location, entity_name=f"{location} outage",
+               ts, entity_key=ref, entity_name=f"{name} outage",
                metric="customers_off", prev_value=prev_customers,
                new_value=customers, unit="customers", since=prev_ts,
                rate=(f"{pct:+.0f}%" + (f" over {minutes} minutes" if minutes
                                        else "") if pct is not None else None),
-               detail=[f"{row.get('type') or 'Unplanned'} outage"],
-               url="/power")
+               detail=detail, latitude=lat, longitude=lon, url="/power")
+
+
+def _outage_points(events):
+    """{outage ref: (lat, lon)} — the mean of its localities' geocoded points,
+    so a power entry gets cross-layer context and a place on the map."""
+    refs = [str(r) for r in events["outage_ref"] if r]
+    if not refs:
+        return {}
+    df = database.read_df(
+        "SELECT o.outage_ref, AVG(g.latitude) AS lat, AVG(g.longitude) AS lon "
+        "FROM power_outages o JOIN geocode_cache g ON g.location = o.location "
+        "WHERE o.restored = 0 AND g.latitude IS NOT NULL AND o.outage_ref IN (%s) "
+        "GROUP BY o.outage_ref" % ",".join("?" * len(refs)), refs)
+    return {r["outage_ref"]: (_num(r["lat"]), _num(r["lon"]))
+            for _, r in df.iterrows()}
+
+
+def _reported_by_location(locations, first_seen):
+    """Whether this outage's start was already announced under one of its
+    localities — the pre-ID detector keyed entries by locality, so an outage
+    that started just before the upgrade would otherwise be announced twice."""
+    names = [str(n) for n in (locations or [])[:50] if n]
+    if not names:
+        return False
+    df = database.read_df(
+        "SELECT 1 FROM intel_events WHERE hazard = 'power' AND kind = 'new' "
+        "AND ts = ? AND entity_key IN (%s) LIMIT 1" % ",".join("?" * len(names)),
+        [_stamp(first_seen)] + names)
+    return not df.empty
 
 
 def _detect_storm(cfg, cutoff):
@@ -962,7 +1002,8 @@ def _context_sources():
         "SELECT road_name, latitude, longitude, is_closure FROM road_disruptions "
         "WHERE resolved = 0 AND latitude IS NOT NULL")
     outages = database.read_df(
-        "SELECT o.location, o.customers_off, g.latitude, g.longitude "
+        "SELECT o.outage_ref, o.location, o.customers_off, o.type, o.first_seen, "
+        "       g.latitude, g.longitude "
         "FROM power_outages o JOIN geocode_cache g ON g.location = o.location "
         "WHERE o.restored = 0 AND g.latitude IS NOT NULL")
     gauges = flood_data.map_gauges()
@@ -1002,12 +1043,14 @@ def _nearby_lines(lat, lon, radius_km, sources, hazard):
             text += f" ({closures} full closure{'s' if closures > 1 else ''})"
         lines.append(f"{text} within {radius_km:g} km")
 
-    outages = within(sources["outages"])
+    outages = within(sources["outages"]) if hazard != "power" else None
     if outages is not None and not outages.empty:
-        customers = int(pd.to_numeric(outages["customers_off"],
-                                      errors="coerce").fillna(0).sum())
-        lines.append(f"{_plural(len(outages), 'power outage')} nearby — "
-                     f"{_fmt(customers)} customers off")
+        # Localities of one outage each carry its whole count: count the
+        # OUTAGE once (power/outages.py), never once per suburb.
+        from app.modules.power import outages as power_outages
+        lines.append(f"{_plural(power_outages.outage_count(outages), 'power outage')}"
+                     f" nearby — {_fmt(power_outages.customers_total(outages))} "
+                     "customers off")
 
     if hazard != "flood":
         gauges = within(sources["gauges"])

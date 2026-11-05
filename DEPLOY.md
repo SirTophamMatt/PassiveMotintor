@@ -40,6 +40,28 @@ by Xvfb in the container). Once its `forbidden.seam` blocker is resolved:
 3. On **Admin**, tick *Auto-start on server boot* for power (and *Start* it
    once to verify). Leave headless **off** — EM-COP drops headless sessions.
 
+### Suburb boundaries (outage highlighting)
+
+The power map outlines the suburbs each outage affects. The boundaries are
+downloaded **by the server** the first time it boots with none loaded (from the
+ABS Suburbs and Localities layer at `geo.abs.gov.au`, a few minutes, once). If
+that host is blocked, or the download fails, outages still show as points —
+retry from **Admin → Power collection → Download locality boundaries**, or
+download a Victorian locality file yourself (Vicmap Admin *Locality Polygon*,
+or ABS SAL, in GDA2020 / GDA94 / WGS84 — **not** VicGrid / MGA), copy it into
+the data volume and load it from the **Import** page. From a shell:
+
+```bash
+docker compose exec app python -m app.localities status
+docker compose exec app python -m app.localities fetch
+docker compose exec app python -m app.localities import /data/localities.zip
+docker compose exec app python -m app.localities match BELGRAVE "GOLDEN POINT"
+```
+
+The power scraper also saves one copy of EM-COP's outage table per run to
+`/data/power_table_sample.html` — send it along if the outage columns ever
+need checking.
+
 ## Health checks
 
 - `GET /health` returns JSON and HTTP 200 (or 503 if the DB is unreachable):
