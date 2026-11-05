@@ -129,6 +129,9 @@ If a session drops, the scraper re-logs-in on the next cycle.
   `seed/lfg_extract_tool.py` is the one-off extraction script — re-run it if the LFG folder
   gets new guides (it contains hand-checked per-file overrides; unmatched/scanned guides are
   documented there). Guides with no BoM gauge (urban flash-flood LFGs) are intentionally absent.
+  A guide whose table parses incompletely gets its rows typed into `IMPACT_OVERRIDES` (same
+  file), which a re-run applies instead of the parse — edit the seed JSON AND that table, or the
+  next re-run undoes the fix. Skipton (Mount Emu Creek) was the first (2026-11-05, 8 rows).
 
 ## Fire / Incidents module (built 2026-07-12)
 - **Source:** the public VicEmergency GeoJSON feed (`emergency.vic.gov.au/public/osom-geojson.json`,

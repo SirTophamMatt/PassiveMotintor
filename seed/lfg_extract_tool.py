@@ -85,6 +85,27 @@ OVERRIDES = {
         "Clayton South Drain at Clayton (Retarding Basin)",
 }
 
+# Hand-entered impact tables: source PDF -> the full impact list, replacing
+# whatever the parser pulled out. For guides whose table parses incompletely
+# (rows with no height cell, headings in shaded bands). A row under a historic
+# flood heading with no height of its own is merged into that heading's row.
+_B = " ◼ "
+IMPACT_OVERRIDES = {
+    # Parser kept 4 of the 8 heights (missed the 1%/5%/10% rows and Sep 2010)
+    # and dropped the text under the 2011 / 2020 headings. Entered from the
+    # guide's table, 2026-11-05.
+    "Skipton Local Flood Guide (LFG).pdf": [
+        (6.08, "1% chance in any year" + _B + "Significant flooding on both sides of the creek and across the floodplain, up and downstream of Glenelg Highway." + _B + "34 properties are expected to be impacted by floodwater, 32 of these above floor level"),
+        (6.04, "January 2011 flood level" + _B + "Shops in the lower end of Montgomery Street including the supermarket, chemist, hotel, garage, art gallery and pottery were flooded along with 30 residential properties. Flood depths exceeded 1.5m in some properties." + _B + "The Glenelg Highway bridge was overtopped and the Highway was closed for more than 2 days." + _B + "The town was split in two."),
+        (5.55, "October 2022 flood level"),
+        (5.23, "5% chance in any year" + _B + "Floodwater may impact upto 27 properties with 25 experiencing flooding above-floor level." + _B + "Access is anticipated to be cut to Smythe and Wright Streets, and part of the Glenelg Highway."),
+        (4.97, "September 2010 flood level"),
+        (4.89, "10% chance in any year" + _B + "Floodwater spills out from the eastern bank of Mt.Emu Creek, and spreads over Wright Street and Smythe Street." + _B + "One property may be impacted by floodwater."),
+        (4.18, "20% chance in any year" + _B + "Stewart Park fills early. No overbank flows of Mt. Emu Creek within Skipton. No properties flooded." + _B + "Flooding of the Smythe Street Bridge blocks access."),
+        (2.35, "October 2020 flood level" + _B + "Minimal flooding on low-lying rural farmland."),
+    ],
+}
+
 
 def norm(s):
     s = str(s).lower().replace("'", "").replace("’", "")
@@ -373,6 +394,16 @@ def main():
                 skipped.append((fname, "no impact table found"))
             continue
         town = town_from_filename(fname)
+        if fname in IMPACT_OVERRIDES:
+            if len(blocks) != 1:
+                skipped.append((fname, f"impact override expects 1 table block, "
+                                       f"found {len(blocks)} — not applied"))
+            else:
+                rows = [{"height_m": h, "impact": t}
+                        for h, t in IMPACT_OVERRIDES[fname]]
+                rows.sort(key=lambda r: -r["height_m"])
+                blocks[0]["impacts"] = rows
+                blocks[0]["guide_levels"] = class_levels_from_rows(rows)
         for gb in blocks:
             st = gb["station"]
             guides.append({

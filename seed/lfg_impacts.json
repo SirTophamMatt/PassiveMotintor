@@ -2607,12 +2607,28 @@
    "guide_levels": {},
    "impacts": [
     {
+     "height_m": 6.08,
+     "impact": "1% chance in any year ◼ Significant flooding on both sides of the creek and across the floodplain, up and downstream of Glenelg Highway. ◼ 34 properties are expected to be impacted by floodwater, 32 of these above floor level"
+    },
+    {
      "height_m": 6.04,
-     "impact": "January 2011 flood level"
+     "impact": "January 2011 flood level ◼ Shops in the lower end of Montgomery Street including the supermarket, chemist, hotel, garage, art gallery and pottery were flooded along with 30 residential properties. Flood depths exceeded 1.5m in some properties. ◼ The Glenelg Highway bridge was overtopped and the Highway was closed for more than 2 days. ◼ The town was split in two."
     },
     {
      "height_m": 5.55,
      "impact": "October 2022 flood level"
+    },
+    {
+     "height_m": 5.23,
+     "impact": "5% chance in any year ◼ Floodwater may impact upto 27 properties with 25 experiencing flooding above-floor level. ◼ Access is anticipated to be cut to Smythe and Wright Streets, and part of the Glenelg Highway."
+    },
+    {
+     "height_m": 4.97,
+     "impact": "September 2010 flood level"
+    },
+    {
+     "height_m": 4.89,
+     "impact": "10% chance in any year ◼ Floodwater spills out from the eastern bank of Mt.Emu Creek, and spreads over Wright Street and Smythe Street. ◼ One property may be impacted by floodwater."
     },
     {
      "height_m": 4.18,
@@ -2620,7 +2636,7 @@
     },
     {
      "height_m": 2.35,
-     "impact": "October 2020 flood level"
+     "impact": "October 2020 flood level ◼ Minimal flooding on low-lying rural farmland."
     }
    ]
   },
